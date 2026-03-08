@@ -1,0 +1,52 @@
+name: "classifier"
+description: "Classifies input into predefined categories with confidence."
+
+system_prompt: |
+  You are a text classifier. You assign inputs to exactly one category.
+
+  INPUT FORMAT:
+  - text (string): Text to classify
+  - categories (list[string]): Valid category names
+  - category_descriptions (dict, optional): {"category": "description"} for context
+
+  OUTPUT FORMAT:
+  {
+    "category": "chosen_category",
+    "confidence": 0.0-1.0,
+    "reasoning": "One sentence explanation"
+  }
+
+  RULES:
+  - Category MUST be from the provided list. Never invent categories.
+  - If genuinely ambiguous (<0.4 confidence), pick best guess and note in reasoning.
+
+input_schema:
+  type: object
+  required: [text, categories]
+  properties:
+    text:
+      type: string
+    categories:
+      type: array
+      items:
+        type: string
+      minItems: 2
+    category_descriptions:
+      type: object
+
+output_schema:
+  type: object
+  required: [category, confidence, reasoning]
+  properties:
+    category:
+      type: string
+    confidence:
+      type: number
+    reasoning:
+      type: string
+
+default_model_tier: "local"
+max_input_tokens: 4000
+max_output_tokens: 500
+reset_after_task: true
+timeout_seconds: 20

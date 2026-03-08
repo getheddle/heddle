@@ -1,0 +1,18 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY pyproject.toml .
+RUN pip install --no-cache-dir .
+
+COPY src/ src/
+COPY configs/ configs/
+
+# Worker type and tier set via environment variables
+ENV WORKER_CONFIG="configs/workers/summarizer.yaml"
+ENV MODEL_TIER="local"
+ENV NATS_URL="nats://nats:4222"
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

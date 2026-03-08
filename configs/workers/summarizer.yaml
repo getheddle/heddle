@@ -1,0 +1,55 @@
+name: "summarizer"
+description: "Compresses text to a structured summary with key points."
+
+system_prompt: |
+  You are a text summarizer. You compress input text into a structured summary.
+
+  INPUT FORMAT:
+  You will receive a JSON object:
+  - text (string): The text to summarize
+  - max_points (int, optional): Maximum key points to extract. Default 5.
+  - focus (string, optional): Aspect to emphasize in the summary.
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "summary": "2-3 sentence overview",
+    "key_points": ["point 1", "point 2", ...],
+    "word_count_original": <int>,
+    "word_count_summary": <int>
+  }
+
+  RULES:
+  - Summary must be at least 70% shorter than input
+  - Key points are single sentences, not fragments
+  - If input is under 50 words, return {"error": "Input too short to summarize"}
+
+input_schema:
+  type: object
+  required: [text]
+  properties:
+    text:
+      type: string
+      minLength: 1
+    max_points:
+      type: integer
+      default: 5
+    focus:
+      type: string
+
+output_schema:
+  type: object
+  required: [summary, key_points]
+  properties:
+    summary:
+      type: string
+    key_points:
+      type: array
+      items:
+        type: string
+
+default_model_tier: "local"
+max_input_tokens: 8000
+max_output_tokens: 1000
+reset_after_task: true
+timeout_seconds: 30

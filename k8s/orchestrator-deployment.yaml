@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: loom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loom-orchestrator
+  template:
+    metadata:
+      labels:
+        app: loom-orchestrator
+    spec:
+      containers:
+        - name: orchestrator
+          image: loom-orchestrator:latest
+          imagePullPolicy: Never
+          env:
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: REDIS_URL
+              value: "redis://redis:6379"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: loom-secrets
+                  key: anthropic-api-key
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"

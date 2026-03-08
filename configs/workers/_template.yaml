@@ -1,0 +1,67 @@
+# Worker configuration template
+# Copy this file and customize for each worker type.
+
+name: "template_worker"
+description: "What this worker does in one sentence."
+
+# System prompt — the ONLY instructions the worker sees.
+# Keep narrow and specific. No general-purpose instructions.
+system_prompt: |
+  You are a specialized agent that does exactly ONE thing: [specific task].
+
+  INPUT FORMAT:
+  You will receive a JSON object with these fields:
+  - field_one (string): Description
+  - field_two (list[string]): Description
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object. No preamble, no explanation.
+  {
+    "result_field": "...",
+    "confidence": 0.0-1.0
+  }
+
+  RULES:
+  - If input is malformed, return {"error": "description of problem"}
+  - Never deviate from the output format
+  - Never reference previous conversations (you have none)
+
+# I/O contract for validation
+input_schema:
+  type: object
+  required: [field_one]
+  properties:
+    field_one:
+      type: string
+    field_two:
+      type: array
+      items:
+        type: string
+
+output_schema:
+  type: object
+  required: [result_field, confidence]
+  properties:
+    result_field:
+      type: string
+    confidence:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+
+# Model routing defaults (can be overridden per-task)
+default_model_tier: "standard"
+max_input_tokens: 4000
+max_output_tokens: 2000
+
+# Knowledge context (optional)
+# Files listed here are injected into the system prompt context
+knowledge_sources: []
+  # - path: "configs/knowledge/domain_glossary.yaml"
+  #   inject_as: "reference"    # "reference" = append to system prompt
+  # - path: "configs/knowledge/examples.jsonl"
+  #   inject_as: "few_shot"     # "few_shot" = format as example exchanges
+
+# Session behavior
+reset_after_task: true     # ALWAYS true for workers. Non-negotiable.
+timeout_seconds: 60

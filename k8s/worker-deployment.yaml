@@ -1,0 +1,131 @@
+# Summarizer workers (local tier)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-summarizer
+  namespace: loom
+spec:
+  replicas: 2        # Scale horizontally — competing consumers via NATS queue group
+  selector:
+    matchLabels:
+      app: loom-worker
+      worker-type: summarizer
+  template:
+    metadata:
+      labels:
+        app: loom-worker
+        worker-type: summarizer
+    spec:
+      containers:
+        - name: worker
+          image: loom-worker:latest
+          imagePullPolicy: Never
+          env:
+            - name: WORKER_CONFIG
+              value: "configs/workers/summarizer.yaml"
+            - name: MODEL_TIER
+              value: "local"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: OLLAMA_URL
+              value: "http://ollama:11434"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: loom-secrets
+                  key: anthropic-api-key
+                  optional: true
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+---
+# Classifier workers (local tier)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-classifier
+  namespace: loom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loom-worker
+      worker-type: classifier
+  template:
+    metadata:
+      labels:
+        app: loom-worker
+        worker-type: classifier
+    spec:
+      containers:
+        - name: worker
+          image: loom-worker:latest
+          imagePullPolicy: Never
+          env:
+            - name: WORKER_CONFIG
+              value: "configs/workers/classifier.yaml"
+            - name: MODEL_TIER
+              value: "local"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: OLLAMA_URL
+              value: "http://ollama:11434"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: loom-secrets
+                  key: anthropic-api-key
+                  optional: true
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+---
+# Extractor workers (standard tier)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-extractor
+  namespace: loom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loom-worker
+      worker-type: extractor
+  template:
+    metadata:
+      labels:
+        app: loom-worker
+        worker-type: extractor
+    spec:
+      containers:
+        - name: worker
+          image: loom-worker:latest
+          imagePullPolicy: Never
+          env:
+            - name: WORKER_CONFIG
+              value: "configs/workers/extractor.yaml"
+            - name: MODEL_TIER
+              value: "standard"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: loom-secrets
+                  key: anthropic-api-key
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"

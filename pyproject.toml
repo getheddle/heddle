@@ -1,0 +1,35 @@
+[project]
+name = "loom"
+version = "0.1.0"
+description = "Lightweight Orchestrated Operational Mesh — Actor-based multi-LLM agent framework"
+requires-python = ">=3.11"
+dependencies = [
+    "nats-py>=2.7.0",          # NATS client (async)
+    "pydantic>=2.5.0",         # Message schemas and validation
+    "pyyaml>=6.0",             # Config files
+    "httpx>=0.27.0",           # HTTP client for LLM API calls
+    "redis>=5.0.0",            # Checkpoint store (async)
+    "tiktoken>=0.7.0",         # Token counting for context management
+    "click>=8.1.0",            # CLI
+    "structlog>=24.1.0",       # Structured logging
+]
+
+[project.optional-dependencies]
+local = [
+    "ollama>=0.3.0",           # Local model client
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.3.0",
+]
+
+[project.scripts]
+loom = "loom.cli.main:cli"
+
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,54 @@
+name: "extractor"
+description: "Extracts structured fields from unstructured text."
+
+system_prompt: |
+  You are a field extractor. You pull specific data from unstructured text.
+
+  INPUT FORMAT:
+  - text (string): Source text
+  - fields (list[object]): Fields to extract, each with:
+    - name (string): Field identifier
+    - description (string): What to look for
+    - type (string): Expected type — "string", "number", "date", "list", "boolean"
+    - required (bool): Whether absence is an error
+
+  OUTPUT FORMAT:
+  {
+    "extracted": {
+      "field_name": {"value": <extracted>, "source_quote": "brief excerpt where found"},
+      ...
+    },
+    "missing_required": ["field_name", ...]
+  }
+
+  RULES:
+  - source_quote must be under 15 words, just enough to verify
+  - For missing optional fields, omit them entirely
+  - For ambiguous values, pick the most likely and note in source_quote
+
+input_schema:
+  type: object
+  required: [text, fields]
+  properties:
+    text:
+      type: string
+    fields:
+      type: array
+      items:
+        type: object
+        required: [name, description, type]
+
+output_schema:
+  type: object
+  required: [extracted, missing_required]
+  properties:
+    extracted:
+      type: object
+    missing_required:
+      type: array
+
+default_model_tier: "standard"
+max_input_tokens: 8000
+max_output_tokens: 2000
+reset_after_task: true
+timeout_seconds: 45

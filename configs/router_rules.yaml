@@ -1,0 +1,22 @@
+# Task routing rules.
+# These are deterministic — no LLM involved.
+
+# Override the default model tier for specific worker types.
+# If a worker_type is not listed here, the tier from the TaskMessage is used.
+tier_overrides:
+  summarizer: "local"
+  classifier: "local"
+  extractor: "standard"
+  # analyzer: "frontier"
+
+# Cost thresholds (tokens per minute budget per tier)
+rate_limits:
+  local:
+    max_concurrent: 4
+    tokens_per_minute: 100000
+  standard:
+    max_concurrent: 10
+    tokens_per_minute: 200000
+  frontier:
+    max_concurrent: 3
+    tokens_per_minute: 50000

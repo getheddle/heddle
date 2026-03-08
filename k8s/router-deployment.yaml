@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: router
+  namespace: loom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loom-router
+  template:
+    metadata:
+      labels:
+        app: loom-router
+    spec:
+      containers:
+        - name: router
+          image: loom-router:latest
+          imagePullPolicy: Never      # Use local images with Minikube
+          env:
+            - name: NATS_URL
+              value: "nats://nats:4222"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
