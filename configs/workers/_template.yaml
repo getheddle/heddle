@@ -1,11 +1,25 @@
 # Worker configuration template
 # Copy this file and customize for each worker type.
+#
+# Two kinds of workers:
+#   worker_kind: "llm"       — Calls an LLM backend (default if omitted)
+#   worker_kind: "processor"  — Runs a non-LLM processing backend
+#
+# For processor workers, specify:
+#   processing_backend: "mypackage.module.ClassName"
+#   backend_config: {key: value, ...}  (passed to backend constructor)
 
 name: "template_worker"
 description: "What this worker does in one sentence."
 
+# Worker kind: "llm" (default) or "processor"
+# worker_kind: "llm"
+
+# --- LLM worker fields ---
+
 # System prompt — the ONLY instructions the worker sees.
 # Keep narrow and specific. No general-purpose instructions.
+# (Not used by processor workers.)
 system_prompt: |
   You are a specialized agent that does exactly ONE thing: [specific task].
 
@@ -26,7 +40,19 @@ system_prompt: |
   - Never deviate from the output format
   - Never reference previous conversations (you have none)
 
-# I/O contract for validation
+# --- Processor worker fields ---
+
+# Fully qualified class path for the processing backend.
+# (Only used when worker_kind: "processor")
+# processing_backend: "mypackage.backends.MyBackend"
+
+# Config dict passed to the backend constructor as kwargs.
+# backend_config:
+#   workspace_dir: "/tmp/loom-workspace"
+
+# --- Common fields ---
+
+# I/O contract for validation (used by both LLM and processor workers)
 input_schema:
   type: object
   required: [field_one]
@@ -54,7 +80,7 @@ default_model_tier: "standard"
 max_input_tokens: 4000
 max_output_tokens: 2000
 
-# Knowledge context (optional)
+# Knowledge context (optional, LLM workers only)
 # Files listed here are injected into the system prompt context
 knowledge_sources: []
   # - path: "configs/knowledge/domain_glossary.yaml"

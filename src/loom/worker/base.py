@@ -1,0 +1,142 @@
+"""
+TaskWorker base class.
+
+Extracts the reusable worker lifecycle from the LLM-specific worker:
+message parsing, I/O contract validation, result publishing, timing,
+and error handling. Subclasses implement process() to do the actual work.
+"""
+from __future__ import annotations
+
+import time
+from abc import abstractmethod
+from typing import Any
+
+import structlog
+import yaml
+
+from loom.core.actor import BaseActor
+from loom.core.contracts import validate_input, validate_output
+from loom.core.messages import TaskMessage, TaskResult, TaskStatus
+
+logger = structlog.get_logger()
+
+
+class TaskWorker(BaseActor):
+    """
+    Generic stateless worker base.
+
+    Lifecycle per message:
+    1. Receive TaskMessage
+    2. Validate input against worker contract
+    3. Delegate to process() (subclass implements)
+    4. Validate output against worker contract
+    5. Publish TaskResult
+    6. Reset (no state retained)
+    """
+
+    def __init__(
+        self,
+        actor_id: str,
+        config_path: str,
+        nats_url: str = "nats://nats:4222",
+    ):
+        super().__init__(actor_id, nats_url)
+        self.config = self._load_config(config_path)
+
+    def _load_config(self, path: str) -> dict:
+        with open(path) as f:
+            return yaml.safe_load(f)
+
+    async def handle_message(self, data: dict[str, Any]) -> None:
+        task = TaskMessage(**data)
+        start = time.monotonic()
+
+        log = logger.bind(
+            task_id=task.task_id,
+            worker_type=task.worker_type,
+            model_tier=task.model_tier.value,
+        )
+
+        try:
+            # 1. Validate input
+            errors = validate_input(task.payload, self.config.get("input_schema", {}))
+            if errors:
+                await self._publish_result(task, TaskStatus.FAILED, error=f"Input validation: {errors}")
+                return
+
+            # 2. Delegate to subclass
+            result = await self.process(task.payload, task.metadata)
+
+            # 3. Validate output
+            output = result["output"]
+            output_errors = validate_output(output, self.config.get("output_schema", {}))
+            if output_errors:
+                await self._publish_result(
+                    task, TaskStatus.FAILED,
+                    error=f"Output validation: {output_errors}",
+                    model_used=result.get("model_used"),
+                    tokens=result.get("token_usage"),
+                )
+                return
+
+            # 4. Publish success
+            elapsed = int((time.monotonic() - start) * 1000)
+            await self._publish_result(
+                task, TaskStatus.COMPLETED,
+                output=output,
+                model_used=result.get("model_used"),
+                tokens=result.get("token_usage"),
+                elapsed=elapsed,
+            )
+            log.info("worker.completed", ms=elapsed)
+
+        except Exception as e:
+            log.error("worker.exception", error=str(e))
+            await self._publish_result(task, TaskStatus.FAILED, error=str(e))
+
+        # Reset — worker holds NO state from this task
+
+    @abstractmethod
+    async def process(self, payload: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
+        """
+        Process a task payload. Subclasses implement this.
+
+        Args:
+            payload: Validated input dict (matches input_schema).
+            metadata: Task metadata dict (routing hints, pipeline context, etc.).
+
+        Returns:
+            {
+                "output": dict,              # Must match output_schema
+                "model_used": str | None,    # Identifier for what processed this
+                "token_usage": dict | None,  # {"prompt_tokens": int, "completion_tokens": int} or empty
+            }
+        """
+        ...
+
+    async def _publish_result(
+        self,
+        task: TaskMessage,
+        status: TaskStatus,
+        output: dict | None = None,
+        error: str | None = None,
+        model_used: str | None = None,
+        tokens: dict | None = None,
+        elapsed: int = 0,
+    ) -> None:
+        result = TaskResult(
+            task_id=task.task_id,
+            parent_task_id=task.parent_task_id,
+            worker_type=task.worker_type,
+            status=status,
+            output=output,
+            error=error,
+            model_used=model_used,
+            token_usage={
+                "prompt_tokens": tokens.get("prompt_tokens", 0) if tokens else 0,
+                "completion_tokens": tokens.get("completion_tokens", 0) if tokens else 0,
+            },
+            processing_time_ms=elapsed,
+        )
+        subject = f"loom.results.{task.parent_task_id or 'default'}"
+        await self.publish(subject, result.model_dump(mode="json"))
