@@ -81,12 +81,20 @@ max_input_tokens: 4000
 max_output_tokens: 2000
 
 # Knowledge context (optional, LLM workers only)
-# Files listed here are injected into the system prompt context
+# Files listed here are loaded and injected into the system prompt
 knowledge_sources: []
   # - path: "configs/knowledge/domain_glossary.yaml"
   #   inject_as: "reference"    # "reference" = append to system prompt
   # - path: "configs/knowledge/examples.jsonl"
   #   inject_as: "few_shot"     # "few_shot" = format as example exchanges
+
+# File-ref resolution (optional, LLM workers only)
+# When set, the worker reads JSON files from workspace_dir and injects
+# their content into the payload before building the LLM prompt.
+# For each field listed in resolve_file_refs, the worker adds a
+# "{field}_content" key with the parsed JSON data.
+# workspace_dir: "/tmp/loom-workspace"
+# resolve_file_refs: ["file_ref"]
 
 # Session behavior
 reset_after_task: true     # ALWAYS true for workers. Non-negotiable.

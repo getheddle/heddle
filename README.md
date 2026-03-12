@@ -1,10 +1,10 @@
 # LOOM — Lightweight Orchestrated Operational Mesh
 
-Loom is an experimental scaffolding to refactor AI assistance architecture for projects where a single monolithic LLM conversation breaks down — large databases, complex knowledge graphs, tasks that need multiple model tiers working together.
+Loom is a Python framework for building AI workflows where a single monolithic LLM conversation breaks down — large databases, complex knowledge graphs, tasks that need multiple model tiers working together.
 
 Instead of one big prompt, Loom splits work across **narrowly-scoped worker actors** coordinated by an **orchestrator** through a message bus. Each worker has a single system prompt, strict I/O contracts, and resets after every task. The orchestrator decomposes goals, routes subtasks, and synthesizes results — checkpointing its own context when it gets too large.
 
-**Status:** All major components implemented and tested. Message schemas, worker runtime, LLM backends, router (with dead-letter handling and rate limiting), orchestrator (decompose/dispatch/collect/synthesize loop), pipeline orchestrator, and checkpoint system are all functional. 75+ unit tests pass.
+**Status:** All major components implemented and tested. 89+ unit tests pass. See `docs/building-workflows.md` for a guide to building your own AI workflows with Loom.
 
 ## What's here
 
@@ -14,9 +14,11 @@ src/loom/
 │   ├── messages.py      # Pydantic schemas: TaskMessage, TaskResult, OrchestratorGoal, CheckpointState
 │   ├── actor.py          # Base actor class (NATS subscribe/publish lifecycle)
 │   ├── contracts.py      # Lightweight JSON Schema validation for worker I/O
+│   ├── workspace.py      # File-ref resolution with path traversal protection
 │   └── config.py         # YAML config loader
 ├── worker/
-│   ├── runner.py         # Worker actor: receive task → validate → call LLM → validate → publish result
+│   ├── runner.py         # LLM worker: validate → resolve files → inject knowledge → call LLM → validate → publish
+│   ├── processor.py      # Non-LLM worker: ProcessingBackend, SyncProcessingBackend, BackendError
 │   ├── backends.py       # LLM adapters: Anthropic, Ollama, OpenAI-compatible
 │   └── knowledge.py      # Scoped knowledge/RAG loader for worker context injection
 ├── orchestrator/
@@ -41,6 +43,9 @@ configs/
 ├── orchestrators/
 │   └── default.yaml      # General-purpose orchestrator config
 └── router_rules.yaml     # Tier overrides and rate limits
+
+docs/
+└── building-workflows.md # Getting started guide for building AI workflows
 
 k8s/                      # Kubernetes manifests (Minikube-ready)
 Dockerfile.{worker,router,orchestrator}
@@ -188,8 +193,7 @@ For Ollama on Mac with Minikube, run Ollama natively on the host and point worke
 
 The core framework is functional. Key extension points:
 
-1. **New worker configs** — Add workers specific to your domain (e.g., entity resolver, relationship mapper, evidence grader)
-2. **Knowledge injection** — Wire `load_knowledge_sources()` into LLMWorker and add domain-specific knowledge files under `configs/knowledge/`
-3. **File-ref resolution** — Add workspace file reading to LLMWorker for stages that need extracted document content
-4. **Dead-letter consumer** — Implement a monitoring/retry service for tasks landing on `loom.tasks.dead_letter`
-5. **Orchestrator tests** — Unit tests for the decompose/dispatch/collect/synthesize loop
+1. **New worker configs** — Add workers specific to your domain (e.g., entity resolver, relationship mapper, evidence grader). See `docs/building-workflows.md` for a walkthrough.
+2. **Dead-letter consumer** — Implement a monitoring/retry service for tasks landing on `loom.tasks.dead_letter`
+3. **Orchestrator tests** — Unit tests for the decompose/dispatch/collect/synthesize loop
+4. **End-to-end integration test** — Full goal submission through router/workers/orchestrator
