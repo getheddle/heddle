@@ -34,7 +34,7 @@ Input mapping example (from doc_pipeline.yaml):
         payload["metadata"] = context["extract"]["output"]["metadata"]
 
 See also:
-    loom.orchestrator.runner — dynamic LLM-based orchestrator (not yet implemented)
+    loom.orchestrator.runner — dynamic LLM-based orchestrator
     loom.core.messages.OrchestratorGoal — the input message type
     configs/orchestrators/ — pipeline config YAML files
 """

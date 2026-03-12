@@ -4,7 +4,7 @@ Loom is a Python framework for building AI workflows where a single monolithic L
 
 Instead of one big prompt, Loom splits work across **narrowly-scoped worker actors** coordinated by an **orchestrator** through a message bus. Each worker has a single system prompt, strict I/O contracts, and resets after every task. The orchestrator decomposes goals, routes subtasks, and synthesizes results — checkpointing its own context when it gets too large.
 
-**Status:** All major components implemented and tested. 89+ unit tests pass. See `docs/building-workflows.md` for a guide to building your own AI workflows with Loom.
+**Status:** All major components implemented and tested. 159 unit tests pass. See `docs/building-workflows.md` for a guide to building your own AI workflows with Loom.
 
 ## What's here
 
@@ -17,10 +17,12 @@ src/loom/
 │   ├── workspace.py      # File-ref resolution with path traversal protection
 │   └── config.py         # YAML config loader
 ├── worker/
-│   ├── runner.py         # LLM worker: validate → resolve files → inject knowledge → call LLM → validate → publish
+│   ├── runner.py         # LLM worker: validate → resolve files → inject knowledge → call LLM → tool loop → validate → publish
 │   ├── processor.py      # Non-LLM worker: ProcessingBackend, SyncProcessingBackend, BackendError
-│   ├── backends.py       # LLM adapters: Anthropic, Ollama, OpenAI-compatible
-│   └── knowledge.py      # Scoped knowledge/RAG loader for worker context injection
+│   ├── backends.py       # LLM adapters: Anthropic, Ollama, OpenAI-compatible (with tool-use support)
+│   ├── tools.py          # ToolProvider ABC, SyncToolProvider, dynamic tool loader
+│   ├── knowledge.py      # Knowledge sources + knowledge silos (folder read/write, tool injection)
+│   └── embeddings.py     # EmbeddingProvider ABC, OllamaEmbeddingProvider (/api/embed)
 ├── orchestrator/
 │   ├── runner.py         # Orchestrator actor: decompose → dispatch → collect → synthesize
 │   ├── pipeline.py       # Pipeline orchestrator: sequential stage execution with input mapping
@@ -78,7 +80,7 @@ pip install -e ".[dev]"
 pytest tests/ -v -m "not integration"
 ```
 
-This runs all unit tests (messages, contracts, checkpoint, pipeline, workers, processor) without needing NATS or Redis. The integration test is excluded by marker.
+This runs all unit tests (messages, contracts, checkpoint, pipeline, workers, processor, tools, tool-use, knowledge silos, embeddings) without needing NATS or Redis. The integration test is excluded by marker.
 
 ### 3. Set up infrastructure (NATS + Redis)
 

@@ -11,9 +11,16 @@ To add a new backend:
     3. Register it in cli/main.py's worker command (backend resolution by tier)
 
 All backends use httpx with a 120s timeout. Adjust if your models are slow.
+
+Tool-use support:
+    Backends accept optional ``tools`` and ``messages`` parameters. When
+    ``tools`` is provided, the LLM may return tool_calls instead of content.
+    When ``messages`` is provided, it replaces the single user_message for
+    multi-turn conversations (tool execution loop).
 """
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -30,14 +37,28 @@ class LLMBackend(ABC):
         user_message: str,
         max_tokens: int = 2000,
         temperature: float = 0.0,
+        *,
+        tools: list[dict[str, Any]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
+        Args:
+            system_prompt: System instructions for the LLM.
+            user_message: User message (ignored when ``messages`` is provided).
+            max_tokens: Maximum tokens in the response.
+            temperature: Sampling temperature.
+            tools: Optional list of tool definitions for function-calling.
+            messages: Optional full message history for multi-turn. When
+                provided, overrides ``user_message``.
+
         Returns:
             {
-                "content": str,          # Raw model output
-                "model": str,            # Model identifier
+                "content": str | None,      # Text response (None if tool_calls)
+                "model": str,               # Model identifier
                 "prompt_tokens": int,
                 "completion_tokens": int,
+                "tool_calls": list | None,  # [{"id": str, "name": str, "arguments": dict}]
+                "stop_reason": str | None,  # "end_turn" | "tool_use"
             }
         """
         ...
@@ -66,24 +87,62 @@ class AnthropicBackend(LLMBackend):
             timeout=120.0,
         )
 
-    async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0):
-        resp = await self.client.post(
-            "/v1/messages",
-            json={
-                "model": self.model,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "system": system_prompt,
-                "messages": [{"role": "user", "content": user_message}],
-            },
-        )
+    async def complete(
+        self, system_prompt, user_message, max_tokens=2000, temperature=0.0,
+        *, tools=None, messages=None,
+    ):
+        # Build messages array
+        if messages is not None:
+            api_messages = _anthropic_messages(messages)
+        else:
+            api_messages = [{"role": "user", "content": user_message}]
+
+        body: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "system": system_prompt,
+            "messages": api_messages,
+        }
+
+        # Add tool definitions if provided
+        if tools:
+            body["tools"] = [
+                {
+                    "name": t["name"],
+                    "description": t.get("description", ""),
+                    "input_schema": t.get("parameters", {"type": "object"}),
+                }
+                for t in tools
+            ]
+
+        resp = await self.client.post("/v1/messages", json=body)
         resp.raise_for_status()
         data = resp.json()
+
+        # Parse response — may contain text blocks, tool_use blocks, or both
+        content = None
+        tool_calls = None
+
+        for block in data.get("content", []):
+            if block["type"] == "text":
+                content = block["text"]
+            elif block["type"] == "tool_use":
+                if tool_calls is None:
+                    tool_calls = []
+                tool_calls.append({
+                    "id": block["id"],
+                    "name": block["name"],
+                    "arguments": block["input"],
+                })
+
         return {
-            "content": data["content"][0]["text"],
+            "content": content,
             "model": data["model"],
             "prompt_tokens": data["usage"]["input_tokens"],
             "completion_tokens": data["usage"]["output_tokens"],
+            "tool_calls": tool_calls,
+            "stop_reason": data.get("stop_reason"),
         }
 
 
@@ -101,26 +160,72 @@ class OllamaBackend(LLMBackend):
         self.model = model
         self.client = httpx.AsyncClient(base_url=base_url, timeout=120.0)
 
-    async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0):
-        resp = await self.client.post(
-            "/api/chat",
-            json={
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-                "stream": False,
-                "options": {"temperature": temperature, "num_predict": max_tokens},
-            },
-        )
+    async def complete(
+        self, system_prompt, user_message, max_tokens=2000, temperature=0.0,
+        *, tools=None, messages=None,
+    ):
+        # Build messages array
+        if messages is not None:
+            api_messages = [
+                {"role": "system", "content": system_prompt},
+                *_ollama_messages(messages),
+            ]
+        else:
+            api_messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ]
+
+        body: dict[str, Any] = {
+            "model": self.model,
+            "messages": api_messages,
+            "stream": False,
+            "options": {"temperature": temperature, "num_predict": max_tokens},
+        }
+
+        # Add tool definitions if provided (OpenAI-compatible format)
+        if tools:
+            body["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t["name"],
+                        "description": t.get("description", ""),
+                        "parameters": t.get("parameters", {"type": "object"}),
+                    },
+                }
+                for t in tools
+            ]
+
+        resp = await self.client.post("/api/chat", json=body)
         resp.raise_for_status()
         data = resp.json()
+
+        # Parse tool calls from Ollama response
+        message = data.get("message", {})
+        content = message.get("content") or None
+        tool_calls = None
+
+        raw_calls = message.get("tool_calls")
+        if raw_calls:
+            tool_calls = []
+            for i, call in enumerate(raw_calls):
+                func = call.get("function", {})
+                tool_calls.append({
+                    "id": f"call_{i}",
+                    "name": func.get("name", ""),
+                    "arguments": func.get("arguments", {}),
+                })
+
+        stop_reason = "tool_use" if tool_calls else "end_turn"
+
         return {
-            "content": data["message"]["content"],
+            "content": content,
             "model": self.model,
             "prompt_tokens": data.get("prompt_eval_count", 0),
             "completion_tokens": data.get("eval_count", 0),
+            "tool_calls": tool_calls,
+            "stop_reason": stop_reason,
         }
 
 
@@ -135,25 +240,187 @@ class OpenAICompatibleBackend(LLMBackend):
             timeout=120.0,
         )
 
-    async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0):
-        resp = await self.client.post(
-            "/v1/chat/completions",
-            json={
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-            },
-        )
+    async def complete(
+        self, system_prompt, user_message, max_tokens=2000, temperature=0.0,
+        *, tools=None, messages=None,
+    ):
+        # Build messages array
+        if messages is not None:
+            api_messages = [
+                {"role": "system", "content": system_prompt},
+                *_openai_messages(messages),
+            ]
+        else:
+            api_messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ]
+
+        body: dict[str, Any] = {
+            "model": self.model,
+            "messages": api_messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+
+        # Add tool definitions if provided
+        if tools:
+            body["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t["name"],
+                        "description": t.get("description", ""),
+                        "parameters": t.get("parameters", {"type": "object"}),
+                    },
+                }
+                for t in tools
+            ]
+
+        resp = await self.client.post("/v1/chat/completions", json=body)
         resp.raise_for_status()
         data = resp.json()
         usage = data.get("usage", {})
+
+        # Parse response
+        choice = data["choices"][0]
+        message = choice.get("message", {})
+        content = message.get("content")
+        tool_calls = None
+
+        raw_calls = message.get("tool_calls")
+        if raw_calls:
+            tool_calls = []
+            for call in raw_calls:
+                func = call.get("function", {})
+                args = func.get("arguments", "{}")
+                if isinstance(args, str):
+                    args = json.loads(args)
+                tool_calls.append({
+                    "id": call.get("id", ""),
+                    "name": func.get("name", ""),
+                    "arguments": args,
+                })
+
+        finish_reason = choice.get("finish_reason", "stop")
+        stop_reason = "tool_use" if finish_reason == "tool_calls" else "end_turn"
+
         return {
-            "content": data["choices"][0]["message"]["content"],
+            "content": content,
             "model": data.get("model", self.model),
             "prompt_tokens": usage.get("prompt_tokens", 0),
             "completion_tokens": usage.get("completion_tokens", 0),
+            "tool_calls": tool_calls,
+            "stop_reason": stop_reason,
         }
+
+
+# ---------------------------------------------------------------------------
+# Message format helpers
+# ---------------------------------------------------------------------------
+
+def _anthropic_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert internal message format to Anthropic Messages API format."""
+    result = []
+    for msg in messages:
+        role = msg["role"]
+
+        if role == "user":
+            result.append({"role": "user", "content": msg["content"]})
+
+        elif role == "assistant":
+            # May contain text and/or tool_calls
+            content_blocks = []
+            if msg.get("content"):
+                content_blocks.append({"type": "text", "text": msg["content"]})
+            for call in msg.get("tool_calls", []):
+                content_blocks.append({
+                    "type": "tool_use",
+                    "id": call["id"],
+                    "name": call["name"],
+                    "input": call["arguments"],
+                })
+            result.append({"role": "assistant", "content": content_blocks})
+
+        elif role == "tool":
+            result.append({
+                "role": "user",
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": msg["tool_call_id"],
+                    "content": msg["content"],
+                }],
+            })
+
+    return result
+
+
+def _ollama_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert internal message format to Ollama /api/chat format."""
+    result = []
+    for msg in messages:
+        role = msg["role"]
+
+        if role == "user":
+            result.append({"role": "user", "content": msg["content"]})
+
+        elif role == "assistant":
+            entry: dict[str, Any] = {"role": "assistant"}
+            if msg.get("content"):
+                entry["content"] = msg["content"]
+            if msg.get("tool_calls"):
+                entry["tool_calls"] = [
+                    {
+                        "function": {
+                            "name": call["name"],
+                            "arguments": call["arguments"],
+                        },
+                    }
+                    for call in msg["tool_calls"]
+                ]
+            result.append(entry)
+
+        elif role == "tool":
+            result.append({
+                "role": "tool",
+                "content": msg["content"],
+            })
+
+    return result
+
+
+def _openai_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert internal message format to OpenAI /v1/chat/completions format."""
+    result = []
+    for msg in messages:
+        role = msg["role"]
+
+        if role == "user":
+            result.append({"role": "user", "content": msg["content"]})
+
+        elif role == "assistant":
+            entry: dict[str, Any] = {"role": "assistant"}
+            if msg.get("content"):
+                entry["content"] = msg["content"]
+            if msg.get("tool_calls"):
+                entry["tool_calls"] = [
+                    {
+                        "id": call["id"],
+                        "type": "function",
+                        "function": {
+                            "name": call["name"],
+                            "arguments": json.dumps(call["arguments"]),
+                        },
+                    }
+                    for call in msg["tool_calls"]
+                ]
+            result.append(entry)
+
+        elif role == "tool":
+            result.append({
+                "role": "tool",
+                "tool_call_id": msg["tool_call_id"],
+                "content": msg["content"],
+            })
+
+    return result

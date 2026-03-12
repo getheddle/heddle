@@ -11,7 +11,7 @@ The core idea: instead of one big LLM context, split work across narrowly-scoped
 ```
 src/loom/
   core/         # Message schemas (Pydantic), base actor class, I/O contract validation, workspace manager, config loader
-  worker/       # Stateless LLM worker actor, processor worker, LLM backend adapters, knowledge loader
+  worker/       # Stateless LLM worker actor, processor worker, LLM backend adapters, knowledge loader, tool-use, embeddings
   orchestrator/ # Orchestrator actor, checkpoint system (Redis), goal decomposer, result synthesizer, pipeline orchestrator
   router/       # Deterministic task router with dead-letter handling and rate limiting (not an LLM — pure logic)
   bus/          # NATS message bus adapter
@@ -76,14 +76,17 @@ loom submit "some goal text" --nats-url nats://localhost:4222
 All major components are implemented and functional:
 
 - **Core:** Message schemas, contract validation (with correct bool/int handling), base actor (with signal handling and configurable concurrency), config loader (with schema validation).
-- **Worker:** LLMWorker with resilient JSON parsing (strips markdown fences, handles preamble), `reset()` hook after each task, knowledge source injection, file-ref resolution via WorkspaceManager. Backends updated to current Anthropic API version (2024-10-22).
+- **Worker:** LLMWorker with resilient JSON parsing (strips markdown fences, handles preamble), `reset()` hook after each task, knowledge source injection, file-ref resolution via WorkspaceManager, multi-turn tool-use loop, knowledge silo loading/write-back. Backends updated to current Anthropic API version (2024-10-22) with tool-use support (tools/messages params).
+- **Tool-Use:** ToolProvider ABC and SyncToolProvider in `worker/tools.py`. Dynamic class loading via `load_tool_provider()`. LLMWorker runs a multi-turn tool execution loop (max 10 rounds) when tools are configured.
+- **Knowledge Silos:** Folder-based knowledge injection (`knowledge_silos` config key). Read-only folders prepend content to system prompt. Read-write folders accept `silo_updates` from LLM output (add/modify/delete actions). Tool-type silos load ToolProvider instances for LLM function-calling.
+- **Embeddings:** EmbeddingProvider ABC and OllamaEmbeddingProvider in `worker/embeddings.py`. Generates vector embeddings via Ollama `/api/embed` endpoint. Supports single and batch embedding. Lazy dimension detection.
 - **Router:** Deterministic routing with dead-letter subject for unroutable tasks, token-bucket rate limiting per tier.
 - **Orchestrator:** Full OrchestratorActor with decompose/dispatch/collect/synthesize loop. GoalDecomposer (LLM-based task decomposition), ResultSynthesizer (merge + LLM synthesis modes), CheckpointManager (Redis-backed, configurable TTL).
 - **PipelineOrchestrator:** Fully functional sequential stage execution with input mapping, conditions, timeouts.
 - **ProcessorWorker:** Non-LLM backend support with BackendError hierarchy and SyncProcessingBackend for CPU-bound backends.
 - **WorkspaceManager:** Centralized file-ref resolution with path traversal protection, JSON/text read/write helpers.
 - **CLI:** All 6 commands registered (worker, processor, pipeline, orchestrator, router, submit). Tier mismatch warnings on worker startup.
-- **Tests:** 89+ unit tests pass (messages, contracts, checkpoint, pipeline, workers, processor, workspace). Integration test has `@pytest.mark.integration` marker and polling-based result collection.
+- **Tests:** 159 unit tests pass (messages, contracts, checkpoint, pipeline, workers, processor, workspace, tools, tool-use, knowledge silos, embeddings). Integration test has `@pytest.mark.integration` marker and polling-based result collection.
 - **Infrastructure:** Dockerfiles and k8s manifests updated with correct CMDs and no stale FIXMEs.
 
 ## Known issues

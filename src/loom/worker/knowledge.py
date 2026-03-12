@@ -5,19 +5,20 @@ Workers can have knowledge sources defined in their config YAML under
 a `knowledge_sources` key. This module loads those files and formats them
 for injection into the system prompt, giving workers domain-specific context.
 
-Example config:
-    knowledge_sources:
-      - path: "configs/knowledge/domain_terms.yaml"
-        inject_as: "reference"
-      - path: "configs/knowledge/examples.yaml"
-        inject_as: "few_shot"
+Knowledge silos extend this with folder-based knowledge:
+    knowledge_silos:
+      - name: "classification_guides"
+        type: "folder"
+        path: "knowledge/classification/"
+        permissions: "read"           # "read" or "read_write"
 
-Note: This module is implemented and ready for use. To wire it into a worker,
-call load_knowledge_sources() with the worker config's knowledge_sources list
-and prepend the result to the system prompt in LLMWorker.process().
+Folder silos load all text files from a directory into the system prompt.
+Writable silos accept ``silo_updates`` from the LLM output to persist
+learned patterns (add/modify/delete files within the silo folder).
 """
 from __future__ import annotations
 
+import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,9 @@ import structlog
 import yaml
 
 logger = structlog.get_logger()
+
+# File extensions loaded from folder silos.
+_TEXT_EXTENSIONS = {".md", ".txt", ".yaml", ".yml", ".json", ".csv", ".toml"}
 
 
 def load_knowledge_sources(sources: list[dict[str, Any]]) -> str:
@@ -73,3 +77,189 @@ def _format_few_shot(content: str, suffix: str) -> str:
 
     # For JSONL or plain text, return as-is with header
     return f"\n--- Few-Shot Examples ---\n{content}"
+
+
+# ---------------------------------------------------------------------------
+# Knowledge silos — folder loading and write-back
+# ---------------------------------------------------------------------------
+
+def load_knowledge_silos(silos: list[dict[str, Any]]) -> str:
+    """Load folder-type silos and return formatted content for system prompt.
+
+    Only processes silos with ``type="folder"``. Tool-type silos are handled
+    separately by the runner's ``_load_tool_providers()``.
+
+    Returns:
+        Concatenated content from all folder silos, with section headers.
+        Empty string if no folder silos or no content found.
+    """
+    sections: list[str] = []
+
+    for silo in silos:
+        if silo.get("type") != "folder":
+            continue
+
+        name = silo.get("name", "unnamed")
+        path = Path(silo["path"])
+
+        if not path.is_dir():
+            logger.warning("knowledge.silo_folder_not_found", path=str(path), silo=name)
+            continue
+
+        content = _load_folder_contents(path)
+        if content:
+            sections.append(f"--- Knowledge Silo: {name} ---\n{content}")
+
+    return "\n\n".join(sections)
+
+
+def _load_folder_contents(folder: Path) -> str:
+    """Read all text files from a folder, with file headers.
+
+    Reads ``.md``, ``.txt``, ``.yaml``, ``.yml``, ``.json``, ``.csv``,
+    ``.toml`` files. Skips files matching patterns in ``.siloignore``.
+
+    Files are sorted by name for deterministic prompt ordering.
+    """
+    ignore_patterns = _load_siloignore(folder)
+    parts: list[str] = []
+
+    # Walk recursively, sorted for deterministic ordering
+    for file_path in sorted(folder.rglob("*")):
+        if not file_path.is_file():
+            continue
+        if file_path.suffix.lower() not in _TEXT_EXTENSIONS:
+            continue
+        if file_path.name == ".siloignore":
+            continue
+
+        rel_path = str(file_path.relative_to(folder))
+        if _is_ignored(rel_path, ignore_patterns):
+            continue
+
+        try:
+            text = file_path.read_text(encoding="utf-8")
+            parts.append(f"## {rel_path}\n{text}")
+        except (OSError, UnicodeDecodeError) as e:
+            logger.warning("knowledge.silo_read_error", file=str(file_path), error=str(e))
+
+    return "\n\n".join(parts)
+
+
+def _load_siloignore(folder: Path) -> list[str]:
+    """Load ignore patterns from ``.siloignore`` if it exists.
+
+    Format: one glob pattern per line. Lines starting with ``#`` are comments.
+    """
+    ignore_file = folder / ".siloignore"
+    if not ignore_file.exists():
+        return []
+
+    patterns: list[str] = []
+    for line in ignore_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            patterns.append(line)
+    return patterns
+
+
+def _is_ignored(rel_path: str, patterns: list[str]) -> bool:
+    """Check if a relative path matches any ignore pattern (fnmatch glob)."""
+    for pattern in patterns:
+        if fnmatch.fnmatch(rel_path, pattern):
+            return True
+    return False
+
+
+def apply_silo_updates(
+    updates: list[dict[str, Any]],
+    silos: list[dict[str, Any]],
+) -> None:
+    """Apply LLM-requested file modifications to writable folder silos.
+
+    Each update dict has:
+        - ``silo``: Name of the target silo
+        - ``action``: ``"add"`` | ``"modify"`` | ``"delete"``
+        - ``filename``: Target filename within the silo folder
+        - ``content``: File content (for add/modify actions)
+
+    Validates:
+        - Target silo exists and has ``permissions="read_write"``
+        - Filename has no path traversal (``../``)
+        - Action is one of the allowed values
+    """
+    # Build lookup of writable folder silos
+    writable: dict[str, Path] = {}
+    for silo in silos:
+        if silo.get("type") == "folder" and silo.get("permissions") == "read_write":
+            writable[silo["name"]] = Path(silo["path"])
+
+    for update in updates:
+        silo_name = update.get("silo", "")
+        action = update.get("action", "")
+        filename = update.get("filename", "")
+        content = update.get("content", "")
+
+        # Validate silo is writable
+        if silo_name not in writable:
+            logger.warning(
+                "knowledge.silo_update_denied",
+                silo=silo_name,
+                reason="not writable or not found",
+            )
+            continue
+
+        # Validate filename — no path traversal
+        if ".." in filename or filename.startswith("/"):
+            logger.warning(
+                "knowledge.silo_update_denied",
+                silo=silo_name,
+                filename=filename,
+                reason="path traversal",
+            )
+            continue
+
+        folder = writable[silo_name]
+        target = folder / filename
+
+        # Ensure resolved path is within the silo folder
+        try:
+            target.resolve().relative_to(folder.resolve())
+        except ValueError:
+            logger.warning(
+                "knowledge.silo_update_denied",
+                silo=silo_name,
+                filename=filename,
+                reason="path escapes silo",
+            )
+            continue
+
+        if action == "add":
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            logger.info("knowledge.silo_file_added", silo=silo_name, file=filename)
+
+        elif action == "modify":
+            if not target.exists():
+                logger.warning(
+                    "knowledge.silo_update_skipped",
+                    silo=silo_name,
+                    filename=filename,
+                    reason="file not found for modify",
+                )
+                continue
+            target.write_text(content, encoding="utf-8")
+            logger.info("knowledge.silo_file_modified", silo=silo_name, file=filename)
+
+        elif action == "delete":
+            if target.exists():
+                target.unlink()
+                logger.info("knowledge.silo_file_deleted", silo=silo_name, file=filename)
+
+        else:
+            logger.warning(
+                "knowledge.silo_update_skipped",
+                silo=silo_name,
+                action=action,
+                reason="unknown action",
+            )

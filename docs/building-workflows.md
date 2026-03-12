@@ -276,6 +276,8 @@ loom submit "Analyze document" --context file_ref=report.pdf
 
 LLM workers can have domain-specific knowledge injected into their system prompt. This is useful for glossaries, style guides, domain rules, or few-shot examples.
 
+> **Note:** For folder-based knowledge with write-back support, see Part 7 (Knowledge silos). `knowledge_sources` is simpler but read-only and file-level only.
+
 ### Step 1: Create a knowledge file
 
 Knowledge files can be Markdown, YAML, or plain text:
@@ -416,6 +418,7 @@ Full list of fields available in worker YAML configs:
 | `max_input_tokens` | no | `4000` | Max input token budget |
 | `max_output_tokens` | no | `2000` | Max output token budget |
 | `knowledge_sources` | no | `[]` | List of `{path, inject_as}` for context injection |
+| `knowledge_silos` | no | `[]` | List of silo defs — see Part 7 below |
 | `workspace_dir` | no | — | Workspace directory for file-ref resolution |
 | `resolve_file_refs` | no | `[]` | Payload fields to resolve as workspace file refs |
 | `reset_after_task` | no | `true` | Always `true` for workers (statelessness is enforced) |
@@ -430,6 +433,171 @@ Full list of fields available in worker YAML configs:
 | `loom.tasks.{worker_type}.{tier}` | Workers subscribe here (queue groups for competing consumers) |
 | `loom.tasks.dead_letter` | Unroutable or rate-limited tasks land here |
 | `loom.results.{goal_id}` | Results flow back to the orchestrator that owns the goal |
+
+## Part 7: Knowledge silos (folder-based knowledge with write-back)
+
+Knowledge silos are a more powerful alternative to `knowledge_sources`. They support folder-based loading (not just single files), `.siloignore` filtering, and **write-back** — the LLM can persist learned patterns by including `silo_updates` in its output.
+
+### Read-only silo
+
+Load all files from a folder into the system prompt:
+
+```yaml
+knowledge_silos:
+  - name: "domain_rules"
+    type: "folder"
+    path: "configs/knowledge/rules/"
+    mode: "read"
+```
+
+All files in the folder (except those matching `.siloignore` patterns) are concatenated and prepended to the system prompt.
+
+### Read-write silo
+
+Allow the LLM to add, modify, or delete knowledge files:
+
+```yaml
+knowledge_silos:
+  - name: "learned_patterns"
+    type: "folder"
+    path: "configs/knowledge/patterns/"
+    mode: "readwrite"
+```
+
+The LLM can include a `silo_updates` field in its output:
+
+```json
+{
+  "result": "...",
+  "silo_updates": [
+    {"silo": "learned_patterns", "action": "add", "filename": "new_pattern.md", "content": "..."},
+    {"silo": "learned_patterns", "action": "modify", "filename": "existing.md", "content": "..."},
+    {"silo": "learned_patterns", "action": "delete", "filename": "outdated.md"}
+  ]
+}
+```
+
+The `silo_updates` field is automatically stripped from the worker output before validation and downstream propagation.
+
+### .siloignore
+
+Place a `.siloignore` file in any silo folder. It uses gitignore-style patterns to exclude files:
+
+```
+# .siloignore
+*.pyc
+__pycache__/
+*.tmp
+```
+
+## Part 8: Tool-use (LLM function-calling)
+
+LLM workers support multi-turn tool-use via the standard function-calling protocol. Tools are loaded dynamically from Python classes.
+
+### Step 1: Implement a ToolProvider
+
+For async tools, implement `ToolProvider`:
+
+```python
+from loom.worker.tools import ToolProvider
+
+class MyTool(ToolProvider):
+    def get_definition(self) -> dict:
+        return {
+            "name": "lookup_record",
+            "description": "Look up a record by ID",
+            "input_schema": {
+                "type": "object",
+                "required": ["record_id"],
+                "properties": {
+                    "record_id": {"type": "string"}
+                }
+            }
+        }
+
+    async def execute(self, arguments: dict) -> str:
+        record = await fetch_record(arguments["record_id"])
+        return json.dumps(record)
+```
+
+For synchronous tools, use `SyncToolProvider` (runs in a thread pool):
+
+```python
+from loom.worker.tools import SyncToolProvider
+
+class MyDBTool(SyncToolProvider):
+    def get_definition(self) -> dict:
+        return { ... }
+
+    def execute_sync(self, arguments: dict) -> str:
+        # CPU-bound or blocking I/O — automatically offloaded
+        result = db.query(arguments["sql"])
+        return json.dumps(result)
+```
+
+### Step 2: Configure tools as knowledge silos
+
+Tools are loaded via `knowledge_silos` with `type: "tool"`:
+
+```yaml
+knowledge_silos:
+  - name: "db_lookup"
+    type: "tool"
+    provider: "mypackage.tools.MyDBTool"
+    config:
+      db_path: "/tmp/data.db"
+```
+
+The `config` dict is passed as keyword arguments to the tool class constructor.
+
+### Step 3: How the tool loop works
+
+1. LLM backends receive tool definitions alongside the system prompt
+2. If the LLM returns `tool_calls`, the worker executes each tool
+3. Tool results are fed back to the LLM as follow-up messages
+4. This continues for up to 10 rounds until the LLM produces a final text response
+
+## Part 9: Vector embeddings
+
+Loom provides an `EmbeddingProvider` abstraction for generating vector embeddings. The built-in implementation uses Ollama's `/api/embed` endpoint.
+
+### Using OllamaEmbeddingProvider
+
+```python
+from loom.worker.embeddings import OllamaEmbeddingProvider
+
+provider = OllamaEmbeddingProvider(
+    model="nomic-embed-text",
+    base_url="http://localhost:11434",
+)
+
+# Single text
+embedding = await provider.embed("Some text to embed")
+# Returns: list[float] of dimension-sized vector
+
+# Batch
+embeddings = await provider.embed_batch(["text1", "text2", "text3"])
+# Returns: list[list[float]]
+```
+
+### Creating a custom EmbeddingProvider
+
+Implement the `EmbeddingProvider` ABC:
+
+```python
+from loom.worker.embeddings import EmbeddingProvider
+
+class MyEmbeddingProvider(EmbeddingProvider):
+    async def embed(self, text: str) -> list[float]:
+        ...
+
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        ...
+
+    @property
+    def dimensions(self) -> int | None:
+        return 768
+```
 
 ## Tips
 

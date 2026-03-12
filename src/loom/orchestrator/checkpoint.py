@@ -23,7 +23,7 @@ This is conceptually similar to how Claude Code itself handles context
 compression — the key insight is the same: keep a structured summary +
 recent window rather than the full history.
 
-NOTE: This module is used by OrchestratorActor (runner.py), which is a stub.
+NOTE: This module is used by OrchestratorActor (runner.py).
       PipelineOrchestrator does NOT use checkpoints because its sequential
       stage execution doesn't accumulate unbounded context.
 

@@ -18,24 +18,28 @@ class MockLLMBackend:
         self._output = response_output or {"summary": "test summary", "key_points": ["a"]}
         self._model = model
 
-    async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0):
+    async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs):
         return {
             "content": json.dumps(self._output),
             "model": self._model,
             "prompt_tokens": 100,
             "completion_tokens": 50,
+            "tool_calls": None,
+            "stop_reason": "end_turn",
         }
 
 
 class BadJsonBackend:
     """Backend that returns non-JSON content."""
 
-    async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0):
+    async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs):
         return {
             "content": "This is not JSON at all",
             "model": "bad-model",
             "prompt_tokens": 10,
             "completion_tokens": 5,
+            "tool_calls": None,
+            "stop_reason": "end_turn",
         }
 
 
@@ -202,13 +206,15 @@ async def test_llm_worker_resolves_file_refs(tmp_path):
     received_prompts = {}
 
     class SpyLLMBackend:
-        async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0):
+        async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs):
             received_prompts["user_message"] = user_message
             return {
                 "content": json.dumps({"summary": "test", "key_points": ["a"]}),
                 "model": "mock",
                 "prompt_tokens": 10,
                 "completion_tokens": 5,
+                "tool_calls": None,
+                "stop_reason": "end_turn",
             }
 
     backends = {"local": SpyLLMBackend()}
@@ -252,13 +258,15 @@ async def test_llm_worker_loads_knowledge_sources(tmp_path):
     received_prompts = {}
 
     class SpyLLMBackend:
-        async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0):
+        async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs):
             received_prompts["system_prompt"] = system_prompt
             return {
                 "content": json.dumps({"summary": "test", "key_points": ["a"]}),
                 "model": "mock",
                 "prompt_tokens": 10,
                 "completion_tokens": 5,
+                "tool_calls": None,
+                "stop_reason": "end_turn",
             }
 
     backends = {"local": SpyLLMBackend()}

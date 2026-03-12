@@ -316,8 +316,6 @@ def orchestrator(config: str, nats_url: str):
     Subscribes to: loom.goals.incoming
     Queue group: orchestrators
 
-    Note: OrchestratorActor is currently a stub. The decompose/dispatch/
-    synthesize loop is the next major implementation milestone.
     """
     import yaml
 

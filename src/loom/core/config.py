@@ -105,4 +105,70 @@ def _validate_config(
                 f"(JSON Schema object), got {type(config[schema_key]).__name__}"
             )
 
+    # Validate knowledge_silos if present
+    if "knowledge_silos" in config:
+        errors.extend(_validate_knowledge_silos(config["knowledge_silos"], path))
+
+    return errors
+
+
+def _validate_knowledge_silos(
+    silos: Any,
+    path: str | Path,
+) -> list[str]:
+    """Validate the knowledge_silos config section.
+
+    Each silo must have ``name`` (str) and ``type`` (str).
+    Folder silos must have ``path`` (str).
+    Tool silos must have ``provider`` (str) and ``config`` (dict).
+    """
+    errors: list[str] = []
+
+    if not isinstance(silos, list):
+        return [f"config at {path}: 'knowledge_silos' should be a list, got {type(silos).__name__}"]
+
+    for i, silo in enumerate(silos):
+        prefix = f"config at {path}: knowledge_silos[{i}]"
+
+        if not isinstance(silo, dict):
+            errors.append(f"{prefix}: expected dict, got {type(silo).__name__}")
+            continue
+
+        # Required fields for all silo types
+        if "name" not in silo:
+            errors.append(f"{prefix}: missing required key 'name'")
+        elif not isinstance(silo["name"], str):
+            errors.append(f"{prefix}: 'name' must be a string")
+
+        if "type" not in silo:
+            errors.append(f"{prefix}: missing required key 'type'")
+            continue
+        elif not isinstance(silo["type"], str):
+            errors.append(f"{prefix}: 'type' must be a string")
+            continue
+
+        silo_type = silo["type"]
+
+        if silo_type == "folder":
+            if "path" not in silo:
+                errors.append(f"{prefix}: folder silo missing required key 'path'")
+            elif not isinstance(silo["path"], str):
+                errors.append(f"{prefix}: 'path' must be a string")
+
+            permissions = silo.get("permissions", "read")
+            if permissions not in ("read", "read_write"):
+                errors.append(f"{prefix}: 'permissions' must be 'read' or 'read_write', got '{permissions}'")
+
+        elif silo_type == "tool":
+            if "provider" not in silo:
+                errors.append(f"{prefix}: tool silo missing required key 'provider'")
+            elif not isinstance(silo["provider"], str):
+                errors.append(f"{prefix}: 'provider' must be a string")
+
+            if "config" in silo and not isinstance(silo["config"], dict):
+                errors.append(f"{prefix}: 'config' must be a dict")
+
+        else:
+            errors.append(f"{prefix}: unknown silo type '{silo_type}' (expected 'folder' or 'tool')")
+
     return errors
