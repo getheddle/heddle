@@ -97,8 +97,7 @@ class TaskWorker(BaseActor):
         # Reset — worker holds NO state from this task.
         # This is a design invariant, not a suggestion. Any instance variables
         # set during process() must not affect subsequent invocations.
-        # TODO: Consider adding an explicit reset() hook for subclasses that
-        # need to clean up temporary resources (file handles, caches, etc.).
+        await self.reset()
 
     @abstractmethod
     async def process(self, payload: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
@@ -117,6 +116,18 @@ class TaskWorker(BaseActor):
             }
         """
         ...
+
+    async def reset(self) -> None:
+        """Post-task cleanup hook for subclasses.
+
+        Called after every task (success or failure) to release temporary
+        resources (file handles, caches, scratch buffers). The default
+        implementation is a no-op. Override in subclasses that allocate
+        per-task resources in process().
+
+        This is the enforcement point for the statelessness invariant:
+        any state set during process() must be cleared here.
+        """
 
     async def _publish_result(
         self,

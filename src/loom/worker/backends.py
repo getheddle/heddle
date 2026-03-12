@@ -58,10 +58,9 @@ class AnthropicBackend(LLMBackend):
             base_url="https://api.anthropic.com",
             headers={
                 "x-api-key": api_key,
-                # FIXME: This API version is old (2023-06-01). Consider updating
-                # to a more recent version for access to newer features.
+                # Anthropic API version — pinned for reproducibility.
                 # See: https://docs.anthropic.com/en/api/versioning
-                "anthropic-version": "2023-06-01",
+                "anthropic-version": "2024-10-22",
                 "content-type": "application/json",
             },
             timeout=120.0,

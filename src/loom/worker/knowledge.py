@@ -12,16 +12,19 @@ Example config:
       - path: "configs/knowledge/examples.yaml"
         inject_as: "few_shot"
 
-TODO: This module is implemented but not yet wired into the worker startup
-      path (LLMWorker.process() doesn't call it). Wire it in when knowledge
-      injection is needed — the API is ready.
+Note: This module is implemented and ready for use. To wire it into a worker,
+call load_knowledge_sources() with the worker config's knowledge_sources list
+and prepend the result to the system prompt in LLMWorker.process().
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
+import structlog
 import yaml
+
+logger = structlog.get_logger()
 
 
 def load_knowledge_sources(sources: list[dict[str, Any]]) -> str:
@@ -39,8 +42,11 @@ def load_knowledge_sources(sources: list[dict[str, Any]]) -> str:
         inject_as = source.get("inject_as", "reference")
 
         if not path.exists():
-            # TODO: Consider logging a warning here instead of silently skipping.
-            # Silent skips can hide configuration mistakes (typos in paths, etc.).
+            logger.warning(
+                "knowledge.source_not_found",
+                path=str(path),
+                inject_as=inject_as,
+            )
             continue
 
         content = path.read_text()

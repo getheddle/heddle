@@ -225,9 +225,9 @@ class PipelineOrchestrator(BaseActor):
         Supports: "path.to.value == true", "path.to.value == false",
                   "path.to.value != null"
 
-        TODO: This is a minimal condition evaluator. If more complex conditions
-              are needed (AND/OR, numeric comparisons, regex), consider using
-              a safe expression evaluator rather than extending this ad-hoc parser.
+        Note: This is a minimal condition evaluator supporting == and != against
+        bool, null, and string literals. If more complex conditions are needed
+        (AND/OR, numeric comparisons, regex), consider a safe expression evaluator.
         """
         parts = condition.split()
         if len(parts) != 3:
@@ -268,9 +268,7 @@ class PipelineOrchestrator(BaseActor):
         Subscribes to loom.results.{goal_id}, filters by task_id,
         and returns the matching result (or None on timeout).
         """
-        # FIXME: asyncio.get_event_loop() is deprecated in Python 3.10+.
-        # Use asyncio.get_running_loop() instead to avoid DeprecationWarning.
-        result_future: asyncio.Future[TaskResult] = asyncio.get_event_loop().create_future()
+        result_future: asyncio.Future[TaskResult] = asyncio.get_running_loop().create_future()
         subject = f"loom.results.{goal_id}"
 
         async def _handler(msg):

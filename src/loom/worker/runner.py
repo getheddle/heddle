@@ -5,6 +5,7 @@ No state carries between tasks — this is enforced, not optional.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import structlog
@@ -14,6 +15,50 @@ from loom.worker.base import TaskWorker
 
 logger = structlog.get_logger()
 
+# Regex to strip markdown code fences that LLMs commonly wrap JSON in.
+# Matches ```json ... ``` or ``` ... ``` with optional whitespace.
+_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?\s*```$", re.DOTALL)
+
+
+def _extract_json(raw: str) -> dict:
+    """Extract a JSON object from an LLM response, handling common quirks.
+
+    LLMs frequently wrap valid JSON in markdown code fences (```json ... ```)
+    or add explanatory text before/after the JSON object. This function
+    handles those cases in order of preference:
+
+    1. Direct parse (ideal — model returned clean JSON)
+    2. Strip markdown fences and parse
+    3. Extract the first { ... } block via regex (fallback for preamble/postamble)
+
+    Raises ValueError if no valid JSON object can be extracted.
+    """
+    # 1. Try direct parse
+    stripped = raw.strip()
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Try stripping markdown fences
+    fence_match = _FENCE_RE.match(stripped)
+    if fence_match:
+        try:
+            return json.loads(fence_match.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+
+    # 3. Fallback: extract the first JSON object from anywhere in the response.
+    # This handles cases where the LLM adds prose before/after the JSON.
+    obj_match = re.search(r"\{.*\}", stripped, re.DOTALL)
+    if obj_match:
+        try:
+            return json.loads(obj_match.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    raise ValueError(f"LLM returned non-JSON: {raw[:200]}")
+
 
 class LLMWorker(TaskWorker):
     """
@@ -22,7 +67,7 @@ class LLMWorker(TaskWorker):
     Extends TaskWorker with LLM-specific logic:
     - Builds prompt from system_prompt + JSON payload
     - Calls the appropriate LLM backend by model tier
-    - Parses JSON output from the LLM response
+    - Parses JSON output from the LLM response (with fence-stripping fallback)
     """
 
     def __init__(
@@ -54,15 +99,8 @@ class LLMWorker(TaskWorker):
             max_tokens=self.config.get("max_output_tokens", 2000),
         )
 
-        # 4. Parse JSON output from LLM response.
-        # FIXME: This is fragile — if the LLM wraps JSON in markdown fences
-        # (e.g., ```json\n{...}\n```) or adds explanatory text before/after the
-        # JSON, parsing fails. Consider extracting JSON from the response with
-        # a regex fallback: re.search(r'\{.*\}', content, re.DOTALL).
-        try:
-            output = json.loads(result["content"])
-        except json.JSONDecodeError:
-            raise ValueError(f"LLM returned non-JSON: {result['content'][:200]}")
+        # 4. Parse JSON output — handles markdown fences and preamble text
+        output = _extract_json(result["content"])
 
         return {
             "output": output,

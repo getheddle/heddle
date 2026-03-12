@@ -8,8 +8,9 @@
 #   2. If using local models, deploy Ollama separately (see ollama-deployment.yaml)
 #   3. Images use imagePullPolicy: Never (for Minikube local builds)
 #
-# FIXME: orchestrator-deployment.yaml uses a CMD that references a nonexistent
-#        CLI command. See the FIXME in Dockerfile.orchestrator.
+# Build all images before deploying:
+#   docker build -f Dockerfile.router       -t loom-router .
+#   docker build -f Dockerfile.orchestrator -t loom-orchestrator .
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

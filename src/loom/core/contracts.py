@@ -12,8 +12,8 @@ Limitations (by design — keeps the dependency tree minimal):
 - No min/max, pattern, enum, or format constraints
 - No $ref or schema composition (allOf, oneOf, anyOf)
 
-TODO: If you need full Draft 2020-12 validation, add `jsonschema` to dependencies
-      and swap this module. The validate_input/validate_output API stays the same.
+If you need full Draft 2020-12 validation, add `jsonschema` to dependencies
+and swap this module. The validate_input/validate_output API stays the same.
 """
 from __future__ import annotations
 
@@ -57,25 +57,27 @@ def _validate(data: Any, schema: dict, context: str) -> list[str]:
             if field not in data:
                 errors.append(f"{context}: missing required field '{field}'")
 
-        # Check property types (shallow — does not recurse into nested objects)
+        # Check property types (shallow — does not recurse into nested objects).
+        # Type checking order matters: bool must be checked BEFORE int/number
+        # because Python's bool is a subclass of int (isinstance(True, int) is True).
         props = schema.get("properties", {})
         for field, field_schema in props.items():
             if field in data:
                 field_type = field_schema.get("type")
                 value = data[field]
-                if field_type == "string" and not isinstance(value, str):
+                if field_type == "boolean" and not isinstance(value, bool):
+                    errors.append(f"{context}.{field}: expected boolean")
+                elif field_type == "integer":
+                    # Reject bools masquerading as ints (bool is a subclass of int)
+                    if isinstance(value, bool) or not isinstance(value, int):
+                        errors.append(f"{context}.{field}: expected integer")
+                elif field_type == "number":
+                    # Reject bools masquerading as numbers
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
+                        errors.append(f"{context}.{field}: expected number")
+                elif field_type == "string" and not isinstance(value, str):
                     errors.append(f"{context}.{field}: expected string")
-                elif field_type == "number" and not isinstance(value, (int, float)):
-                    errors.append(f"{context}.{field}: expected number")
-                elif field_type == "integer" and not isinstance(value, int):
-                    errors.append(f"{context}.{field}: expected integer")
                 elif field_type == "array" and not isinstance(value, list):
                     errors.append(f"{context}.{field}: expected array")
-                elif field_type == "boolean" and not isinstance(value, bool):
-                    errors.append(f"{context}.{field}: expected boolean")
-                # FIXME: Python's bool is a subclass of int, so isinstance(True, int)
-                # returns True. This means a boolean value passes an "integer" check.
-                # Not a problem in practice since LLM JSON output distinguishes them,
-                # but worth noting if strict validation is ever needed.
 
     return errors

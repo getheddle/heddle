@@ -1,6 +1,17 @@
-# FIXME: This deployment will fail because Dockerfile.orchestrator's CMD
-#        references "loom.cli.main orchestrator" which doesn't exist as a CLI command.
-#        Either add an 'orchestrator' command to cli/main.py or switch to 'pipeline'.
+# Deployment for the Loom dynamic orchestrator.
+#
+# The orchestrator uses an LLM to decompose goals into subtasks, dispatches
+# them to workers via the router, and synthesizes the results. It requires
+# NATS for messaging and Redis for checkpoint state.
+#
+# The container CMD (set in Dockerfile.orchestrator) runs:
+#   loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://nats:4222
+#
+# Note: OrchestratorActor is currently a stub. The container will start and
+# subscribe to loom.goals.incoming, but the decompose/dispatch/synthesize
+# loop is not yet implemented.
+#
+# Build image: docker build -f Dockerfile.orchestrator -t loom-orchestrator .
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,7 +30,7 @@ spec:
       containers:
         - name: orchestrator
           image: loom-orchestrator:latest
-          imagePullPolicy: Never
+          imagePullPolicy: Never    # For Minikube local builds
           env:
             - name: NATS_URL
               value: "nats://nats:4222"

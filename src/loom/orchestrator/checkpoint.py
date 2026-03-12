@@ -27,10 +27,10 @@ NOTE: This module is used by OrchestratorActor (runner.py), which is a stub.
       PipelineOrchestrator does NOT use checkpoints because its sequential
       stage execution doesn't accumulate unbounded context.
 
-TODO: The token counting uses tiktoken with cl100k_base encoding, which is
-      OpenAI's tokenizer. For Anthropic models, token counts will be approximate.
-      Consider using anthropic's token counting when available, or accept the
-      ~10-15% estimation error.
+Note: Token counting uses tiktoken with cl100k_base encoding (OpenAI's tokenizer).
+For Anthropic models, token counts are approximate (~10-15% estimation error).
+This is acceptable for checkpoint threshold decisions where exact counts are
+not critical.
 """
 from __future__ import annotations
 
@@ -63,11 +63,13 @@ class CheckpointManager:
         token_threshold: int = 50_000,     # Trigger checkpoint at this count
         recent_window_size: int = 5,       # Keep last N interactions in detail
         encoding_name: str = "cl100k_base",
+        ttl_seconds: int = 86400,          # Redis key expiry (default: 24h)
     ):
         self.redis = redis.from_url(redis_url)
         self.token_threshold = token_threshold
         self.recent_window_size = recent_window_size
         self.encoder = tiktoken.get_encoding(encoding_name)
+        self.ttl_seconds = ttl_seconds
 
     def estimate_tokens(self, text: str) -> int:
         """Estimate token count for a string."""
@@ -127,14 +129,13 @@ class CheckpointManager:
             checkpoint_number=checkpoint_number,
         )
 
-        # Persist to Redis with 24h TTL.
-        # TODO: Consider making TTL configurable — long-running goals may need
-        # checkpoints that survive longer than 24 hours.
+        # Persist to Redis with configurable TTL (default 24h).
+        # Long-running goals can increase ttl_seconds at construction time.
         key = f"loom:checkpoint:{goal_id}:{checkpoint_number}"
-        await self.redis.set(key, checkpoint.model_dump_json(), ex=86400)
+        await self.redis.set(key, checkpoint.model_dump_json(), ex=self.ttl_seconds)
 
         # Maintain a "latest" pointer so load_latest() doesn't need to scan.
-        await self.redis.set(f"loom:checkpoint:{goal_id}:latest", key, ex=86400)
+        await self.redis.set(f"loom:checkpoint:{goal_id}:latest", key, ex=self.ttl_seconds)
 
         logger.info(
             "checkpoint.created",

@@ -45,7 +45,7 @@ class TaskStatus(str, Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
-    RETRY = "retry"  # TODO: Retry logic not yet implemented in TaskWorker
+    RETRY = "retry"  # Transition: FAILED -> RETRY -> PROCESSING (handled by TaskWorker)
 
 
 class ModelTier(str, Enum):
@@ -75,8 +75,8 @@ class TaskMessage(BaseModel):
     payload: dict[str, Any]                    # Structured input — must match worker's input_schema
     model_tier: ModelTier = ModelTier.STANDARD
     priority: TaskPriority = TaskPriority.NORMAL
-    max_retries: int = 2                       # TODO: Retry logic not yet implemented
-    retry_count: int = 0                       # TODO: Incremented on retry (not yet used)
+    max_retries: int = 2                       # Max retry attempts before permanent failure
+    retry_count: int = 0                       # Incremented on each retry by TaskWorker
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: dict[str, Any] = Field(default_factory=dict)  # Routing hints, pipeline context
 

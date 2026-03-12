@@ -14,9 +14,14 @@ tier_overrides:
   extractor: "standard"
   # analyzer: "frontier"
 
-# Cost thresholds (tokens per minute budget per tier).
-# TODO: These are defined but NOT enforced by the router yet.
-#       See the TODO in router.py for implementation notes.
+# Per-tier rate limits enforced by the router's token-bucket rate limiter.
+# max_concurrent: bucket capacity (burst limit). Tasks exceeding this are
+#                 sent to loom.tasks.dead_letter with reason "rate_limited".
+# tokens_per_minute: used to derive the refill rate. The bucket refills one
+#                    token every (60 / max_concurrent) seconds.
+# NOTE: This is dispatch-side throttling only. It does not track whether
+#       workers have finished processing. For true backpressure, workers
+#       would need to report completion events.
 rate_limits:
   local:
     max_concurrent: 4

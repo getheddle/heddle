@@ -12,28 +12,30 @@ The core idea: instead of one big LLM context, split work across narrowly-scoped
 src/loom/
   core/         # Message schemas (Pydantic), base actor class, I/O contract validation, config loader
   worker/       # Stateless LLM worker actor, LLM backend adapters (Anthropic/Ollama/OpenAI-compat), knowledge loader
-  orchestrator/ # Orchestrator actor (stub), checkpoint system (Redis), decomposer (stub), synthesizer (stub)
-  router/       # Deterministic task router (not an LLM — pure logic routing by worker_type and model_tier)
+  orchestrator/ # Orchestrator actor, checkpoint system (Redis), goal decomposer, result synthesizer, pipeline orchestrator
+  router/       # Deterministic task router with dead-letter handling and rate limiting (not an LLM — pure logic)
   bus/          # NATS message bus adapter
-  cli/          # Click CLI entry point
+  cli/          # Click CLI entry point (worker, processor, pipeline, orchestrator, router, submit commands)
 configs/
   workers/      # YAML configs defining each worker's system prompt, I/O schema, default tier
   orchestrators/# Orchestrator configs
-  router_rules.yaml  # Tier overrides and rate limits
+  router_rules.yaml  # Tier overrides and rate limits (enforced by token-bucket limiter)
 k8s/            # Kubernetes manifests (Minikube-ready, Kustomize)
-tests/          # Unit tests (messages, contracts) and integration test stub
+tests/          # Unit tests (messages, contracts, checkpoint, pipeline, workers, processor) and integration test
 ```
 
 ## Key design rules
 
-- **Workers are stateless.** They process one task and reset. No state carries between tasks — this is enforced, not optional.
+- **Workers are stateless.** They process one task and reset (via `reset()` hook). No state carries between tasks — this is enforced, not optional.
 - **All inter-actor communication uses typed Pydantic messages** (`TaskMessage`, `TaskResult`, `OrchestratorGoal`, `CheckpointState` in `core/messages.py`).
-- **The router is deterministic** — it does not use an LLM. It routes by `worker_type` and `model_tier` using rules in `configs/router_rules.yaml`.
-- **Workers have strict I/O contracts** validated by `core/contracts.py`. Input and output schemas are defined per-worker in their YAML config.
+- **The router is deterministic** — it does not use an LLM. It routes by `worker_type` and `model_tier` using rules in `configs/router_rules.yaml`. Unroutable tasks go to `loom.tasks.dead_letter`.
+- **Workers have strict I/O contracts** validated by `core/contracts.py`. Input and output schemas are defined per-worker in their YAML config. Boolean values are correctly distinguished from integers.
 - **Three model tiers exist:** `local` (Ollama), `standard` (Claude Sonnet etc.), `frontier` (Claude Opus etc.). The router and task metadata decide which tier handles each task.
+- **Rate limiting:** Token-bucket rate limiter enforces per-tier dispatch throttling based on `rate_limits` in `router_rules.yaml`.
 - **NATS subject convention:**
   - `loom.tasks.incoming` — Router picks up tasks here
   - `loom.tasks.{worker_type}.{tier}` — Routed tasks land here; workers subscribe with queue groups
+  - `loom.tasks.dead_letter` — Unroutable/rate-limited tasks land here
   - `loom.results.{goal_id}` — Results flow back to orchestrators
   - `loom.goals.incoming` — Top-level goals for orchestrators
 
@@ -44,8 +46,11 @@ tests/          # Unit tests (messages, contracts) and integration test stub
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Run unit tests (no infrastructure needed)
-pytest tests/test_messages.py tests/test_contracts.py -v
+# Run unit tests (no infrastructure needed — excludes integration tests)
+pytest tests/ -v -m "not integration"
+
+# Run ALL tests including integration (needs NATS + workers running)
+pytest tests/ -v
 
 # Lint
 ruff check src/
@@ -56,41 +61,42 @@ loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nat
 # Run the router
 loom router --nats-url nats://localhost:4222
 
+# Run the orchestrator
+loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
+
+# Run a pipeline
+loom pipeline --config configs/orchestrators/doc_pipeline.yaml --nats-url nats://localhost:4222
+
 # Submit a test goal
 loom submit "some goal text" --nats-url nats://localhost:4222
 ```
 
 ## Current state
 
-The scaffolding is complete and wired:
-- Message schemas, contract validation, base actor, LLM backends, worker runtime, router, NATS adapter, CLI — all implemented and working.
-- **PipelineOrchestrator** is fully functional (sequential stage execution with input mapping, conditions, timeouts).
-- **ProcessorWorker** is implemented and working (non-LLM backend support, tested with DoclingBackend).
-- **49 unit tests pass** (messages, contracts, pipeline, workers, processor).
-- **1 integration test exists** but requires running infrastructure (NATS + workers).
-- Orchestrator has a stub `handle_message` — the decompose/dispatch/synthesize loop is the next thing to build.
-- `orchestrator/decomposer.py` and `orchestrator/synthesizer.py` are empty stubs with detailed TODO guidance.
-- `orchestrator/checkpoint.py` is fully implemented (Redis-backed context compression with tiktoken token counting).
+All major components are implemented and functional:
 
-## Known issues (FIXME)
+- **Core:** Message schemas, contract validation (with correct bool/int handling), base actor (with signal handling and configurable concurrency), config loader (with schema validation).
+- **Worker:** LLMWorker with resilient JSON parsing (strips markdown fences, handles preamble), `reset()` hook after each task, knowledge source loader with logging. Backends updated to current Anthropic API version (2024-10-22).
+- **Router:** Deterministic routing with dead-letter subject for unroutable tasks, token-bucket rate limiting per tier.
+- **Orchestrator:** Full OrchestratorActor with decompose/dispatch/collect/synthesize loop. GoalDecomposer (LLM-based task decomposition), ResultSynthesizer (merge + LLM synthesis modes), CheckpointManager (Redis-backed, configurable TTL).
+- **PipelineOrchestrator:** Fully functional sequential stage execution with input mapping, conditions, timeouts.
+- **ProcessorWorker:** Non-LLM backend support, tested with DoclingBackend.
+- **CLI:** All 6 commands registered (worker, processor, pipeline, orchestrator, router, submit). Tier mismatch warnings on worker startup.
+- **Tests:** 75+ unit tests pass (messages, contracts, checkpoint, pipeline, workers, processor). Integration test has `@pytest.mark.integration` marker and polling-based result collection.
+- **Infrastructure:** Dockerfiles and k8s manifests updated with correct CMDs and no stale FIXMEs.
 
-- **Router CLI bug:** `cli/main.py` router command exits immediately after subscribing — `asyncio.get_event_loop().run_forever()` is unreachable after `asyncio.run()`. Fix documented in code.
-- **Dockerfile.orchestrator:** CMD references nonexistent `loom orchestrator` CLI command. OrchestratorActor is a stub.
-- **Anthropic API version:** backends.py uses old `anthropic-version: 2023-06-01`.
-- **LLMWorker JSON parsing:** `runner.py` uses `json.loads()` directly on LLM output — fails if model wraps response in markdown fences or adds surrounding text.
-- **Deprecated asyncio calls:** Several files use `asyncio.get_event_loop()` instead of `asyncio.get_running_loop()`.
-- **Router rate limits:** Defined in `router_rules.yaml` but not enforced by the router.
-- **Knowledge sources:** Module exists (`worker/knowledge.py`) but is not wired into the worker startup path.
+## Known issues
+
+- **Knowledge sources:** Module exists (`worker/knowledge.py`) but is not wired into the worker startup path. The loader works but `LLMWorker.process()` doesn't call it yet.
+- **Summarizer file_ref gap:** LLMWorker doesn't resolve file_refs from workspace. Workers that need file content require custom logic or inline data in the payload.
 
 ## What to implement next
 
-1. **Fix router CLI bug** — the asyncio.run()/run_forever() issue (see FIXME in cli/main.py)
-2. **LLMWorker JSON parsing resilience** — strip markdown fences, handle non-JSON preamble
-3. **OrchestratorActor** — implement the decompose/dispatch/synthesize loop using decomposer.py and synthesizer.py
-4. **Wire knowledge sources** — call `load_knowledge_sources()` in LLMWorker.process()
-5. **Add `orchestrator` CLI command** — register OrchestratorActor in cli/main.py, fix Dockerfile.orchestrator
-6. **Enforce rate limits** — implement rate limiting in TaskRouter based on router_rules.yaml
-7. **Expand test coverage** — checkpoint tests, orchestrator tests, integration test with pytest marker
+1. **Wire knowledge sources** — call `load_knowledge_sources()` in LLMWorker.process()
+2. **File-ref resolution** — add workspace file reading to LLMWorker for stages that need extracted content
+3. **Orchestrator tests** — unit tests for OrchestratorActor (decompose/dispatch/synthesize loop)
+4. **End-to-end integration test** — full goal submission through router/workers/orchestrator
+5. **Router dead-letter consumer** — implement a dead-letter processor for monitoring/retry
 
 ## What NOT to do
 

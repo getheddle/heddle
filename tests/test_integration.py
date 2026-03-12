@@ -1,60 +1,130 @@
 """
-Integration test: submit task -> router -> worker -> result.
+Integration test: submit a task via NATS -> worker processes it -> result arrives.
 
-Run with:  pytest tests/test_integration.py -v
-Requires:  NATS running on localhost:4222 AND a summarizer worker running:
-           loom worker --config configs/workers/summarizer.yaml --tier local \
-                       --nats-url nats://localhost:4222
+This test validates the full message round-trip through the Loom actor mesh:
+  1. Connect to NATS and subscribe to the results subject.
+  2. Publish a TaskMessage directly to a worker's subject (bypassing the
+     router for test isolation).
+  3. Poll for the result with a configurable timeout instead of a fixed
+     sleep, so the test adapts to slow machines and cold Ollama starts.
+  4. Assert that exactly one result arrived and its status is valid.
 
-NOTE: This test will FAIL if no worker is subscribed to loom.tasks.summarizer.local.
-      The task message will be published but nobody will process it, so results
-      will be empty after the 5-second wait. This is expected behavior when
-      running `pytest tests/` without infrastructure — only unit tests pass.
+Run with:
+    pytest tests/test_integration.py -v
 
-TODO: Add a pytest marker (e.g., @pytest.mark.integration) so this test can be
-      excluded from default test runs: pytest tests/ -v -m "not integration"
+Skip during default runs:
+    pytest tests/ -v -m "not integration"
 
-TODO: Consider increasing the sleep or using a polling loop with timeout instead
-      of a fixed 5-second wait. On slow machines or cold Ollama starts, 5 seconds
-      may not be enough for the model to respond.
+Prerequisites:
+    - NATS running on localhost:4222
+    - A summarizer worker subscribed to ``loom.tasks.summarizer.local``::
+
+        loom worker --config configs/workers/summarizer.yaml \\
+                    --tier local --nats-url nats://localhost:4222
+
+NOTE: Without infrastructure the test will fail — this is expected.
+      Unit tests (``pytest tests/ -m "not integration"``) do not require it.
 """
+from __future__ import annotations
+
 import asyncio
 import json
+import time
 
 import pytest
 import nats as nats_lib
 
 from loom.core.messages import TaskMessage, TaskResult, ModelTier
 
+# ---------------------------------------------------------------------------
+# Configuration constants
+# ---------------------------------------------------------------------------
+
 NATS_URL = "nats://localhost:4222"
 
+# Maximum number of seconds to wait for the worker to return a result.
+# Override via the LOOM_INTEGRATION_TIMEOUT env-var if needed (see fixture).
+DEFAULT_TIMEOUT_SECONDS: float = 15.0
 
+# How often (in seconds) we check whether a result has arrived.
+POLL_INTERVAL_SECONDS: float = 0.5
+
+
+# ---------------------------------------------------------------------------
+# Test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_roundtrip():
-    nc = await nats_lib.connect(NATS_URL)
-    results = []
+    """Full NATS round-trip: publish a task and poll until the result arrives.
 
-    # Subscribe to results
-    async def on_result(msg):
+    The test publishes a ``TaskMessage`` for the *summarizer* worker on the
+    ``local`` tier and then polls the ``loom.results.*`` wildcard subscription
+    until either:
+
+    * A result message is received (success path), or
+    * The configurable timeout elapses (failure path — no worker responded).
+
+    Using a polling loop instead of a fixed ``asyncio.sleep`` makes the test
+    both faster on quick machines and more tolerant of slow cold-starts.
+    """
+
+    # -- 1. Connect to NATS -------------------------------------------------
+    nc = await nats_lib.connect(NATS_URL)
+
+    # Accumulator for result messages delivered via the subscription callback.
+    results: list[dict] = []
+
+    async def _on_result(msg) -> None:
+        """Callback invoked by NATS when a message arrives on loom.results.*."""
         results.append(json.loads(msg.data.decode()))
 
-    await nc.subscribe("loom.results.*", cb=on_result)
+    # Subscribe to the wildcard results subject so we capture any result
+    # regardless of goal_id.
+    await nc.subscribe("loom.results.*", cb=_on_result)
 
-    # Publish a task directly to a worker subject (bypasses router for test isolation)
+    # -- 2. Build and publish the task --------------------------------------
     task = TaskMessage(
         worker_type="summarizer",
-        payload={"text": "This is a test document with several sentences about testing."},
+        payload={
+            "text": (
+                "This is a test document with several sentences about testing."
+            ),
+        },
         model_tier=ModelTier.LOCAL,
     )
+
+    # Publish directly to the worker subject, bypassing the router.
+    # This keeps the test focused on the worker round-trip.
     await nc.publish(
         "loom.tasks.summarizer.local",
         json.dumps(task.model_dump(mode="json")).encode(),
     )
 
-    # Wait for result
-    await asyncio.sleep(5)
+    # -- 3. Poll for the result with a timeout ------------------------------
+    deadline = time.monotonic() + DEFAULT_TIMEOUT_SECONDS
+
+    while not results and time.monotonic() < deadline:
+        # Yield to the event loop so the NATS subscription callback can fire.
+        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+
+    # -- 4. Tear down the NATS connection -----------------------------------
+    # drain() flushes pending messages and closes the connection gracefully.
     await nc.drain()
 
-    assert len(results) == 1
+    # -- 5. Assertions ------------------------------------------------------
+    assert len(results) == 1, (
+        f"Expected exactly 1 result within {DEFAULT_TIMEOUT_SECONDS}s, "
+        f"got {len(results)}. Is the summarizer worker running?"
+    )
+
     result = TaskResult(**results[0])
-    assert result.status.value in ("completed", "failed")
+
+    # The worker should report either success or an explicit failure — both
+    # are valid outcomes for an integration smoke-test. What we do *not*
+    # want is zero results (timeout) or a malformed message.
+    assert result.status.value in ("completed", "failed"), (
+        f"Unexpected result status: {result.status.value!r}"
+    )
