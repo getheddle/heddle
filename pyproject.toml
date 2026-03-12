@@ -21,10 +21,14 @@ local = [
 docproc = [
     "docling>=2.0.0",          # Document extraction (PDF, DOCX, etc.)
 ]
+duckdb = [
+    "duckdb>=1.0.0",           # Embedded analytics database
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "ruff>=0.3.0",
+    "duckdb>=1.0.0",
 ]
 
 [project.scripts]

@@ -606,3 +606,89 @@ class MyEmbeddingProvider(EmbeddingProvider):
 - **Use local tier for development.** Ollama with a small model (llama3.2:3b or command-r7b) gives fast iteration. Switch to standard/frontier tiers when you need better reasoning.
 - **Schema validation is your safety net.** It catches malformed LLM output before it propagates to downstream stages. Define schemas tightly.
 - **Monitor the dead-letter subject.** Tasks landing on `loom.tasks.dead_letter` indicate routing failures or rate limit hits. Use `nats sub loom.tasks.dead_letter` during development.
+
+## Part 10: DuckDB integration (`loom.contrib.duckdb`)
+
+Loom includes optional DuckDB tools and backends for workflows that need embedded database storage, full-text search, or vector similarity search.
+
+Install the optional dependency:
+
+```bash
+pip install loom[duckdb]
+```
+
+### DuckDBViewTool — expose a DuckDB view as an LLM tool
+
+Lets the LLM query a read-only DuckDB view during reasoning. The tool auto-introspects the view's column schema and supports search (ILIKE) and list operations.
+
+```yaml
+knowledge_silos:
+  - name: "catalog"
+    type: "tool"
+    provider: "loom.contrib.duckdb.DuckDBViewTool"
+    config:
+      db_path: "/tmp/workspace/data.duckdb"
+      view_name: "summaries"
+      description: "Search and browse record summaries"
+      max_results: 20
+```
+
+### DuckDBVectorTool — semantic similarity search
+
+Finds records similar to a natural language query using vector embeddings stored in DuckDB. Embeds the query via Ollama at search time.
+
+```yaml
+knowledge_silos:
+  - name: "similar_items"
+    type: "tool"
+    provider: "loom.contrib.duckdb.DuckDBVectorTool"
+    config:
+      db_path: "/tmp/workspace/data.duckdb"
+      table_name: "records"
+      result_columns: ["id", "title", "summary", "created_at"]
+      embedding_column: "embedding"
+      tool_name: "find_similar"
+      description: "Find semantically similar records"
+      embedding_model: "nomic-embed-text"
+```
+
+If `result_columns` is omitted, the tool introspects the table schema at first use (excluding embedding and `full_text` columns).
+
+### DuckDBQueryBackend — action-dispatch query backend
+
+A `SyncProcessingBackend` for processor workers that provides configurable query actions against any DuckDB table: full-text search (BM25 via DuckDB FTS), attribute filtering, aggregate statistics, single-record retrieval, and vector similarity search.
+
+```yaml
+name: "my_query_worker"
+worker_kind: "processor"
+processing_backend: "myapp.backends.MyQueryBackend"
+backend_config:
+  db_path: "/tmp/workspace/data.duckdb"
+```
+
+Subclass `DuckDBQueryBackend` to set your schema defaults:
+
+```python
+from loom.contrib.duckdb import DuckDBQueryBackend
+
+class MyQueryBackend(DuckDBQueryBackend):
+    def __init__(self, db_path="/tmp/workspace/data.duckdb"):
+        super().__init__(
+            db_path=db_path,
+            table_name="records",
+            result_columns=["id", "title", "status", "created_at"],
+            json_columns={"tags"},
+            filter_fields={
+                "status": "status = ?",
+                "min_score": "score >= ?",
+            },
+            stats_groups={"status"},
+            stats_aggregates=[
+                "COUNT(*) AS record_count",
+                "ROUND(AVG(score), 2) AS avg_score",
+            ],
+            default_order_by="created_at DESC",
+        )
+```
+
+The backend accepts payloads with `action` set to `search`, `filter`, `stats`, `get`, or `vector_search`, plus action-specific parameters.

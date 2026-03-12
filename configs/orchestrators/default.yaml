@@ -1,10 +1,6 @@
 # Configuration for the dynamic OrchestratorActor (loom/src/loom/orchestrator/runner.py).
-# NOTE: OrchestratorActor is a stub — this config is not currently loaded by anything.
-#       The PipelineOrchestrator (loom pipeline CLI) uses configs/orchestrators/doc_pipeline.yaml
-#       or similar pipeline-specific configs instead.
-#
-# TODO: Wire this into OrchestratorActor when it is implemented. The system_prompt
-#       below defines the LLM's behavior for dynamic goal decomposition.
+# The OrchestratorActor uses this config for LLM-driven goal decomposition.
+# For sequential pipelines, use PipelineOrchestrator with pipeline-specific configs instead.
 
 name: "default_orchestrator"
 description: "General-purpose task orchestrator."

@@ -16,6 +16,8 @@ src/loom/
   router/       # Deterministic task router with dead-letter handling and rate limiting (not an LLM — pure logic)
   bus/          # NATS message bus adapter
   cli/          # Click CLI entry point (worker, processor, pipeline, orchestrator, router, submit commands)
+  contrib/      # Optional integrations (Django-style contrib namespace)
+    duckdb/     # DuckDB tools and backends: DuckDBViewTool, DuckDBVectorTool, DuckDBQueryBackend
 configs/
   workers/      # YAML configs defining each worker's system prompt, I/O schema, default tier
   orchestrators/# Orchestrator configs
@@ -86,7 +88,8 @@ All major components are implemented and functional:
 - **ProcessorWorker:** Non-LLM backend support with BackendError hierarchy and SyncProcessingBackend for CPU-bound backends.
 - **WorkspaceManager:** Centralized file-ref resolution with path traversal protection, JSON/text read/write helpers.
 - **CLI:** All 6 commands registered (worker, processor, pipeline, orchestrator, router, submit). Tier mismatch warnings on worker startup.
-- **Tests:** 159 unit tests pass (messages, contracts, checkpoint, pipeline, workers, processor, workspace, tools, tool-use, knowledge silos, embeddings). Integration test has `@pytest.mark.integration` marker and polling-based result collection.
+- **Contrib DuckDB:** `loom.contrib.duckdb` — DuckDBViewTool (view-based LLM tool), DuckDBVectorTool (semantic similarity search), DuckDBQueryBackend (action-dispatch query backend with FTS, filtering, stats, get, vector search). All configurable via constructor params. Optional dependency: `pip install loom[duckdb]`.
+- **Tests:** 223 unit tests pass (messages, contracts, checkpoint, pipeline, workers, processor, workspace, tools, tool-use, knowledge silos, embeddings, contrib/duckdb). Integration test has `@pytest.mark.integration` marker and polling-based result collection.
 - **Infrastructure:** Dockerfiles and k8s manifests updated with correct CMDs and no stale FIXMEs.
 
 ## Known issues

@@ -4,7 +4,7 @@ Loom is a Python framework for building AI workflows where a single monolithic L
 
 Instead of one big prompt, Loom splits work across **narrowly-scoped worker actors** coordinated by an **orchestrator** through a message bus. Each worker has a single system prompt, strict I/O contracts, and resets after every task. The orchestrator decomposes goals, routes subtasks, and synthesizes results — checkpointing its own context when it gets too large.
 
-**Status:** All major components implemented and tested. 159 unit tests pass. See `docs/building-workflows.md` for a guide to building your own AI workflows with Loom.
+**Status:** All major components implemented and tested. 223 unit tests pass. See `docs/building-workflows.md` for a guide to building your own AI workflows with Loom.
 
 ## What's here
 
@@ -33,8 +33,10 @@ src/loom/
 │   └── router.py         # Deterministic task routing with dead-letter handling and rate limiting
 ├── bus/
 │   └── nats_adapter.py   # NATS pub/sub/request wrapper
-└── cli/
-    └── main.py           # Click CLI: worker, processor, pipeline, orchestrator, router, submit
+├── cli/
+│   └── main.py           # Click CLI: worker, processor, pipeline, orchestrator, router, submit
+└── contrib/
+    └── duckdb/            # DuckDB tools and backends (optional: pip install loom[duckdb])
 
 configs/
 ├── workers/
@@ -74,13 +76,19 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
+Loom has optional extras for integrations:
+
+```bash
+pip install loom[duckdb]   # DuckDB tools and query backends
+```
+
 ### 2. Run the unit tests (no infrastructure needed)
 
 ```bash
 pytest tests/ -v -m "not integration"
 ```
 
-This runs all unit tests (messages, contracts, checkpoint, pipeline, workers, processor, tools, tool-use, knowledge silos, embeddings) without needing NATS or Redis. The integration test is excluded by marker.
+This runs all unit tests (messages, contracts, checkpoint, pipeline, workers, processor, tools, tool-use, knowledge silos, embeddings, contrib/duckdb) without needing NATS or Redis. The integration test is excluded by marker.
 
 ### 3. Set up infrastructure (NATS + Redis)
 
@@ -196,6 +204,7 @@ For Ollama on Mac with Minikube, run Ollama natively on the host and point worke
 The core framework is functional. Key extension points:
 
 1. **New worker configs** — Add workers specific to your domain (e.g., entity resolver, relationship mapper, evidence grader). See `docs/building-workflows.md` for a walkthrough.
-2. **Dead-letter consumer** — Implement a monitoring/retry service for tasks landing on `loom.tasks.dead_letter`
-3. **Orchestrator tests** — Unit tests for the decompose/dispatch/collect/synthesize loop
-4. **End-to-end integration test** — Full goal submission through router/workers/orchestrator
+2. **New contrib packages** — Add optional integrations (like `loom.contrib.duckdb`) for databases, search engines, or other backends your workers need.
+3. **Dead-letter consumer** — Implement a monitoring/retry service for tasks landing on `loom.tasks.dead_letter`
+4. **Orchestrator tests** — Unit tests for the decompose/dispatch/collect/synthesize loop
+5. **End-to-end integration test** — Full goal submission through router/workers/orchestrator
