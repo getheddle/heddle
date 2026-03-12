@@ -69,7 +69,10 @@ def worker(config: str, nats_url: str, tier: str):
     # TODO: Warn if --tier is specified but no matching backend is configured.
     backends = {}
     if os.getenv("OLLAMA_URL"):
-        backends["local"] = OllamaBackend(base_url=os.getenv("OLLAMA_URL"))
+        ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+        backends["local"] = OllamaBackend(
+            model=ollama_model, base_url=os.getenv("OLLAMA_URL")
+        )
     if os.getenv("ANTHROPIC_API_KEY"):
         backends["standard"] = AnthropicBackend(api_key=os.getenv("ANTHROPIC_API_KEY"))
         backends["frontier"] = AnthropicBackend(
@@ -188,19 +191,11 @@ def router(config: str, nats_url: str):
     bus = NATSBus(nats_url)
     r = TaskRouter(config, bus)
 
-    # FIXME: This is broken. asyncio.run(r.run()) completes immediately because
-    # r.run() just subscribes (async callback) and returns. The subsequent
-    # asyncio.get_event_loop().run_forever() is unreachable because asyncio.run()
-    # creates and closes its own event loop.
-    #
-    # Fix: use a single async function that subscribes and then blocks:
-    #     async def _run():
-    #         await r.run()
-    #         await asyncio.Event().wait()  # Block forever
-    #     asyncio.run(_run())
-    asyncio.run(r.run())
-    # FIXME: Unreachable — asyncio.run() already closed the event loop above.
-    asyncio.get_event_loop().run_forever()
+    async def _run():
+        await r.run()
+        await asyncio.Event().wait()  # Block forever after subscribing
+
+    asyncio.run(_run())
 
 
 @cli.command()
