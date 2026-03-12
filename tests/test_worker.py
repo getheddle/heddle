@@ -160,3 +160,116 @@ async def test_llm_worker_output_validation(tmp_path):
     result = TaskResult(**worker.publish.call_args[0][1])
     assert result.status == TaskStatus.FAILED
     assert "Output validation" in result.error
+
+
+# --- File-ref resolution tests ---
+
+@pytest.mark.asyncio
+async def test_llm_worker_resolves_file_refs(tmp_path):
+    """LLMWorker resolves file_ref fields and injects content into payload."""
+    # Create workspace with a JSON file
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    extracted_data = {"text": "hello world", "page_count": 1}
+    (workspace / "doc_extracted.json").write_text(json.dumps(extracted_data))
+
+    # Config with file-ref resolution enabled
+    config = {
+        **LLM_CONFIG,
+        "workspace_dir": str(workspace),
+        "resolve_file_refs": ["file_ref"],
+        "input_schema": {
+            "type": "object",
+            "required": ["file_ref"],
+            "properties": {
+                "file_ref": {"type": "string"},
+                "file_ref_content": {"type": "object"},
+            },
+        },
+        "output_schema": {
+            "type": "object",
+            "required": ["summary", "key_points"],
+            "properties": {
+                "summary": {"type": "string"},
+                "key_points": {"type": "array"},
+            },
+        },
+    }
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump(config))
+
+    # Spy backend that captures what it received
+    received_prompts = {}
+
+    class SpyLLMBackend:
+        async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0):
+            received_prompts["user_message"] = user_message
+            return {
+                "content": json.dumps({"summary": "test", "key_points": ["a"]}),
+                "model": "mock",
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+            }
+
+    backends = {"local": SpyLLMBackend()}
+    worker = LLMWorker("llm-1", str(config_file), backends)
+    worker.publish = AsyncMock()
+
+    task = TaskMessage(
+        worker_type="test_llm_worker",
+        payload={"file_ref": "doc_extracted.json"},
+        model_tier=ModelTier.LOCAL,
+        parent_task_id="goal-789",
+    ).model_dump(mode="json")
+
+    await worker.handle_message(task)
+
+    # The user_message sent to the LLM should contain the resolved content
+    user_msg = json.loads(received_prompts["user_message"])
+    assert user_msg["file_ref"] == "doc_extracted.json"
+    assert user_msg["file_ref_content"] == extracted_data
+
+
+# --- Knowledge injection tests ---
+
+@pytest.mark.asyncio
+async def test_llm_worker_loads_knowledge_sources(tmp_path):
+    """LLMWorker prepends knowledge sources to system prompt."""
+    # Create a knowledge file
+    knowledge_dir = tmp_path / "knowledge"
+    knowledge_dir.mkdir()
+    (knowledge_dir / "context.md").write_text("# Important Context\nThis is background knowledge.")
+
+    config = {
+        **LLM_CONFIG,
+        "knowledge_sources": [
+            {"path": str(knowledge_dir / "context.md"), "inject_as": "reference"},
+        ],
+    }
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump(config))
+
+    received_prompts = {}
+
+    class SpyLLMBackend:
+        async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0):
+            received_prompts["system_prompt"] = system_prompt
+            return {
+                "content": json.dumps({"summary": "test", "key_points": ["a"]}),
+                "model": "mock",
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+            }
+
+    backends = {"local": SpyLLMBackend()}
+    worker = LLMWorker("llm-1", str(config_file), backends)
+    worker.publish = AsyncMock()
+
+    await worker.handle_message(_make_task())
+
+    # System prompt should contain knowledge text prepended
+    sys_prompt = received_prompts["system_prompt"]
+    assert "Important Context" in sys_prompt
+    assert "background knowledge" in sys_prompt
+    # Original system prompt should still be there
+    assert "You are a test worker" in sys_prompt

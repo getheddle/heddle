@@ -1,11 +1,11 @@
-"""Test ProcessorWorker and ProcessingBackend (unit tests, no infrastructure)."""
+"""Test ProcessorWorker, ProcessingBackend, and SyncProcessingBackend (unit tests, no infrastructure)."""
 from unittest.mock import AsyncMock
 
 import pytest
 import yaml
 
 from loom.core.messages import ModelTier, TaskMessage, TaskResult, TaskStatus
-from loom.worker.processor import ProcessingBackend, ProcessorWorker
+from loom.worker.processor import ProcessingBackend, ProcessorWorker, SyncProcessingBackend
 
 
 # --- Mock backend ---
@@ -152,3 +152,34 @@ async def test_processor_worker_passes_config_to_backend(tmp_path):
     await worker.handle_message(_make_task({"file_ref": "doc.pdf"}))
 
     assert received_config.get("custom_setting") == "value123"
+
+
+# --- SyncProcessingBackend tests ---
+
+class MockSyncBackend(SyncProcessingBackend):
+    """Synchronous backend that returns a fixed output."""
+
+    def process_sync(self, payload, config):
+        return {"output": {"result": "sync-processed"}, "model_used": "sync-mock"}
+
+
+@pytest.mark.asyncio
+async def test_sync_processing_backend_runs_in_executor():
+    """SyncProcessingBackend.process() offloads to thread pool and returns result."""
+    backend = MockSyncBackend()
+    result = await backend.process({"file_ref": "test.pdf"}, {"setting": "val"})
+    assert result["output"] == {"result": "sync-processed"}
+    assert result["model_used"] == "sync-mock"
+
+
+@pytest.mark.asyncio
+async def test_sync_processing_backend_propagates_exceptions():
+    """SyncProcessingBackend.process() propagates exceptions from process_sync()."""
+
+    class FailingSyncBackend(SyncProcessingBackend):
+        def process_sync(self, payload, config):
+            raise RuntimeError("sync failure")
+
+    backend = FailingSyncBackend()
+    with pytest.raises(RuntimeError, match="sync failure"):
+        await backend.process({}, {})

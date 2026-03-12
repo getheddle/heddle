@@ -83,6 +83,32 @@ class LLMWorker(TaskWorker):
     async def process(self, payload: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
         # 1. Build prompt
         system_prompt = self.config["system_prompt"]
+
+        # 1a. Knowledge injection — prepend loaded knowledge to system prompt
+        knowledge_sources = self.config.get("knowledge_sources", [])
+        if knowledge_sources:
+            from loom.worker.knowledge import load_knowledge_sources
+            knowledge_text = load_knowledge_sources(knowledge_sources)
+            if knowledge_text:
+                system_prompt = knowledge_text + "\n\n" + system_prompt
+
+        # 1b. File-ref resolution — read workspace files and inject content
+        workspace_dir = self.config.get("workspace_dir")
+        file_ref_fields = self.config.get("resolve_file_refs", [])
+        if workspace_dir and file_ref_fields:
+            from loom.core.workspace import WorkspaceManager
+            ws = WorkspaceManager(workspace_dir)
+            for field in file_ref_fields:
+                if field in payload:
+                    try:
+                        content = ws.read_json(payload[field])
+                        payload[f"{field}_content"] = content
+                    except (ValueError, FileNotFoundError, json.JSONDecodeError) as e:
+                        logger.warning(
+                            "worker.file_ref_resolution_failed",
+                            field=field, error=str(e),
+                        )
+
         user_message = json.dumps(payload, indent=2)
 
         # 2. Resolve backend from task metadata or config default
