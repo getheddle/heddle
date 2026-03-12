@@ -1,3 +1,15 @@
+# Kustomize overlay for the Loom framework.
+# Deploy: kubectl apply -k k8s/
+#
+# Prerequisites:
+#   1. Create the loom-secrets secret with your Anthropic API key:
+#      kubectl -n loom create secret generic loom-secrets \
+#        --from-literal=anthropic-api-key=sk-ant-...
+#   2. If using local models, deploy Ollama separately (see ollama-deployment.yaml)
+#   3. Images use imagePullPolicy: Never (for Minikube local builds)
+#
+# FIXME: orchestrator-deployment.yaml uses a CMD that references a nonexistent
+#        CLI command. See the FIXME in Dockerfile.orchestrator.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

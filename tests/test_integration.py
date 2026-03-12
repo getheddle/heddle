@@ -1,7 +1,22 @@
 """
 Integration test: submit task -> router -> worker -> result.
-Run with: pytest tests/test_integration.py -v
-Requires NATS on localhost:4222
+
+Run with:  pytest tests/test_integration.py -v
+Requires:  NATS running on localhost:4222 AND a summarizer worker running:
+           loom worker --config configs/workers/summarizer.yaml --tier local \
+                       --nats-url nats://localhost:4222
+
+NOTE: This test will FAIL if no worker is subscribed to loom.tasks.summarizer.local.
+      The task message will be published but nobody will process it, so results
+      will be empty after the 5-second wait. This is expected behavior when
+      running `pytest tests/` without infrastructure — only unit tests pass.
+
+TODO: Add a pytest marker (e.g., @pytest.mark.integration) so this test can be
+      excluded from default test runs: pytest tests/ -v -m "not integration"
+
+TODO: Consider increasing the sleep or using a polling loop with timeout instead
+      of a fixed 5-second wait. On slow machines or cold Ollama starts, 5 seconds
+      may not be enough for the model to respond.
 """
 import asyncio
 import json

@@ -1,3 +1,11 @@
+# Configuration for the dynamic OrchestratorActor (loom/src/loom/orchestrator/runner.py).
+# NOTE: OrchestratorActor is a stub — this config is not currently loaded by anything.
+#       The PipelineOrchestrator (loom pipeline CLI) uses configs/orchestrators/doc_pipeline.yaml
+#       or similar pipeline-specific configs instead.
+#
+# TODO: Wire this into OrchestratorActor when it is implemented. The system_prompt
+#       below defines the LLM's behavior for dynamic goal decomposition.
+
 name: "default_orchestrator"
 description: "General-purpose task orchestrator."
 
@@ -29,9 +37,12 @@ system_prompt: |
   - When all subtasks are complete, output: {"final_result": {...}}
   - If a worker fails, decide: retry, escalate tier, or work around it
 
+# Checkpoint settings for self-summarization (see loom/orchestrator/checkpoint.py).
+# When the orchestrator's context exceeds token_threshold, it compresses into a
+# CheckpointState and "reboots" with the summary + recent_window interactions.
 checkpoint:
-  token_threshold: 50000
-  recent_window: 5
+  token_threshold: 50000      # Compress when context exceeds this many tokens
+  recent_window: 5            # Keep last N interactions alongside the checkpoint
 
-max_concurrent_tasks: 5
-timeout_seconds: 300
+max_concurrent_tasks: 5       # Max subtasks the orchestrator can dispatch at once
+timeout_seconds: 300          # Per-subtask timeout in seconds

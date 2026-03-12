@@ -1,7 +1,19 @@
 """
 Lightweight JSON Schema validation for I/O contracts.
-We avoid jsonschema dependency — this covers the 90% case.
-Add jsonschema to dependencies if you need full Draft 2020-12.
+
+We avoid the jsonschema dependency — this covers the 90% case (required fields
++ shallow type checks for object properties). This is intentionally simple:
+every worker has an input_schema and output_schema defined in its YAML config,
+and this module validates payloads against those schemas at message boundaries.
+
+Limitations (by design — keeps the dependency tree minimal):
+- No nested object validation (only top-level properties)
+- No array item type validation
+- No min/max, pattern, enum, or format constraints
+- No $ref or schema composition (allOf, oneOf, anyOf)
+
+TODO: If you need full Draft 2020-12 validation, add `jsonschema` to dependencies
+      and swap this module. The validate_input/validate_output API stays the same.
 """
 from __future__ import annotations
 
@@ -9,19 +21,31 @@ from typing import Any
 
 
 def validate_input(data: dict[str, Any], schema: dict) -> list[str]:
+    """Validate a task's input payload against the worker's input_schema.
+
+    Returns an empty list if valid, or a list of human-readable error strings.
+    """
     return _validate(data, schema, "input")
 
 
 def validate_output(data: dict[str, Any], schema: dict) -> list[str]:
+    """Validate a worker's output against its output_schema.
+
+    Returns an empty list if valid, or a list of human-readable error strings.
+    """
     return _validate(data, schema, "output")
 
 
 def _validate(data: Any, schema: dict, context: str) -> list[str]:
-    """Basic schema validation. Returns list of error strings (empty = valid)."""
+    """Basic schema validation. Returns list of error strings (empty = valid).
+
+    Only validates top-level required fields and shallow property types.
+    Extra fields not in the schema are silently allowed (open-world assumption).
+    """
     errors = []
 
     if not schema:
-        return errors
+        return errors  # No schema = no constraints = always valid
 
     expected_type = schema.get("type")
     if expected_type == "object" and not isinstance(data, dict):
@@ -33,7 +57,7 @@ def _validate(data: Any, schema: dict, context: str) -> list[str]:
             if field not in data:
                 errors.append(f"{context}: missing required field '{field}'")
 
-        # Check property types (shallow)
+        # Check property types (shallow — does not recurse into nested objects)
         props = schema.get("properties", {})
         for field, field_schema in props.items():
             if field in data:
@@ -49,5 +73,9 @@ def _validate(data: Any, schema: dict, context: str) -> list[str]:
                     errors.append(f"{context}.{field}: expected array")
                 elif field_type == "boolean" and not isinstance(value, bool):
                     errors.append(f"{context}.{field}: expected boolean")
+                # FIXME: Python's bool is a subclass of int, so isinstance(True, int)
+                # returns True. This means a boolean value passes an "integer" check.
+                # Not a problem in practice since LLM JSON output distinguishes them,
+                # but worth noting if strict validation is ever needed.
 
     return errors

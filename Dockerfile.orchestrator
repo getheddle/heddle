@@ -1,3 +1,11 @@
+# Dockerfile for Loom orchestrator.
+#
+# FIXME: CMD references "loom.cli.main orchestrator" but no "orchestrator"
+#        CLI command exists. OrchestratorActor is a stub (see runner.py).
+#        Options to fix:
+#        1. Add an 'orchestrator' command to cli/main.py when OrchestratorActor is ready
+#        2. Use 'pipeline' command instead for the PipelineOrchestrator:
+#           CMD ["python", "-m", "loom.cli.main", "pipeline", "--config", "configs/orchestrators/default.yaml"]
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -11,4 +19,6 @@ COPY configs/ configs/
 ENV NATS_URL="nats://nats:4222"
 ENV REDIS_URL="redis://redis:6379"
 
+# FIXME: This command will fail — "orchestrator" is not a registered CLI command.
+# See cli/main.py for available commands: worker, processor, pipeline, router, submit.
 CMD ["python", "-m", "loom.cli.main", "orchestrator"]

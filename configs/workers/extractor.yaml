@@ -1,3 +1,8 @@
+# Extractor worker — pulls structured fields from unstructured text.
+# Run with:  loom worker --config configs/workers/extractor.yaml --tier standard
+# Subscribes to:  loom.tasks.extractor.standard
+# Requires ANTHROPIC_API_KEY (standard tier uses Claude Sonnet)
+
 name: "extractor"
 description: "Extracts structured fields from unstructured text."
 

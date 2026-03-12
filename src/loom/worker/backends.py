@@ -1,6 +1,16 @@
 """
-LLM backend adapters. Uniform interface for local and API models.
-Add new backends by subclassing LLMBackend.
+LLM backend adapters — uniform interface for local and API models.
+
+Each backend wraps a specific LLM provider's API and normalizes the response
+into a consistent dict format. Workers never call APIs directly; they always
+go through a backend.
+
+To add a new backend:
+    1. Subclass LLMBackend
+    2. Implement complete() returning the standard response dict
+    3. Register it in cli/main.py's worker command (backend resolution by tier)
+
+All backends use httpx with a 120s timeout. Adjust if your models are slow.
 """
 from __future__ import annotations
 
@@ -34,7 +44,12 @@ class LLMBackend(ABC):
 
 
 class AnthropicBackend(LLMBackend):
-    """Claude API via httpx."""
+    """Claude API via httpx (Messages API).
+
+    Uses the Anthropic Messages API directly via httpx rather than the
+    anthropic Python SDK — this keeps dependencies minimal and avoids
+    version coupling.
+    """
 
     def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
         self.api_key = api_key
@@ -43,6 +58,9 @@ class AnthropicBackend(LLMBackend):
             base_url="https://api.anthropic.com",
             headers={
                 "x-api-key": api_key,
+                # FIXME: This API version is old (2023-06-01). Consider updating
+                # to a more recent version for access to newer features.
+                # See: https://docs.anthropic.com/en/api/versioning
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json",
             },
@@ -71,7 +89,14 @@ class AnthropicBackend(LLMBackend):
 
 
 class OllamaBackend(LLMBackend):
-    """Local models via Ollama API."""
+    """Local models via Ollama HTTP API.
+
+    Default base_url points to K8s service name "ollama". For local dev,
+    override with http://localhost:11434 (set OLLAMA_URL env var).
+
+    Note: Ollama's token counts (prompt_eval_count, eval_count) may be
+    absent for some models; we default to 0 in that case.
+    """
 
     def __init__(self, model: str = "llama3.2:3b", base_url: str = "http://ollama:11434"):
         self.model = model

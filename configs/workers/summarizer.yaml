@@ -1,3 +1,8 @@
+# Summarizer worker — compresses text into structured summaries.
+# Run with:  loom worker --config configs/workers/summarizer.yaml --tier local
+# Subscribes to:  loom.tasks.summarizer.local
+# Router override: tier_overrides in router_rules.yaml forces this to "local"
+
 name: "summarizer"
 description: "Compresses text to a structured summary with key points."
 

@@ -1,3 +1,8 @@
+# Classifier worker — assigns text to one of a predefined set of categories.
+# Run with:  loom worker --config configs/workers/classifier.yaml --tier local
+# Subscribes to:  loom.tasks.classifier.local
+# Router override: tier_overrides in router_rules.yaml forces this to "local"
+
 name: "classifier"
 description: "Classifies input into predefined categories with confidence."
 

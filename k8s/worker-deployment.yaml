@@ -1,3 +1,16 @@
+# Worker deployments — one per worker_type.
+# Each subscribes to loom.tasks.{worker_type}.{tier} with a queue group,
+# enabling horizontal scaling via NATS competing consumers.
+#
+# To add a new worker type:
+#   1. Create a worker config YAML in configs/workers/
+#   2. Add a Deployment block here following the pattern below
+#   3. Set WORKER_CONFIG and MODEL_TIER appropriately
+#   4. Add tier_overrides in configs/router_rules.yaml if needed
+#
+# NOTE: imagePullPolicy: Never is for Minikube (local image builds).
+#       Change to IfNotPresent or Always for real clusters.
+---
 # Summarizer workers (local tier)
 apiVersion: apps/v1
 kind: Deployment

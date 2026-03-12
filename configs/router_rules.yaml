@@ -1,15 +1,22 @@
-# Task routing rules.
+# Task routing rules — read by TaskRouter (loom/src/loom/router/router.py).
 # These are deterministic — no LLM involved.
+#
+# The router subscribes to loom.tasks.incoming and republishes each task
+# to loom.tasks.{worker_type}.{tier}, where tier is resolved here.
 
 # Override the default model tier for specific worker types.
 # If a worker_type is not listed here, the tier from the TaskMessage is used.
+# This lets you force all tasks of a given type to a specific tier,
+# regardless of what the producer requested.
 tier_overrides:
   summarizer: "local"
   classifier: "local"
   extractor: "standard"
   # analyzer: "frontier"
 
-# Cost thresholds (tokens per minute budget per tier)
+# Cost thresholds (tokens per minute budget per tier).
+# TODO: These are defined but NOT enforced by the router yet.
+#       See the TODO in router.py for implementation notes.
 rate_limits:
   local:
     max_concurrent: 4

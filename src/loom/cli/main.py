@@ -1,5 +1,23 @@
 """
-Loom CLI. Entry point for running components.
+Loom CLI — entry point for running all Loom components.
+
+Commands:
+    loom worker     — Start an LLM worker (requires OLLAMA_URL or ANTHROPIC_API_KEY)
+    loom processor  — Start a non-LLM processor worker (e.g., DoclingBackend)
+    loom pipeline   — Start a pipeline orchestrator (sequential stage execution)
+    loom router     — Start the deterministic task router
+    loom submit     — Submit a goal to the orchestrator
+
+Typical local dev startup (5 terminals):
+    1. docker run -p 4222:4222 nats:latest
+    2. loom router --config configs/router_rules.yaml --nats-url nats://localhost:4222
+    3. loom processor --config configs/workers/doc_extractor.yaml --nats-url nats://localhost:4222
+    4. loom worker --config configs/workers/doc_classifier.yaml --tier local --nats-url nats://localhost:4222
+    5. loom submit "Process document" --context file_ref=test.pdf --nats-url nats://localhost:4222
+
+NOTE: There is no 'orchestrator' CLI command yet (OrchestratorActor is a stub).
+      The Dockerfile.orchestrator references a nonexistent 'loom orchestrator'
+      command — see FIXME in that file.
 """
 import asyncio
 import importlib
@@ -26,7 +44,16 @@ def cli():
 @click.option("--nats-url", default="nats://nats:4222")
 @click.option("--tier", default="standard", help="Model tier this worker serves")
 def worker(config: str, nats_url: str, tier: str):
-    """Start an LLM worker actor."""
+    """Start an LLM worker actor.
+
+    Backends are resolved from environment variables:
+        OLLAMA_URL       → OllamaBackend (serves "local" tier)
+        ANTHROPIC_API_KEY → AnthropicBackend (serves "standard" and "frontier" tiers)
+        FRONTIER_MODEL    → Override frontier model (default: claude-opus-4-20250514)
+
+    The worker subscribes to: loom.tasks.{worker_name}.{tier}
+    with queue group: workers-{worker_name} (enables horizontal scaling).
+    """
     import os
 
     import yaml
@@ -37,7 +64,9 @@ def worker(config: str, nats_url: str, tier: str):
     with open(config) as f:
         cfg = yaml.safe_load(f)
 
-    # Build backends from environment
+    # Build backends from environment.
+    # Only tiers with configured backends can be served.
+    # TODO: Warn if --tier is specified but no matching backend is configured.
     backends = {}
     if os.getenv("OLLAMA_URL"):
         backends["local"] = OllamaBackend(base_url=os.getenv("OLLAMA_URL"))
@@ -63,7 +92,14 @@ def worker(config: str, nats_url: str, tier: str):
 @click.option("--nats-url", default="nats://nats:4222")
 @click.option("--tier", default="local", help="Tier this processor serves")
 def processor(config: str, nats_url: str, tier: str):
-    """Start a processor (non-LLM) worker actor."""
+    """Start a processor (non-LLM) worker actor.
+
+    The processing_backend is loaded by fully qualified class path from the
+    worker config YAML. This keeps backend implementations in the consumer
+    project (e.g., docman.backends.docling_backend.DoclingBackend).
+
+    Optional backend_config in YAML is passed as kwargs to the backend constructor.
+    """
     import yaml
 
     from loom.worker.processor import ProcessorWorker
@@ -151,8 +187,19 @@ def router(config: str, nats_url: str):
 
     bus = NATSBus(nats_url)
     r = TaskRouter(config, bus)
+
+    # FIXME: This is broken. asyncio.run(r.run()) completes immediately because
+    # r.run() just subscribes (async callback) and returns. The subsequent
+    # asyncio.get_event_loop().run_forever() is unreachable because asyncio.run()
+    # creates and closes its own event loop.
+    #
+    # Fix: use a single async function that subscribes and then blocks:
+    #     async def _run():
+    #         await r.run()
+    #         await asyncio.Event().wait()  # Block forever
+    #     asyncio.run(_run())
     asyncio.run(r.run())
-    # Keep alive
+    # FIXME: Unreachable — asyncio.run() already closed the event loop above.
     asyncio.get_event_loop().run_forever()
 
 
@@ -161,7 +208,14 @@ def router(config: str, nats_url: str):
 @click.option("--nats-url", default="nats://nats:4222")
 @click.option("--context", multiple=True, help="Key=value pairs for goal context (repeatable)")
 def submit(goal: str, nats_url: str, context: tuple[str, ...]):
-    """Submit a goal to the orchestrator."""
+    """Submit a goal to the pipeline orchestrator.
+
+    Publishes an OrchestratorGoal to loom.goals.incoming. A running
+    pipeline orchestrator (loom pipeline) must be listening.
+
+    Context is passed as key=value pairs, e.g.:
+        loom submit "Process document" --context file_ref=test.pdf --context lang=en
+    """
     import nats as nats_lib
 
     from loom.core.messages import OrchestratorGoal

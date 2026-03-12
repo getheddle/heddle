@@ -7,6 +7,30 @@ allowing the orchestrator to "reboot" with a clean, compact understanding
 of where things stand.
 
 Checkpoint trigger: when estimated token count exceeds threshold.
+
+Storage: Redis with 24-hour TTL. Keys follow the pattern:
+    loom:checkpoint:{goal_id}:{checkpoint_number}  — versioned checkpoint
+    loom:checkpoint:{goal_id}:latest                — pointer to most recent
+
+The orchestrator workflow with checkpoints:
+    1. Process goal, accumulate conversation_history
+    2. After each worker result: should_checkpoint(conversation_history)
+    3. If True: create_checkpoint() → compress state → persist to Redis
+    4. Orchestrator "reboots" with: system_prompt + format_for_injection(checkpoint)
+       + last N interactions (recent_window_size)
+
+This is conceptually similar to how Claude Code itself handles context
+compression — the key insight is the same: keep a structured summary +
+recent window rather than the full history.
+
+NOTE: This module is used by OrchestratorActor (runner.py), which is a stub.
+      PipelineOrchestrator does NOT use checkpoints because its sequential
+      stage execution doesn't accumulate unbounded context.
+
+TODO: The token counting uses tiktoken with cl100k_base encoding, which is
+      OpenAI's tokenizer. For Anthropic models, token counts will be approximate.
+      Consider using anthropic's token counting when available, or accept the
+      ~10-15% estimation error.
 """
 from __future__ import annotations
 
@@ -71,9 +95,11 @@ class CheckpointManager:
         Build a checkpoint. The orchestrator or a dedicated summarizer
         compresses current state into this structure.
         """
-        # Build executive summary from completed task outcomes
+        # Build executive summary from completed task outcomes.
+        # Only the last 20 tasks are included to keep the summary concise.
+        # Of those, only the last 10 are rendered into the summary text.
         outcomes = []
-        for t in completed_tasks[-20:]:  # Last 20 for summary
+        for t in completed_tasks[-20:]:
             status = t.get("status", "unknown")
             summary = t.get("summary", t.get("worker_type", "task"))
             outcomes.append(f"- [{status}] {summary}")
@@ -101,11 +127,13 @@ class CheckpointManager:
             checkpoint_number=checkpoint_number,
         )
 
-        # Persist to Redis
+        # Persist to Redis with 24h TTL.
+        # TODO: Consider making TTL configurable — long-running goals may need
+        # checkpoints that survive longer than 24 hours.
         key = f"loom:checkpoint:{goal_id}:{checkpoint_number}"
-        await self.redis.set(key, checkpoint.model_dump_json(), ex=86400)  # 24h TTL
+        await self.redis.set(key, checkpoint.model_dump_json(), ex=86400)
 
-        # Also maintain a "latest" pointer
+        # Maintain a "latest" pointer so load_latest() doesn't need to scan.
         await self.redis.set(f"loom:checkpoint:{goal_id}:latest", key, ex=86400)
 
         logger.info(

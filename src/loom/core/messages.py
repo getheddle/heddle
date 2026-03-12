@@ -1,6 +1,19 @@
 """
-Loom message schemas. All inter-actor communication is typed.
-Actors ONLY communicate through these message types.
+Loom message schemas — the canonical wire format.
+
+All inter-actor communication is typed through these Pydantic models.
+Actors ONLY communicate through these message types; raw dicts or
+ad-hoc JSON are forbidden. This enforces a contract-driven architecture
+where every message is validatable at compile time.
+
+Message flow:
+    Client/CLI  ──OrchestratorGoal──>  Orchestrator
+    Orchestrator  ──TaskMessage──>  Router  ──TaskMessage──>  Worker
+    Worker  ──TaskResult──>  Orchestrator
+
+See also:
+    loom.core.contracts — JSON Schema validation for payload/output dicts
+    loom.bus.nats_adapter — NATS subject conventions for message routing
 """
 from __future__ import annotations
 
@@ -13,6 +26,7 @@ from pydantic import BaseModel, Field
 
 
 class TaskPriority(str, Enum):
+    """Priority levels for task scheduling (not yet enforced by router)."""
     LOW = "low"
     NORMAL = "normal"
     HIGH = "high"
@@ -20,59 +34,97 @@ class TaskPriority(str, Enum):
 
 
 class TaskStatus(str, Enum):
+    """Lifecycle states for a task.
+
+    State transitions:
+        PENDING -> PROCESSING -> COMPLETED
+                               -> FAILED
+                               -> RETRY -> PROCESSING (not yet implemented)
+    """
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
-    RETRY = "retry"
+    RETRY = "retry"  # TODO: Retry logic not yet implemented in TaskWorker
 
 
 class ModelTier(str, Enum):
-    """Which model tier should handle this task."""
+    """Which model tier should handle this task.
+
+    Tiers map to backend instances configured at startup:
+        LOCAL    -> OllamaBackend (e.g., llama3.2:3b)
+        STANDARD -> AnthropicBackend (e.g., Claude Sonnet)
+        FRONTIER -> AnthropicBackend (e.g., Claude Opus)
+
+    The router may override the tier via tier_overrides in router_rules.yaml.
+    """
     LOCAL = "local"         # Small local model (Ollama, llama.cpp)
     STANDARD = "standard"   # Mid-tier API model
     FRONTIER = "frontier"   # Top-tier model (Claude Opus, GPT-4, etc.)
 
 
 class TaskMessage(BaseModel):
-    """Message sent TO a worker actor."""
+    """Message sent TO a worker actor.
+
+    The payload dict must conform to the worker's input_schema (JSON Schema).
+    Contract validation happens in TaskWorker.handle_message(), not here.
+    """
     task_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     parent_task_id: str | None = None          # Links subtask to orchestrator's goal
-    worker_type: str                           # Which worker config to use
-    payload: dict[str, Any]                    # Structured input per worker contract
+    worker_type: str                           # Which worker config to use (e.g., "summarizer", "doc_extractor")
+    payload: dict[str, Any]                    # Structured input — must match worker's input_schema
     model_tier: ModelTier = ModelTier.STANDARD
     priority: TaskPriority = TaskPriority.NORMAL
-    max_retries: int = 2
-    retry_count: int = 0
+    max_retries: int = 2                       # TODO: Retry logic not yet implemented
+    retry_count: int = 0                       # TODO: Incremented on retry (not yet used)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)  # Routing hints, pipeline context
 
 
 class TaskResult(BaseModel):
-    """Message sent FROM a worker actor after processing."""
+    """Message sent FROM a worker actor after processing.
+
+    Published to: loom.results.{parent_task_id or 'default'}
+    The output dict must conform to the worker's output_schema (JSON Schema).
+    """
     task_id: str
     parent_task_id: str | None = None
     worker_type: str
     status: TaskStatus
-    output: dict[str, Any] | None = None       # Structured output per worker contract
-    error: str | None = None
-    model_used: str | None = None               # Actual model that processed this
-    token_usage: dict[str, int] = Field(default_factory=dict)  # prompt/completion tokens
+    output: dict[str, Any] | None = None       # Structured output — must match worker's output_schema
+    error: str | None = None                   # Human-readable error message on failure
+    model_used: str | None = None               # Actual model that processed this (e.g., "llama3.2:3b")
+    token_usage: dict[str, int] = Field(default_factory=dict)  # {"prompt_tokens": N, "completion_tokens": N}
     processing_time_ms: int = 0
     completed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class OrchestratorGoal(BaseModel):
-    """Top-level goal submitted to an orchestrator."""
+    """Top-level goal submitted to an orchestrator.
+
+    Published to: loom.goals.incoming
+    The orchestrator (PipelineOrchestrator or OrchestratorActor) picks this up,
+    decomposes it into TaskMessages, and synthesizes results.
+
+    The context dict carries domain-specific data (e.g., file_ref for doc processing).
+    """
     goal_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     instruction: str                           # Natural language goal
-    context: dict[str, Any] = Field(default_factory=dict)
+    context: dict[str, Any] = Field(default_factory=dict)  # Domain data (file_ref, categories, etc.)
     priority: TaskPriority = TaskPriority.NORMAL
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class CheckpointState(BaseModel):
-    """Compressed orchestrator state for self-summarization."""
+    """Compressed orchestrator state for self-summarization.
+
+    When the orchestrator's conversation history exceeds a token threshold,
+    CheckpointManager compresses it into this structure and persists to Redis.
+    The orchestrator can then "reboot" with a fresh context containing only
+    the checkpoint + a small recent-interactions window.
+
+    See: loom.orchestrator.checkpoint.CheckpointManager
+    """
     goal_id: str
     original_instruction: str
     executive_summary: str                     # High-level status (always short)

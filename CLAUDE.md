@@ -64,10 +64,33 @@ loom submit "some goal text" --nats-url nats://localhost:4222
 
 The scaffolding is complete and wired:
 - Message schemas, contract validation, base actor, LLM backends, worker runtime, router, NATS adapter, CLI — all implemented and working.
-- 14 unit tests pass (messages + contracts).
+- **PipelineOrchestrator** is fully functional (sequential stage execution with input mapping, conditions, timeouts).
+- **ProcessorWorker** is implemented and working (non-LLM backend support, tested with DoclingBackend).
+- **49 unit tests pass** (messages, contracts, pipeline, workers, processor).
+- **1 integration test exists** but requires running infrastructure (NATS + workers).
 - Orchestrator has a stub `handle_message` — the decompose/dispatch/synthesize loop is the next thing to build.
-- `orchestrator/decomposer.py` and `orchestrator/synthesizer.py` are empty stubs.
+- `orchestrator/decomposer.py` and `orchestrator/synthesizer.py` are empty stubs with detailed TODO guidance.
 - `orchestrator/checkpoint.py` is fully implemented (Redis-backed context compression with tiktoken token counting).
+
+## Known issues (FIXME)
+
+- **Router CLI bug:** `cli/main.py` router command exits immediately after subscribing — `asyncio.get_event_loop().run_forever()` is unreachable after `asyncio.run()`. Fix documented in code.
+- **Dockerfile.orchestrator:** CMD references nonexistent `loom orchestrator` CLI command. OrchestratorActor is a stub.
+- **Anthropic API version:** backends.py uses old `anthropic-version: 2023-06-01`.
+- **LLMWorker JSON parsing:** `runner.py` uses `json.loads()` directly on LLM output — fails if model wraps response in markdown fences or adds surrounding text.
+- **Deprecated asyncio calls:** Several files use `asyncio.get_event_loop()` instead of `asyncio.get_running_loop()`.
+- **Router rate limits:** Defined in `router_rules.yaml` but not enforced by the router.
+- **Knowledge sources:** Module exists (`worker/knowledge.py`) but is not wired into the worker startup path.
+
+## What to implement next
+
+1. **Fix router CLI bug** — the asyncio.run()/run_forever() issue (see FIXME in cli/main.py)
+2. **LLMWorker JSON parsing resilience** — strip markdown fences, handle non-JSON preamble
+3. **OrchestratorActor** — implement the decompose/dispatch/synthesize loop using decomposer.py and synthesizer.py
+4. **Wire knowledge sources** — call `load_knowledge_sources()` in LLMWorker.process()
+5. **Add `orchestrator` CLI command** — register OrchestratorActor in cli/main.py, fix Dockerfile.orchestrator
+6. **Enforce rate limits** — implement rate limiting in TaskRouter based on router_rules.yaml
+7. **Expand test coverage** — checkpoint tests, orchestrator tests, integration test with pytest marker
 
 ## What NOT to do
 

@@ -8,6 +8,35 @@ doesn't care about the implementation, only the message contract.
 
 Pipeline definition comes from YAML config with stages, input mappings,
 and optional conditions.
+
+Data flow through the pipeline:
+
+    OrchestratorGoal arrives at handle_message()
+        ↓
+    context = { "goal": { "instruction": ..., "context": { ... } } }
+        ↓
+    For each stage in pipeline_stages:
+        1. Evaluate condition (skip if false)
+        2. Build payload via input_mapping (dot-notation paths into context)
+        3. Publish TaskMessage to loom.tasks.incoming
+        4. Wait for TaskResult on loom.results.{goal_id}
+        5. Store result: context[stage_name] = { "output": ..., ... }
+        ↓
+    Publish final TaskResult with all stage outputs
+
+Input mapping example (from doc_pipeline.yaml):
+    input_mapping:
+        text_preview: "extract.output.text_preview"
+        metadata: "extract.output.metadata"
+
+    This resolves to:
+        payload["text_preview"] = context["extract"]["output"]["text_preview"]
+        payload["metadata"] = context["extract"]["output"]["metadata"]
+
+See also:
+    loom.orchestrator.runner — dynamic LLM-based orchestrator (not yet implemented)
+    loom.core.messages.OrchestratorGoal — the input message type
+    configs/orchestrators/ — pipeline config YAML files
 """
 from __future__ import annotations
 
@@ -62,7 +91,9 @@ class PipelineOrchestrator(BaseActor):
         log = logger.bind(goal_id=goal.goal_id, pipeline=self.config["name"])
         log.info("pipeline.started", stages=len(stages))
 
-        # Accumulated context: goal info + results from each completed stage
+        # Accumulated context: goal info + results from each completed stage.
+        # Each completed stage adds: context[stage_name] = {"output": ..., "model_used": ..., ...}
+        # Subsequent stages reference these via dot-notation in their input_mapping.
         context: dict[str, Any] = {
             "goal": {
                 "instruction": goal.instruction,
@@ -93,7 +124,9 @@ class PipelineOrchestrator(BaseActor):
                 )
                 return
 
-            # Create and dispatch task
+            # Create and dispatch task.
+            # Tasks are sent to loom.tasks.incoming (the router's subject),
+            # which resolves the tier and forwards to loom.tasks.{worker_type}.{tier}.
             task = TaskMessage(
                 worker_type=stage["worker_type"],
                 payload=payload,
@@ -191,6 +224,10 @@ class PipelineOrchestrator(BaseActor):
 
         Supports: "path.to.value == true", "path.to.value == false",
                   "path.to.value != null"
+
+        TODO: This is a minimal condition evaluator. If more complex conditions
+              are needed (AND/OR, numeric comparisons, regex), consider using
+              a safe expression evaluator rather than extending this ad-hoc parser.
         """
         parts = condition.split()
         if len(parts) != 3:
@@ -231,6 +268,8 @@ class PipelineOrchestrator(BaseActor):
         Subscribes to loom.results.{goal_id}, filters by task_id,
         and returns the matching result (or None on timeout).
         """
+        # FIXME: asyncio.get_event_loop() is deprecated in Python 3.10+.
+        # Use asyncio.get_running_loop() instead to avoid DeprecationWarning.
         result_future: asyncio.Future[TaskResult] = asyncio.get_event_loop().create_future()
         subject = f"loom.results.{goal_id}"
 
@@ -242,6 +281,10 @@ class PipelineOrchestrator(BaseActor):
                 except asyncio.InvalidStateError:
                     pass  # Already resolved
 
+        # NOTE: This subscribes directly to NATS (bypassing NATSBus) because
+        # we need the raw nats.aio.msg.Msg for fine-grained subscription control.
+        # NATSBus.subscribe() auto-decodes JSON, but here we need to filter by
+        # task_id before resolving the future.
         sub = await self._nc.subscribe(subject, cb=_handler)
 
         try:

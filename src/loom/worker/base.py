@@ -94,7 +94,11 @@ class TaskWorker(BaseActor):
             log.error("worker.exception", error=str(e))
             await self._publish_result(task, TaskStatus.FAILED, error=str(e))
 
-        # Reset — worker holds NO state from this task
+        # Reset — worker holds NO state from this task.
+        # This is a design invariant, not a suggestion. Any instance variables
+        # set during process() must not affect subsequent invocations.
+        # TODO: Consider adding an explicit reset() hook for subclasses that
+        # need to clean up temporary resources (file handles, caches, etc.).
 
     @abstractmethod
     async def process(self, payload: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
@@ -138,5 +142,7 @@ class TaskWorker(BaseActor):
             },
             processing_time_ms=elapsed,
         )
+        # Results route back to the orchestrator that dispatched this task.
+        # If parent_task_id is None (no orchestrator), results go to "loom.results.default".
         subject = f"loom.results.{task.parent_task_id or 'default'}"
         await self.publish(subject, result.model_dump(mode="json"))

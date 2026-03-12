@@ -1,3 +1,6 @@
+# FIXME: This deployment will fail because Dockerfile.orchestrator's CMD
+#        references "loom.cli.main orchestrator" which doesn't exist as a CLI command.
+#        Either add an 'orchestrator' command to cli/main.py or switch to 'pipeline'.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

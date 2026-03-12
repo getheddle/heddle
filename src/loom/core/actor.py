@@ -1,6 +1,12 @@
 """
-Base actor class. All Loom actors (workers, orchestrators) inherit from this.
-Handles the NATS subscription lifecycle and message dispatch.
+Base actor class — the foundation of Loom's actor model.
+
+All Loom actors (workers, orchestrators, routers) inherit from BaseActor.
+This class handles the NATS subscription lifecycle, message dispatch, and
+error isolation. Each actor is an independent process with no shared memory.
+
+Design invariant: actors communicate ONLY through NATS messages (see messages.py).
+Direct method calls between actors are forbidden.
 """
 from __future__ import annotations
 
@@ -29,7 +35,7 @@ class BaseActor(ABC):
 
     def __init__(self, actor_id: str, nats_url: str = "nats://nats:4222"):
         self.actor_id = actor_id
-        self.nats_url = nats_url
+        self.nats_url = nats_url  # Default points to K8s service name; override for local dev
         self._nc: nats.NATS | None = None
         self._sub = None
         self._running = False
@@ -60,7 +66,16 @@ class BaseActor(ABC):
         await self._nc.publish(subject, json.dumps(message).encode())
 
     async def run(self, subject: str, queue_group: str | None = None) -> None:
-        """Main actor loop. Process messages one at a time."""
+        """Main actor loop. Process messages one at a time (mailbox semantics).
+
+        This method blocks forever (until cancelled or NATS disconnects).
+        Each message is processed sequentially — no concurrent processing within
+        a single actor instance. Horizontal scaling is achieved via queue groups
+        (multiple actor replicas sharing the same queue_group name).
+
+        TODO: Add graceful shutdown signal handling (SIGTERM/SIGINT).
+        TODO: Add configurable concurrency limit per actor (currently hardcoded to 1).
+        """
         await self.connect()
         await self.subscribe(subject, queue_group)
         self._running = True
@@ -76,9 +91,11 @@ class BaseActor(ABC):
                     elapsed = int((time.monotonic() - start) * 1000)
                     logger.info("actor.processed", actor_id=self.actor_id, ms=elapsed)
                 except Exception as e:
+                    # Individual message failures don't kill the actor loop.
+                    # The actor stays alive to process subsequent messages.
                     logger.error("actor.error", actor_id=self.actor_id, error=str(e))
         except asyncio.CancelledError:
-            pass
+            pass  # Clean shutdown via task cancellation
         finally:
             await self.disconnect()
 

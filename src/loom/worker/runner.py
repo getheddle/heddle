@@ -54,7 +54,11 @@ class LLMWorker(TaskWorker):
             max_tokens=self.config.get("max_output_tokens", 2000),
         )
 
-        # 4. Parse JSON output
+        # 4. Parse JSON output from LLM response.
+        # FIXME: This is fragile — if the LLM wraps JSON in markdown fences
+        # (e.g., ```json\n{...}\n```) or adds explanatory text before/after the
+        # JSON, parsing fails. Consider extracting JSON from the response with
+        # a regex fallback: re.search(r'\{.*\}', content, re.DOTALL).
         try:
             output = json.loads(result["content"])
         except json.JSONDecodeError:
