@@ -2,24 +2,28 @@
 Base actor class — the foundation of Loom's actor model.
 
 All Loom actors (workers, orchestrators, routers) inherit from BaseActor.
-This class handles the NATS subscription lifecycle, message dispatch,
+This class handles the message bus subscription lifecycle, message dispatch,
 signal-based shutdown, and error isolation. Each actor is an independent
 process with no shared memory.
 
-Design invariant: actors communicate ONLY through NATS messages (see messages.py).
+Design invariant: actors communicate ONLY through bus messages (see messages.py).
 Direct method calls between actors are forbidden.
+
+The message bus is pluggable via the ``bus`` constructor parameter. The default
+is NATSBus (created from ``nats_url`` when no bus is provided). For testing,
+pass an InMemoryBus instead.
 """
 from __future__ import annotations
 
 import asyncio
-import json
 import signal
 import time
 from abc import ABC, abstractmethod
 from typing import Any
 
-import nats
 import structlog
+
+from loom.bus.base import MessageBus, Subscription
 
 logger = structlog.get_logger()
 
@@ -29,7 +33,7 @@ class BaseActor(ABC):
     Actor model base class.
 
     Each actor:
-    - Subscribes to a NATS subject
+    - Subscribes to a message bus subject
     - Processes messages with configurable concurrency (default: 1 = strict ordering)
     - Communicates only through structured messages
     - Has isolated state (no shared memory)
@@ -40,6 +44,9 @@ class BaseActor(ABC):
     relaxes ordering guarantees. Horizontal scaling via queue groups (multiple
     replicas) is the preferred way to increase throughput while preserving
     per-message isolation.
+
+    The message bus can be injected via the ``bus`` keyword argument. If omitted,
+    a NATSBus is created from ``nats_url`` (backward-compatible default).
     """
 
     def __init__(
@@ -47,47 +54,49 @@ class BaseActor(ABC):
         actor_id: str,
         nats_url: str = "nats://nats:4222",
         max_concurrent: int = 1,
+        *,
+        bus: MessageBus | None = None,
     ):
         self.actor_id = actor_id
-        self.nats_url = nats_url  # Default points to K8s service name; override for local dev
         self.max_concurrent = max_concurrent
-        self._nc: nats.NATS | None = None
-        self._sub = None
+        self._sub: Subscription | None = None
         self._running = False
         self._shutdown_event: asyncio.Event | None = None
         # Semaphore is created at run() time inside the event loop
         self._semaphore: asyncio.Semaphore | None = None
 
+        if bus is not None:
+            self._bus = bus
+        else:
+            from loom.bus.nats_adapter import NATSBus
+            self._bus = NATSBus(nats_url)
+
     async def connect(self) -> None:
-        self._nc = await nats.connect(self.nats_url)
+        await self._bus.connect()
         logger.info("actor.connected", actor_id=self.actor_id)
 
     async def disconnect(self) -> None:
         if self._sub:
             await self._sub.unsubscribe()
-        if self._nc:
-            await self._nc.drain()
+        await self._bus.close()
         logger.info("actor.disconnected", actor_id=self.actor_id)
 
     async def subscribe(self, subject: str, queue_group: str | None = None) -> None:
         """
-        Subscribe to a NATS subject. Queue group enables competing consumers
+        Subscribe to a bus subject. Queue group enables competing consumers
         (multiple worker replicas share load).
         """
-        if queue_group:
-            self._sub = await self._nc.subscribe(subject, queue=queue_group)
-        else:
-            self._sub = await self._nc.subscribe(subject)
+        self._sub = await self._bus.subscribe(subject, queue_group)
         logger.info("actor.subscribed", actor_id=self.actor_id, subject=subject)
 
     async def publish(self, subject: str, message: dict[str, Any]) -> None:
-        await self._nc.publish(subject, json.dumps(message).encode())
+        await self._bus.publish(subject, message)
 
     def _install_signal_handlers(self) -> None:
         """Register SIGTERM/SIGINT handlers for graceful shutdown.
 
         When a signal is received, the actor finishes processing any in-flight
-        messages before disconnecting from NATS. This prevents message loss
+        messages before disconnecting from the bus. This prevents message loss
         during container restarts or manual stops.
         """
         loop = asyncio.get_running_loop()
@@ -101,11 +110,10 @@ class BaseActor(ABC):
         if self._shutdown_event:
             self._shutdown_event.set()
 
-    async def _process_one(self, msg) -> None:
-        """Process a single NATS message with semaphore-bounded concurrency."""
+    async def _process_one(self, data: dict[str, Any]) -> None:
+        """Process a single message with semaphore-bounded concurrency."""
         async with self._semaphore:
             try:
-                data = json.loads(msg.data.decode())
                 start = time.monotonic()
                 await self.handle_message(data)
                 elapsed = int((time.monotonic() - start) * 1000)
@@ -119,13 +127,13 @@ class BaseActor(ABC):
         """Main actor loop — subscribe, process messages, and handle shutdown.
 
         This method blocks until a shutdown signal (SIGTERM/SIGINT) is received
-        or the NATS connection drops. Messages are processed with bounded
+        or the bus connection drops. Messages are processed with bounded
         concurrency controlled by max_concurrent (default 1 = strict ordering).
 
         Graceful shutdown sequence:
         1. Signal received -> _request_shutdown() sets the shutdown event
         2. Message loop breaks after finishing in-flight messages
-        3. Actor disconnects from NATS (drains pending publishes)
+        3. Actor disconnects from the bus (drains pending publishes)
         """
         self._shutdown_event = asyncio.Event()
         self._semaphore = asyncio.Semaphore(self.max_concurrent)
@@ -143,15 +151,15 @@ class BaseActor(ABC):
         )
 
         try:
-            async for msg in self._sub.messages:
+            async for data in self._sub:
                 if not self._running:
                     break
                 if self.max_concurrent == 1:
                     # Sequential processing — strict mailbox semantics
-                    await self._process_one(msg)
+                    await self._process_one(data)
                 else:
                     # Concurrent processing — fire-and-forget within semaphore bound
-                    asyncio.create_task(self._process_one(msg))
+                    asyncio.create_task(self._process_one(data))
         except asyncio.CancelledError:
             pass  # Clean shutdown via task cancellation
         finally:

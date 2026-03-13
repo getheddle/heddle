@@ -295,7 +295,8 @@ def pipeline(config: str, nats_url: str):
     "--config", required=True, help="Path to orchestrator config YAML"
 )
 @click.option("--nats-url", default="nats://nats:4222", help="NATS server URL")
-def orchestrator(config: str, nats_url: str):
+@click.option("--redis-url", default="redis://redis:6379", help="Redis URL for checkpointing (empty to disable)")
+def orchestrator(config: str, nats_url: str, redis_url: str):
     """Start the dynamic LLM-based orchestrator (OrchestratorActor).
 
     Unlike the pipeline orchestrator which follows a fixed stage sequence,
@@ -324,10 +325,23 @@ def orchestrator(config: str, nats_url: str):
     with open(config) as f:
         cfg = yaml.safe_load(f)
 
+    # Build checkpoint store if redis_url is provided.
+    checkpoint_store = None
+    if redis_url:
+        try:
+            from loom.contrib.redis.store import RedisCheckpointStore
+            checkpoint_store = RedisCheckpointStore(redis_url)
+        except ImportError:
+            logger.warning(
+                "orchestrator.no_redis",
+                hint="Install loom[redis] for checkpoint persistence. Continuing without checkpointing.",
+            )
+
     actor = OrchestratorActor(
         actor_id=f"orchestrator-{cfg['name']}",
         config_path=config,
         nats_url=nats_url,
+        checkpoint_store=checkpoint_store,
     )
 
     logger.info(
@@ -335,6 +349,7 @@ def orchestrator(config: str, nats_url: str):
         name=cfg["name"],
         config_path=config,
         nats_url=nats_url,
+        checkpointing="enabled" if checkpoint_store else "disabled",
         max_concurrent_tasks=cfg.get("max_concurrent_tasks", "not set"),
         timeout_seconds=cfg.get("timeout_seconds", "not set"),
     )
@@ -370,18 +385,9 @@ def router(config: str, nats_url: str):
     r = TaskRouter(config, bus)
 
     async def _run():
-        """Subscribe to the incoming subject and block forever.
-
-        We use asyncio.Event().wait() to keep the event loop alive after
-        the router has subscribed. The router processes messages via its
-        NATS subscription callbacks -- it does not need an explicit
-        processing loop here.
-        """
+        """Connect, subscribe, and process messages until terminated."""
         await r.run()
-        # Block indefinitely. The router handles messages via NATS callbacks.
-        # asyncio.Event().wait() is the idiomatic way to keep an async
-        # function alive without busy-waiting or polling.
-        await asyncio.Event().wait()
+        await r.process_messages()
 
     asyncio.run(_run())
 

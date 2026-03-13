@@ -45,7 +45,7 @@ from typing import Any
 import structlog
 import yaml
 
-from loom.bus.nats_adapter import NATSBus
+from loom.bus.base import MessageBus
 from loom.core.messages import ModelTier, TaskMessage
 
 logger = structlog.get_logger()
@@ -148,7 +148,7 @@ class TaskRouter:
     responsible for keeping the event loop alive after run() returns.
     """
 
-    def __init__(self, config_path: str, bus: NATSBus) -> None:
+    def __init__(self, config_path: str, bus: MessageBus) -> None:
         self.bus = bus
         self.rules = self._load_rules(config_path)
 
@@ -313,5 +313,14 @@ class TaskRouter:
             asyncio.run(_run())
         """
         await self.bus.connect()
-        await self.bus.subscribe("loom.tasks.incoming", self.route)
+        self._sub = await self.bus.subscribe("loom.tasks.incoming")
         logger.info("router.running", dead_letter_subject=DEAD_LETTER_SUBJECT)
+
+    async def process_messages(self) -> None:
+        """Process messages from the subscription until cancelled.
+
+        Call run() first to connect and subscribe, then call this to
+        enter the message processing loop.
+        """
+        async for data in self._sub:
+            await self.route(data)

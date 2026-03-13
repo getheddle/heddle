@@ -12,12 +12,13 @@ The core idea: instead of one big LLM context, split work across narrowly-scoped
 src/loom/
   core/         # Message schemas (Pydantic), base actor class, I/O contract validation, workspace manager, config loader
   worker/       # Stateless LLM worker actor, processor worker, LLM backend adapters, knowledge loader, tool-use, embeddings
-  orchestrator/ # Orchestrator actor, checkpoint system (Redis), goal decomposer, result synthesizer, pipeline orchestrator
+  orchestrator/ # Orchestrator actor, checkpoint system (pluggable store), goal decomposer, result synthesizer, pipeline orchestrator
   router/       # Deterministic task router with dead-letter handling and rate limiting (not an LLM — pure logic)
-  bus/          # NATS message bus adapter
+  bus/          # Message bus abstraction (MessageBus ABC, InMemoryBus, NATSBus)
   cli/          # Click CLI entry point (worker, processor, pipeline, orchestrator, router, submit commands)
   contrib/      # Optional integrations (Django-style contrib namespace)
     duckdb/     # DuckDB tools and backends: DuckDBViewTool, DuckDBVectorTool, DuckDBQueryBackend
+    redis/      # Redis-backed CheckpointStore (optional: pip install loom[redis])
 configs/
   workers/      # YAML configs defining each worker's system prompt, I/O schema, default tier
   orchestrators/# Orchestrator configs
@@ -83,13 +84,16 @@ All major components are implemented and functional:
 - **Knowledge Silos:** Folder-based knowledge injection (`knowledge_silos` config key). Read-only folders prepend content to system prompt. Read-write folders accept `silo_updates` from LLM output (add/modify/delete actions). Tool-type silos load ToolProvider instances for LLM function-calling.
 - **Embeddings:** EmbeddingProvider ABC and OllamaEmbeddingProvider in `worker/embeddings.py`. Generates vector embeddings via Ollama `/api/embed` endpoint. Supports single and batch embedding. Lazy dimension detection.
 - **Router:** Deterministic routing with dead-letter subject for unroutable tasks, token-bucket rate limiting per tier.
-- **Orchestrator:** Full OrchestratorActor with decompose/dispatch/collect/synthesize loop. GoalDecomposer (LLM-based task decomposition), ResultSynthesizer (merge + LLM synthesis modes), CheckpointManager (Redis-backed, configurable TTL).
+- **Bus abstraction:** `MessageBus` ABC + `Subscription` ABC in `bus/base.py`. `InMemoryBus` for testing (no infra needed). `NATSBus` for production. `BaseActor` accepts `bus=` kwarg for injection.
+- **Orchestrator:** Full OrchestratorActor with decompose/dispatch/collect/synthesize loop. GoalDecomposer (LLM-based task decomposition), ResultSynthesizer (merge + LLM synthesis modes), CheckpointManager (pluggable store, configurable TTL).
+- **CheckpointStore:** `CheckpointStore` ABC in `orchestrator/store.py`. `InMemoryCheckpointStore` for testing. `RedisCheckpointStore` in `contrib/redis/store.py` (optional: `pip install loom[redis]`).
 - **PipelineOrchestrator:** Fully functional sequential stage execution with input mapping, conditions, timeouts.
 - **ProcessorWorker:** Non-LLM backend support with BackendError hierarchy and SyncProcessingBackend for CPU-bound backends.
 - **WorkspaceManager:** Centralized file-ref resolution with path traversal protection, JSON/text read/write helpers.
 - **CLI:** All 6 commands registered (worker, processor, pipeline, orchestrator, router, submit). Tier mismatch warnings on worker startup.
 - **Contrib DuckDB:** `loom.contrib.duckdb` — DuckDBViewTool (view-based LLM tool), DuckDBVectorTool (semantic similarity search), DuckDBQueryBackend (action-dispatch query backend with FTS, filtering, stats, get, vector search). All configurable via constructor params. Optional dependency: `pip install loom[duckdb]`.
-- **Tests:** 223 unit tests pass (messages, contracts, checkpoint, pipeline, workers, processor, workspace, tools, tool-use, knowledge silos, embeddings, contrib/duckdb). Integration test has `@pytest.mark.integration` marker and polling-based result collection.
+- **Contrib Redis:** `loom.contrib.redis` — RedisCheckpointStore for production checkpoint persistence. Optional dependency: `pip install loom[redis]`.
+- **Tests:** 302 unit tests pass (messages, contracts, checkpoint, pipeline, workers, processor, workspace, tools, tool-use, knowledge silos, embeddings, contrib/duckdb, contrib/rag). Integration test has `@pytest.mark.integration` marker and polling-based result collection.
 - **Infrastructure:** Dockerfiles and k8s manifests updated with correct CMDs and no stale FIXMEs.
 
 ## Known issues

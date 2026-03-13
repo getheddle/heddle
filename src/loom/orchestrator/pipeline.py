@@ -41,7 +41,6 @@ See also:
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from typing import Any
 
@@ -271,25 +270,25 @@ class PipelineOrchestrator(BaseActor):
         result_future: asyncio.Future[TaskResult] = asyncio.get_running_loop().create_future()
         subject = f"loom.results.{goal_id}"
 
-        async def _handler(msg):
-            data = json.loads(msg.data.decode())
-            if data.get("task_id") == task_id:
-                try:
-                    result_future.set_result(TaskResult(**data))
-                except asyncio.InvalidStateError:
-                    pass  # Already resolved
+        sub = await self._bus.subscribe(subject)
 
-        # NOTE: This subscribes directly to NATS (bypassing NATSBus) because
-        # we need the raw nats.aio.msg.Msg for fine-grained subscription control.
-        # NATSBus.subscribe() auto-decodes JSON, but here we need to filter by
-        # task_id before resolving the future.
-        sub = await self._nc.subscribe(subject, cb=_handler)
+        async def _consume():
+            async for data in sub:
+                if data.get("task_id") == task_id:
+                    try:
+                        result_future.set_result(TaskResult(**data))
+                    except asyncio.InvalidStateError:
+                        pass  # Already resolved
+                    break
+
+        consume_task = asyncio.create_task(_consume())
 
         try:
             return await asyncio.wait_for(result_future, timeout=timeout)
         except asyncio.TimeoutError:
             return None
         finally:
+            consume_task.cancel()
             await sub.unsubscribe()
 
     async def _publish_pipeline_result(

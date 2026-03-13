@@ -1,9 +1,9 @@
 """
-NATS message bus adapter — the transport layer for all Loom communication.
+NATS message bus adapter — the default transport layer for Loom communication.
 
 All inter-actor communication flows through this adapter. Actors never
-touch NATS directly; they use NATSBus (or BaseActor's publish/subscribe
-wrappers, which delegate here).
+touch NATS directly; they use the MessageBus interface (or BaseActor's
+publish/subscribe wrappers, which delegate here).
 
 Subject naming convention:
     loom.tasks.incoming          — Router's inbox (all task dispatch goes here first)
@@ -25,21 +25,48 @@ NOTE: All messages are JSON-serialized dicts. Binary payloads are not supported.
 from __future__ import annotations
 
 import json
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 import nats
 from nats.aio.client import Client as NATSClient
 import structlog
 
+from loom.bus.base import MessageBus, Subscription
+
 logger = structlog.get_logger()
 
 
-class NATSBus:
-    """Thin wrapper over nats-py for Loom's messaging patterns.
+class NATSSubscription(Subscription):
+    """Wraps a nats-py subscription as an async iterator of parsed dicts."""
+
+    def __init__(self, nats_sub) -> None:
+        self._sub = nats_sub
+
+    async def unsubscribe(self) -> None:
+        await self._sub.unsubscribe()
+
+    def __aiter__(self) -> NATSSubscription:
+        return self
+
+    async def __anext__(self) -> dict[str, Any]:
+        """Yield the next message, JSON-decoded.
+
+        Blocks until a message arrives. Raises StopAsyncIteration when the
+        underlying NATS subscription is drained or closed.
+        """
+        try:
+            msg = await self._sub.next_msg(timeout=None)
+        except Exception:
+            raise StopAsyncIteration
+        return json.loads(msg.data.decode())
+
+
+class NATSBus(MessageBus):
+    """NATS-backed MessageBus implementation.
 
     Provides three messaging patterns:
     - publish(): Fire-and-forget (tasks, results)
-    - subscribe(): Async callback with optional queue groups for load balancing
+    - subscribe(): Async iterator with optional queue groups for load balancing
     - request(): Request-reply for synchronous-style calls (not yet used by any actor)
     """
 
@@ -71,20 +98,17 @@ class NATSBus:
     async def subscribe(
         self,
         subject: str,
-        handler: Callable[[dict[str, Any]], Awaitable[None]],
         queue_group: str | None = None,
-    ):
-        """
-        Subscribe with a handler callback.
+    ) -> NATSSubscription:
+        """Subscribe to a subject, returning an async-iterable NATSSubscription.
+
         Queue group enables competing consumers for horizontal scaling.
         """
-        async def _cb(msg):
-            data = json.loads(msg.data.decode())
-            await handler(data)
-
         if queue_group:
-            return await self._nc.subscribe(subject, queue=queue_group, cb=_cb)
-        return await self._nc.subscribe(subject, cb=_cb)
+            nats_sub = await self._nc.subscribe(subject, queue=queue_group)
+        else:
+            nats_sub = await self._nc.subscribe(subject)
+        return NATSSubscription(nats_sub)
 
     async def request(self, subject: str, data: dict[str, Any], timeout: float = 30.0) -> dict:
         """Request-reply pattern for synchronous-style calls.

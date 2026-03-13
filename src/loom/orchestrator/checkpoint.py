@@ -8,14 +8,15 @@ of where things stand.
 
 Checkpoint trigger: when estimated token count exceeds threshold.
 
-Storage: Redis with 24-hour TTL. Keys follow the pattern:
+Storage: Pluggable via CheckpointStore (see orchestrator/store.py).
+Keys follow the pattern:
     loom:checkpoint:{goal_id}:{checkpoint_number}  — versioned checkpoint
     loom:checkpoint:{goal_id}:latest                — pointer to most recent
 
 The orchestrator workflow with checkpoints:
     1. Process goal, accumulate conversation_history
     2. After each worker result: should_checkpoint(conversation_history)
-    3. If True: create_checkpoint() → compress state → persist to Redis
+    3. If True: create_checkpoint() → compress state → persist to store
     4. Orchestrator "reboots" with: system_prompt + format_for_injection(checkpoint)
        + last N interactions (recent_window_size)
 
@@ -37,11 +38,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import redis.asyncio as redis
 import structlog
 import tiktoken
 
 from loom.core.messages import CheckpointState
+from loom.orchestrator.store import CheckpointStore
 
 logger = structlog.get_logger()
 
@@ -59,13 +60,13 @@ class CheckpointManager:
 
     def __init__(
         self,
-        redis_url: str = "redis://redis:6379",
+        store: CheckpointStore,
         token_threshold: int = 50_000,     # Trigger checkpoint at this count
         recent_window_size: int = 5,       # Keep last N interactions in detail
         encoding_name: str = "cl100k_base",
-        ttl_seconds: int = 86400,          # Redis key expiry (default: 24h)
+        ttl_seconds: int = 86400,          # Key expiry (default: 24h)
     ):
-        self.redis = redis.from_url(redis_url)
+        self.store = store
         self.token_threshold = token_threshold
         self.recent_window_size = recent_window_size
         self.encoder = tiktoken.get_encoding(encoding_name)
@@ -129,13 +130,13 @@ class CheckpointManager:
             checkpoint_number=checkpoint_number,
         )
 
-        # Persist to Redis with configurable TTL (default 24h).
+        # Persist to store with configurable TTL (default 24h).
         # Long-running goals can increase ttl_seconds at construction time.
         key = f"loom:checkpoint:{goal_id}:{checkpoint_number}"
-        await self.redis.set(key, checkpoint.model_dump_json(), ex=self.ttl_seconds)
+        await self.store.set(key, checkpoint.model_dump_json(), self.ttl_seconds)
 
         # Maintain a "latest" pointer so load_latest() doesn't need to scan.
-        await self.redis.set(f"loom:checkpoint:{goal_id}:latest", key, ex=self.ttl_seconds)
+        await self.store.set(f"loom:checkpoint:{goal_id}:latest", key, self.ttl_seconds)
 
         logger.info(
             "checkpoint.created",
@@ -147,10 +148,10 @@ class CheckpointManager:
 
     async def load_latest(self, goal_id: str) -> CheckpointState | None:
         """Load the most recent checkpoint for a goal."""
-        latest_key = await self.redis.get(f"loom:checkpoint:{goal_id}:latest")
+        latest_key = await self.store.get(f"loom:checkpoint:{goal_id}:latest")
         if not latest_key:
             return None
-        data = await self.redis.get(latest_key)
+        data = await self.store.get(latest_key)
         if not data:
             return None
         return CheckpointState.model_validate_json(data)

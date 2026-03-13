@@ -8,13 +8,15 @@ dependencies = [
     "pydantic>=2.5.0",         # Message schemas and validation
     "pyyaml>=6.0",             # Config files
     "httpx>=0.27.0",           # HTTP client for LLM API calls
-    "redis>=5.0.0",            # Checkpoint store (async)
     "tiktoken>=0.7.0",         # Token counting for context management
     "click>=8.1.0",            # CLI
     "structlog>=24.1.0",       # Structured logging
 ]
 
 [project.optional-dependencies]
+redis = [
+    "redis>=5.0.0",            # Redis-backed checkpoint store (async)
+]
 local = [
     "ollama>=0.3.0",           # Local model client
 ]
@@ -33,6 +35,7 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.3.0",
     "duckdb>=1.0.0",
+    "redis>=5.0.0",            # Needed for contrib/redis tests
 ]
 
 [project.scripts]

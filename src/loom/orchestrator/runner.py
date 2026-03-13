@@ -65,6 +65,7 @@ from loom.core.messages import (
 )
 from loom.orchestrator.checkpoint import CheckpointManager
 from loom.orchestrator.decomposer import GoalDecomposer
+from loom.orchestrator.store import CheckpointStore
 from loom.orchestrator.synthesizer import ResultSynthesizer
 from loom.worker.backends import LLMBackend
 
@@ -153,23 +154,24 @@ class OrchestratorActor(BaseActor):
         the same backend instance, but could be different tiers.
     nats_url : str
         NATS server URL.
-    redis_url : str
-        Redis server URL for checkpoint persistence.  Set to an empty string
-        to disable checkpointing.
+    checkpoint_store : CheckpointStore | None
+        Checkpoint persistence backend.  Pass None to disable checkpointing.
 
     Example
     -------
     ::
 
         from loom.worker.backends import OllamaBackend
+        from loom.contrib.redis.store import RedisCheckpointStore
 
         backend = OllamaBackend(model="command-r7b:latest")
+        store = RedisCheckpointStore("redis://localhost:6379")
         actor = OrchestratorActor(
             actor_id="orchestrator-1",
             config_path="configs/orchestrators/default.yaml",
             backend=backend,
             nats_url="nats://localhost:4222",
-            redis_url="redis://localhost:6379",
+            checkpoint_store=store,
         )
         await actor.run("loom.goals.incoming")
     """
@@ -180,12 +182,11 @@ class OrchestratorActor(BaseActor):
         config_path: str,
         backend: LLMBackend,
         nats_url: str = "nats://nats:4222",
-        redis_url: str = "redis://redis:6379",
+        checkpoint_store: CheckpointStore | None = None,
     ):
         super().__init__(actor_id, nats_url)
         self.config = self._load_config(config_path)
         self.backend = backend
-        self.redis_url = redis_url
 
         # Build the decomposer from config-defined available workers.
         # Each entry needs at least "name" and "description".
@@ -206,12 +207,12 @@ class OrchestratorActor(BaseActor):
         # Synthesizer uses the same backend for LLM-based synthesis.
         self.synthesizer = ResultSynthesizer(backend=backend)
 
-        # Checkpoint manager -- only initialized if redis_url is non-empty.
+        # Checkpoint manager -- only initialized if a checkpoint store is provided.
         checkpoint_config = self.config.get("checkpoint", {})
         self._checkpoint_manager: CheckpointManager | None = None
-        if redis_url:
+        if checkpoint_store is not None:
             self._checkpoint_manager = CheckpointManager(
-                redis_url=redis_url,
+                store=checkpoint_store,
                 token_threshold=checkpoint_config.get("token_threshold", 50_000),
                 recent_window_size=checkpoint_config.get("recent_window", 5),
             )
@@ -415,7 +416,7 @@ class OrchestratorActor(BaseActor):
     ) -> list[TaskResult]:
         """Subscribe to ``loom.results.{goal_id}`` and collect worker results.
 
-        Creates a temporary NATS subscription that listens for TaskResult
+        Creates a temporary bus subscription that listens for TaskResult
         messages.  Each result is matched by ``task_id`` against the set of
         dispatched tasks.  Collection completes when:
 
@@ -444,52 +445,54 @@ class OrchestratorActor(BaseActor):
         all_done = asyncio.Event()
         subject = f"loom.results.{goal.goal_id}"
 
-        async def _result_handler(msg: Any) -> None:
-            """NATS callback: parse result and store if it matches a dispatched task."""
-            try:
-                data = json.loads(msg.data.decode())
-                task_id = data.get("task_id")
+        sub = await self._bus.subscribe(subject)
 
-                # Only accept results for tasks we actually dispatched.
-                if task_id not in expected_task_ids:
-                    log.debug(
-                        "orchestrator.result_ignored",
+        async def _consume() -> None:
+            """Iterate over subscription and store matching results."""
+            async for data in sub:
+                try:
+                    task_id = data.get("task_id")
+
+                    # Only accept results for tasks we actually dispatched.
+                    if task_id not in expected_task_ids:
+                        log.debug(
+                            "orchestrator.result_ignored",
+                            task_id=task_id,
+                            reason="not_dispatched_by_this_goal",
+                        )
+                        continue
+
+                    # Skip duplicates (at-least-once delivery).
+                    if task_id in goal_state.collected_results:
+                        log.debug(
+                            "orchestrator.result_duplicate",
+                            task_id=task_id,
+                        )
+                        continue
+
+                    result = TaskResult(**data)
+                    goal_state.collected_results[task_id] = result
+
+                    log.info(
+                        "orchestrator.result_received",
                         task_id=task_id,
-                        reason="not_dispatched_by_this_goal",
+                        worker_type=result.worker_type,
+                        status=result.status.value,
+                        collected=len(goal_state.collected_results),
+                        expected=expected_count,
                     )
-                    return
 
-                # Skip duplicates (NATS at-least-once delivery).
-                if task_id in goal_state.collected_results:
-                    log.debug(
-                        "orchestrator.result_duplicate",
-                        task_id=task_id,
+                    if goal_state.all_collected:
+                        all_done.set()
+                        break
+
+                except Exception as e:
+                    log.error(
+                        "orchestrator.result_parse_error",
+                        error=str(e),
                     )
-                    return
 
-                result = TaskResult(**data)
-                goal_state.collected_results[task_id] = result
-
-                log.info(
-                    "orchestrator.result_received",
-                    task_id=task_id,
-                    worker_type=result.worker_type,
-                    status=result.status.value,
-                    collected=len(goal_state.collected_results),
-                    expected=expected_count,
-                )
-
-                if goal_state.all_collected:
-                    all_done.set()
-
-            except Exception as e:
-                log.error(
-                    "orchestrator.result_parse_error",
-                    error=str(e),
-                )
-
-        # Subscribe directly to NATS (same pattern as PipelineOrchestrator).
-        sub = await self._nc.subscribe(subject, cb=_result_handler)
+        consume_task = asyncio.create_task(_consume())
 
         try:
             await asyncio.wait_for(all_done.wait(), timeout=self._task_timeout)
@@ -503,6 +506,7 @@ class OrchestratorActor(BaseActor):
                 timeout_seconds=self._task_timeout,
             )
         finally:
+            consume_task.cancel()
             await sub.unsubscribe()
 
         return list(goal_state.collected_results.values())

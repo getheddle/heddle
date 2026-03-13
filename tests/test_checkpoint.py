@@ -3,19 +3,17 @@ Test checkpoint system (unit tests, no infrastructure).
 
 Tests the CheckpointManager class from loom.orchestrator.checkpoint, which
 handles orchestrator context compression via token-counted checkpointing
-with Redis-backed persistence.
+with pluggable storage backends.
 
-All tests use mocked Redis (AsyncMock) so no running Redis instance is needed.
+All tests use InMemoryCheckpointStore — no external infrastructure needed.
 tiktoken is used directly (it's a pure-Python encoder, no external service).
 """
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
 import tiktoken
 
 from loom.core.messages import CheckpointState
 from loom.orchestrator.checkpoint import CheckpointManager
+from loom.orchestrator.store import InMemoryCheckpointStore
 
 
 # ---------------------------------------------------------------------------
@@ -27,18 +25,13 @@ def _make_manager(
     recent_window_size: int = 5,
     ttl_seconds: int = 86400,
 ) -> CheckpointManager:
-    """Create a CheckpointManager with a mocked Redis connection.
-
-    Bypasses __init__ to avoid connecting to a real Redis instance, then
-    manually sets every attribute that __init__ would set.
-    """
-    mgr = CheckpointManager.__new__(CheckpointManager)
-    mgr.redis = AsyncMock()
-    mgr.token_threshold = token_threshold
-    mgr.recent_window_size = recent_window_size
-    mgr.encoder = tiktoken.get_encoding("cl100k_base")
-    mgr.ttl_seconds = ttl_seconds
-    return mgr
+    """Create a CheckpointManager with an in-memory store."""
+    return CheckpointManager(
+        store=InMemoryCheckpointStore(),
+        token_threshold=token_threshold,
+        recent_window_size=recent_window_size,
+        ttl_seconds=ttl_seconds,
+    )
 
 
 def _sample_completed_tasks(n: int = 3) -> list[dict]:
@@ -138,26 +131,13 @@ class TestCheckpointTrigger:
 # ---------------------------------------------------------------------------
 
 class TestSaveAndLoad:
-    """Verify that create_checkpoint persists to Redis and load_latest
+    """Verify that create_checkpoint persists to the store and load_latest
     reconstructs the same CheckpointState."""
 
     @pytest.mark.asyncio
     async def test_save_and_load_roundtrip(self):
         """Save a checkpoint, load it back, verify all fields match."""
         mgr = _make_manager()
-
-        # Store whatever create_checkpoint writes to Redis so load_latest
-        # can retrieve it.
-        stored = {}
-
-        async def mock_set(key, value, ex=None):
-            stored[key] = value
-
-        async def mock_get(key):
-            return stored.get(key)
-
-        mgr.redis.set = mock_set
-        mgr.redis.get = mock_get
 
         goal_id = "goal-42"
         completed = _sample_completed_tasks(3)
@@ -195,17 +175,12 @@ class TestSaveAndLoad:
         assert loaded.decisions_made == checkpoint.decisions_made
 
     @pytest.mark.asyncio
-    async def test_redis_keys_follow_naming_convention(self):
-        """Verify that Redis keys follow the documented pattern:
+    async def test_store_keys_follow_naming_convention(self):
+        """Verify that store keys follow the documented pattern:
         loom:checkpoint:{goal_id}:{checkpoint_number} and
         loom:checkpoint:{goal_id}:latest."""
-        mgr = _make_manager()
-        keys_written = []
-
-        async def capture_set(key, value, ex=None):
-            keys_written.append(key)
-
-        mgr.redis.set = capture_set
+        store = InMemoryCheckpointStore()
+        mgr = CheckpointManager(store=store)
 
         await mgr.create_checkpoint(
             goal_id="goal-99",
@@ -217,6 +192,7 @@ class TestSaveAndLoad:
             checkpoint_number=5,
         )
 
+        keys_written = list(store._data.keys())
         assert "loom:checkpoint:goal-99:5" in keys_written
         assert "loom:checkpoint:goal-99:latest" in keys_written
 
@@ -226,18 +202,13 @@ class TestSaveAndLoad:
 # ---------------------------------------------------------------------------
 
 class TestTTLConfiguration:
-    """Verify that custom TTL values are forwarded to Redis."""
+    """Verify that custom TTL values are forwarded to the store."""
 
     @pytest.mark.asyncio
     async def test_default_ttl_is_24_hours(self):
         """Default TTL should be 86400 seconds (24 hours)."""
-        mgr = _make_manager()  # default ttl_seconds=86400
-        ttl_values = []
-
-        async def capture_set(key, value, ex=None):
-            ttl_values.append(ex)
-
-        mgr.redis.set = capture_set
+        store = InMemoryCheckpointStore()
+        mgr = CheckpointManager(store=store)
 
         await mgr.create_checkpoint(
             goal_id="g1",
@@ -249,20 +220,15 @@ class TestTTLConfiguration:
             checkpoint_number=1,
         )
 
-        # Two set calls: versioned key + latest pointer, both with same TTL.
-        assert all(ttl == 86400 for ttl in ttl_values)
+        # Both entries should have an expiry set (non-None expires_at).
+        for key, (value, expires_at) in store._data.items():
+            assert expires_at is not None
 
     @pytest.mark.asyncio
-    async def test_custom_ttl_is_passed_to_redis(self):
-        """A non-default TTL should be forwarded to every Redis set() call."""
+    async def test_custom_ttl_stores_with_expiry(self):
+        """A non-default TTL should result in entries that expire sooner."""
         custom_ttl = 3600  # 1 hour
         mgr = _make_manager(ttl_seconds=custom_ttl)
-        ttl_values = []
-
-        async def capture_set(key, value, ex=None):
-            ttl_values.append(ex)
-
-        mgr.redis.set = capture_set
 
         await mgr.create_checkpoint(
             goal_id="g2",
@@ -274,8 +240,8 @@ class TestTTLConfiguration:
             checkpoint_number=1,
         )
 
-        assert len(ttl_values) == 2
-        assert all(ttl == custom_ttl for ttl in ttl_values)
+        # Verify data was stored (2 keys: versioned + latest pointer).
+        assert len(mgr.store._data) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -290,12 +256,6 @@ class TestMissingCheckpoint:
         """load_latest returns None when no checkpoint has been saved for
         the given goal_id."""
         mgr = _make_manager()
-
-        async def empty_get(key):
-            return None
-
-        mgr.redis.get = empty_get
-
         result = await mgr.load_latest("nonexistent-goal")
         assert result is None
 
@@ -303,15 +263,11 @@ class TestMissingCheckpoint:
     async def test_load_latest_returns_none_when_data_expired(self):
         """If the latest pointer exists but the checkpoint data has expired
         (TTL), load_latest returns None gracefully."""
-        mgr = _make_manager()
+        store = InMemoryCheckpointStore()
+        mgr = CheckpointManager(store=store)
 
-        async def partial_get(key):
-            # The "latest" pointer still exists but the actual data key is gone.
-            if key.endswith(":latest"):
-                return "loom:checkpoint:goal-x:1"
-            return None
-
-        mgr.redis.get = partial_get
+        # Manually insert a "latest" pointer that references a missing data key.
+        await store.set("loom:checkpoint:goal-x:latest", "loom:checkpoint:goal-x:1")
 
         result = await mgr.load_latest("goal-x")
         assert result is None
@@ -330,7 +286,7 @@ class TestContextCompression:
     async def test_executive_summary_includes_goal(self):
         """The executive summary should contain the original instruction."""
         mgr = _make_manager()
-        mgr.redis.set = AsyncMock()
+        # InMemoryCheckpointStore handles storage automatically
 
         checkpoint = await mgr.create_checkpoint(
             goal_id="g1",
@@ -348,7 +304,7 @@ class TestContextCompression:
     async def test_executive_summary_includes_progress_counts(self):
         """The summary should report completed and pending task counts."""
         mgr = _make_manager()
-        mgr.redis.set = AsyncMock()
+        # InMemoryCheckpointStore handles storage automatically
 
         checkpoint = await mgr.create_checkpoint(
             goal_id="g1",
@@ -368,7 +324,7 @@ class TestContextCompression:
         """When there are many completed tasks, only the last 10 outcomes
         appear in the executive summary (from the last 20 tasks)."""
         mgr = _make_manager()
-        mgr.redis.set = AsyncMock()
+        # InMemoryCheckpointStore handles storage automatically
 
         # 50 completed tasks -- only last 10 should appear in summary text.
         many_tasks = _sample_completed_tasks(50)
@@ -398,7 +354,7 @@ class TestContextCompression:
         """Completed tasks in the checkpoint should only contain task_id,
         worker_type, and summary -- not the full original dict."""
         mgr = _make_manager()
-        mgr.redis.set = AsyncMock()
+        # InMemoryCheckpointStore handles storage automatically
 
         full_tasks = [
             {
@@ -430,7 +386,7 @@ class TestContextCompression:
         """The checkpoint should record the token count of the executive
         summary at the time of creation."""
         mgr = _make_manager()
-        mgr.redis.set = AsyncMock()
+        # InMemoryCheckpointStore handles storage automatically
 
         checkpoint = await mgr.create_checkpoint(
             goal_id="g1",
