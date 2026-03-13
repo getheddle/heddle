@@ -51,6 +51,14 @@ maps inputs from previous stage outputs, with conditions and timeouts.
 and model tier with token-bucket rate limiting and dead-letter handling. No LLM
 in the routing path.
 
+**Scheduled Dispatch** — a time-driven actor dispatches goals or tasks on cron
+expressions or fixed intervals, configured entirely in YAML.
+
+**MCP Gateway** — any LOOM system becomes a Model Context Protocol server with a
+single YAML config. Workers, pipelines, and query backends are automatically
+discovered as MCP tools with typed input schemas. Supports stdio and
+streamable-http transports.
+
 **Contrib Ecosystem** — optional packages for DuckDB (analytics, vector search),
 Redis (checkpoint persistence), and RAG (ingestion, chunking, embedding, analysis).
 
@@ -85,8 +93,10 @@ that separates concerns across specialized actors.
 | Pipeline orchestrator (sequential stages) | Complete |
 | Router (deterministic, rate-limited) | Complete |
 | Checkpoint (Redis + in-memory) | Complete |
+| Scheduler (cron + interval dispatch) | Complete |
+| MCP gateway (config-driven tool server) | Complete |
 | Contrib: DuckDB, Redis, RAG | Complete |
-| Unit tests | 382 passing |
+| Unit tests | 498 passing |
 
 ---
 
@@ -112,9 +122,9 @@ For the full 7-step setup with infrastructure and LLM backends, see
   subjects, design rules, component details
 - **[Getting Started](docs/GETTING_STARTED.md)** — Installation, infrastructure
   setup, LLM backend configuration, running your first workflow
-- **[Building Workflows](docs/building-workflows.md)** — Comprehensive 10-part
-  guide: workers, pipelines, knowledge, file-refs, routing, silos, tools,
-  embeddings, DuckDB
+- **[Building Workflows](docs/building-workflows.md)** — Comprehensive guide:
+  workers, pipelines, knowledge, file-refs, routing, silos, tools, embeddings,
+  DuckDB, MCP gateway
 - **[RAG Pipeline](docs/rag-howto.md)** — Social media stream ingestion,
   chunking, vector storage, and analysis
 - **[Kubernetes Deployment](docs/KUBERNETES.md)** — Minikube manifests,

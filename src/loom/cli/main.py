@@ -504,5 +504,59 @@ def submit(goal: str, nats_url: str, context: tuple[str, ...]):
     asyncio.run(_submit())
 
 
+# ---------------------------------------------------------------------------
+# mcp command
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option("--config", required=True, help="Path to MCP gateway config YAML")
+@click.option(
+    "--transport",
+    default="stdio",
+    type=click.Choice(["stdio", "streamable-http"]),
+    help="MCP transport (default: stdio)",
+)
+@click.option("--host", default="127.0.0.1", help="HTTP host (streamable-http only)")
+@click.option("--port", default=8000, type=int, help="HTTP port (streamable-http only)")
+def mcp(config: str, transport: str, host: str, port: int):
+    """Start an MCP server exposing LOOM tools and resources.
+
+    Reads an MCP gateway config YAML and starts an MCP server that exposes
+    LOOM workers, pipelines, and query backends as MCP tools. Workspace
+    files can optionally be exposed as MCP resources.
+
+    \b
+    Transports:
+        stdio            -- Standard I/O (default, used by most MCP clients)
+        streamable-http  -- HTTP server (requires uvicorn)
+
+    Requires the 'mcp' package:
+
+    \b
+        pip install loom[mcp]
+
+    See docs/mcp.md for config format and examples.
+    """
+    from loom.mcp import create_server, run_stdio, run_streamable_http
+
+    server, gateway = create_server(config)
+
+    tool_count = len(gateway.tool_registry)
+    has_resources = gateway.resources is not None
+    logger.info(
+        "mcp.starting",
+        config_path=config,
+        transport=transport,
+        tools=tool_count,
+        resources="enabled" if has_resources else "disabled",
+    )
+
+    if transport == "stdio":
+        run_stdio(server, gateway)
+    else:
+        run_streamable_http(server, gateway, host=host, port=port)
+
+
 if __name__ == "__main__":
     cli()

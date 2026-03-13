@@ -23,9 +23,12 @@ pip install -e ".[dev]"
 Loom has optional extras for integrations:
 
 ```bash
-pip install loom[duckdb]   # DuckDB tools and query backends
-pip install loom[redis]    # Redis-backed checkpoint store
-pip install loom[local]    # Ollama client
+pip install loom[duckdb]      # DuckDB tools and query backends
+pip install loom[redis]       # Redis-backed checkpoint store
+pip install loom[local]       # Ollama client
+pip install loom[rag]         # RAG pipeline (DuckDB + Ollama)
+pip install loom[scheduler]   # Cron expression parsing (croniter)
+pip install loom[mcp]         # MCP gateway (Model Context Protocol SDK)
 ```
 
 ---
@@ -157,8 +160,17 @@ loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://
 # Run a pipeline
 loom pipeline --config configs/orchestrators/my_pipeline.yaml --nats-url nats://localhost:4222
 
+# Run the scheduler
+loom scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
+
 # Submit a goal
 loom submit "some goal text" --nats-url nats://localhost:4222
+
+# Run an MCP server (stdio transport, default)
+loom mcp --config configs/mcp/docman.yaml
+
+# Run an MCP server (streamable-http transport)
+loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
 
 # Lint
 ruff check src/

@@ -53,8 +53,15 @@ src/loom/
 │   ├── memory.py        # InMemoryBus for testing (no infrastructure needed)
 │   └── nats_adapter.py  # NATS pub/sub/request wrapper
 │
+├── mcp/
+│   ├── config.py        # MCP gateway YAML config loading + validation
+│   ├── discovery.py     # Tool definition generators (worker/pipeline/query → MCP tools)
+│   ├── bridge.py        # MCPBridge — MCP tool calls → NATS dispatch + result collection
+│   ├── resources.py     # WorkspaceResources — workspace files as MCP resources
+│   └── server.py        # create_server(), MCPGateway, run_stdio(), run_streamable_http()
+│
 ├── cli/
-│   └── main.py          # Click CLI: worker, processor, pipeline, orchestrator, scheduler, router, submit
+│   └── main.py          # Click CLI: worker, processor, pipeline, orchestrator, scheduler, router, submit, mcp
 │
 └── contrib/
     ├── duckdb/          # DuckDB tools and backends (optional: pip install loom[duckdb])
@@ -77,6 +84,8 @@ configs/
 │   └── rag_pipeline.yaml       # RAG pipeline orchestrator config
 ├── schedulers/
 │   └── example.yaml            # Reference scheduler config (cron + interval examples)
+├── mcp/
+│   └── docman.yaml             # Example: document management MCP server config
 └── router_rules.yaml           # Tier overrides and rate limits
 
 docker/                   # Dockerfiles and entrypoint script
@@ -205,6 +214,24 @@ Abstracted behind `MessageBus` ABC:
 - `NATSBus` for production
 - `BaseActor` accepts `bus=` kwarg for injection
 
+### MCP Gateway (`mcp/`)
+
+Config-driven Model Context Protocol server that exposes LOOM actors as MCP tools.
+Any LOOM system becomes an MCP server with a single YAML config — zero MCP-specific
+code needed.
+
+- **Config** (`config.py`): Load and validate MCP gateway YAML
+- **Discovery** (`discovery.py`): Auto-generate MCP tool definitions from worker,
+  pipeline, and query backend configs
+- **Bridge** (`bridge.py`): Dispatch MCP tool calls as NATS messages and collect results
+- **Resources** (`resources.py`): Expose workspace files as MCP resources with
+  `workspace:///` URIs and change notifications
+- **Server** (`server.py`): Assemble the MCP server with stdio and streamable-http transports
+
+Tool discovery flow: Worker YAML `name` + `input_schema` + `description` → MCP tool.
+Pipeline `input_mapping` `goal.context.*` fields → tool input schema. Query backend
+`_get_handlers()` → per-action tools with auto-generated schemas.
+
 ### Contrib Packages
 
 - **DuckDB** (`contrib/duckdb/`): `DuckDBViewTool` (view-based LLM tool),
@@ -222,8 +249,8 @@ Workers are configured via YAML files in `configs/workers/`. Each config defines
 
 ```yaml
 name: summarizer
-kind: llm              # or "processor"
-default_tier: local    # local | standard | frontier
+worker_kind: llm             # or "processor"
+default_model_tier: local    # local | standard | frontier
 system_prompt: |
   You are a text summarizer...
 input_schema:

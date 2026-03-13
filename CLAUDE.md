@@ -10,25 +10,125 @@ The core idea: instead of one big LLM context, split work across narrowly-scoped
 
 ```
 src/loom/
-  core/         # Message schemas (Pydantic), base actor class, I/O contract validation, workspace manager, config loader
-  worker/       # Stateless LLM worker actor, processor worker, LLM backend adapters, knowledge loader, tool-use, embeddings
-  orchestrator/ # Orchestrator actor, checkpoint system (pluggable store), goal decomposer, result synthesizer, pipeline orchestrator
-  scheduler/    # Time-driven scheduler actor (cron + interval dispatch of goals/tasks)
-  router/       # Deterministic task router with dead-letter handling and rate limiting (not an LLM — pure logic)
-  bus/          # Message bus abstraction (MessageBus ABC, InMemoryBus, NATSBus)
-  cli/          # Click CLI entry point (worker, processor, pipeline, orchestrator, scheduler, router, submit commands)
-  contrib/      # Optional integrations (Django-style contrib namespace)
-    duckdb/     # DuckDB tools and backends: DuckDBViewTool, DuckDBVectorTool, DuckDBQueryBackend
-    redis/      # Redis-backed CheckpointStore (optional: pip install loom[redis])
-    rag/        # RAG pipeline: ingestion, chunking, embedding, vector storage, LLM analysis
+  core/
+    actor.py              # BaseActor — async actor with signal handling, configurable concurrency
+    config.py             # load_config(), ConfigValidationError, YAML schema validation
+    contracts.py          # I/O contract validation (bool/int distinction, schema enforcement)
+    messages.py           # Pydantic models: TaskMessage, TaskResult, OrchestratorGoal,
+                          #   CheckpointState, ModelTier, TaskStatus
+    workspace.py          # WorkspaceManager — file-ref resolution, path traversal protection
+
+  worker/
+    base.py               # TaskWorker base class (abstract)
+    runner.py             # LLMWorker — main worker actor (JSON parsing, reset hook, tool-use loop)
+    backends.py           # LLMBackend ABC + AnthropicBackend, OllamaBackend, OpenAICompatibleBackend
+    processor.py          # ProcessorWorker, SyncProcessingBackend ABC, BackendError hierarchy
+    tools.py              # ToolProvider ABC, SyncToolProvider, load_tool_provider(), MAX_TOOL_ROUNDS=10
+    knowledge.py          # Knowledge silo loading and write-back (read-only, read-write, tool silos)
+    embeddings.py         # EmbeddingProvider ABC, OllamaEmbeddingProvider (Ollama /api/embed)
+
+  orchestrator/
+    runner.py             # OrchestratorActor — decompose/dispatch/collect/synthesize loop
+    decomposer.py         # GoalDecomposer — LLM-based task decomposition, WorkerDescriptor
+    synthesizer.py        # ResultSynthesizer — merge + LLM synthesis modes
+    pipeline.py           # PipelineOrchestrator — sequential stage execution with input mapping
+    checkpoint.py         # CheckpointManager — pluggable store, configurable TTL
+    store.py              # CheckpointStore ABC + InMemoryCheckpointStore
+
+  scheduler/
+    scheduler.py          # SchedulerActor — cron + interval dispatch of goals/tasks
+    config.py             # Scheduler config validation
+
+  router/
+    router.py             # Deterministic task router + token-bucket rate limiter + dead-letter
+
+  bus/
+    base.py               # MessageBus ABC + Subscription ABC
+    memory.py             # InMemoryBus + InMemorySubscription (for testing, no infra needed)
+    nats_adapter.py       # NATSBus + NATSSubscription (production, queue groups)
+
+  mcp/
+    config.py             # MCP gateway YAML config loading + validation
+    discovery.py          # Tool definition generators (worker/pipeline/query → MCP tools)
+    bridge.py             # MCPBridge — MCP tool calls → NATS TaskMessage dispatch + result collection
+    resources.py          # WorkspaceResources — workspace files as MCP resources (workspace:/// URIs)
+    server.py             # create_server(), MCPGateway, run_stdio(), run_streamable_http()
+
+  cli/
+    main.py               # Click CLI: worker, processor, pipeline, orchestrator, scheduler,
+                          #   router, submit, mcp (8 commands)
+
+  contrib/                # Optional integrations (Django-style contrib namespace)
+    duckdb/
+      query_backend.py    # DuckDBQueryBackend — action-dispatch query (FTS, filter, stats, get, vector)
+      view_tool.py        # DuckDBViewTool — read-only view as LLM-callable tool
+      vector_tool.py      # DuckDBVectorTool — semantic similarity search via embeddings
+    redis/
+      store.py            # RedisCheckpointStore — production checkpoint persistence
+    rag/
+      backends.py         # Processor backends: IngestorBackend, MuxBackend, ChunkerBackend,
+                          #   VectorStoreBackend
+      ingestion/
+        telegram_ingestor.py  # TelegramIngestor — parse Telegram JSON exports
+      mux/
+        stream_mux.py     # StreamMux — merge multi-channel posts with time windows
+      chunker/
+        sentence_chunker.py   # ChunkConfig, sentence-level text chunking
+      vectorstore/
+        duckdb_store.py   # DuckDBVectorStore — vector storage and cosine similarity search
+      analysis/
+        llm_analyzers.py  # TrendAnalyzer, CorroborationFinder, AnomalyDetector, DataExtractor
+      schemas/            # Pydantic schemas: post, telegram, mux, chunk, embedding, analysis
+      tools/
+        rtl_normalizer.py # RTL text normalization tool
+        temporal_batcher.py   # Time-window batching tool
+
 configs/
-  workers/      # YAML configs defining each worker's system prompt, I/O schema, default tier
-  orchestrators/# Orchestrator configs (default + RAG pipeline)
-  schedulers/   # Scheduler configs (cron + interval schedule definitions)
-  router_rules.yaml  # Tier overrides and rate limits (enforced by token-bucket limiter)
-docker/         # Dockerfiles (orchestrator, router, worker) and entrypoint script
-k8s/            # Kubernetes manifests (Minikube-ready, Kustomize)
-tests/          # Unit tests (messages, contracts, checkpoint, pipeline, workers, processor) and integration test
+  workers/                # Worker YAML configs (system prompt, I/O schema, tier, timeout)
+    summarizer.yaml       #   text → summary + key_points (local tier)
+    classifier.yaml       #   text + categories → category + confidence (local tier)
+    extractor.yaml        #   text + fields → extracted data (standard tier)
+    rag_ingestor.yaml     #   source_path → posts (processor, local)
+    rag_mux.yaml          #   posts_by_channel → muxed windows (processor, local)
+    rag_chunker.yaml      #   posts → chunks (processor, local)
+    rag_vectorstore.yaml  #   action + chunks/query → store/search results (processor, local)
+    rag_trend_analyzer.yaml   # posts + window_id → trend analysis (LLM, standard)
+    _template.yaml        #   template for new workers
+  orchestrators/
+    default.yaml          # General-purpose orchestrator (LLM-driven goal decomposition)
+    rag_pipeline.yaml     # RAG pipeline: ingest → chunk → vectorize
+  schedulers/
+    example.yaml          # Example cron + interval schedule definitions
+  mcp/
+    docman.yaml           # Example: document management MCP server config
+  router_rules.yaml       # Tier overrides and per-tier rate limits
+
+docs/                     # Project documentation
+  ARCHITECTURE.md         # System architecture overview
+  GETTING_STARTED.md      # Quickstart guide
+  KUBERNETES.md           # Kubernetes deployment guide
+  CONTRIBUTING.md         # Contribution guidelines
+  building-workflows.md   # How to build custom workflows
+  rag-howto.md            # RAG pipeline setup guide
+
+examples/
+  rag_demo.py             # End-to-end RAG pipeline demo
+
+docker/                   # Dockerfiles (orchestrator, router, worker) + entrypoint.sh
+k8s/                      # Kubernetes manifests (namespace, NATS, Redis, workers, Kustomize)
+
+tests/                    # 32 test files, 498 unit tests + 1 integration test
+  test_messages.py        test_contracts.py       test_checkpoint.py
+  test_worker.py          test_task_worker.py     test_processor_worker.py
+  test_tools.py           test_tool_use.py        test_knowledge_silos.py
+  test_embeddings.py      test_workspace.py       test_decomposer.py
+  test_synthesizer.py     test_orchestrator.py    test_pipeline.py
+  test_router.py          test_scheduler.py
+  test_contrib_duckdb_query.py  test_contrib_duckdb_vector.py  test_contrib_duckdb_view.py
+  test_mcp_config.py      test_mcp_discovery.py   test_mcp_bridge.py
+  test_mcp_resources.py   test_mcp_server.py
+  test_integration.py                             # @pytest.mark.integration (needs NATS)
+  contrib/rag/            # 6 RAG test files (backends, chunker, ingestion, mux, schemas, tools)
 ```
 
 ## Key design rules
@@ -37,7 +137,8 @@ tests/          # Unit tests (messages, contracts, checkpoint, pipeline, workers
 - **All inter-actor communication uses typed Pydantic messages** (`TaskMessage`, `TaskResult`, `OrchestratorGoal`, `CheckpointState` in `core/messages.py`).
 - **The router is deterministic** — it does not use an LLM. It routes by `worker_type` and `model_tier` using rules in `configs/router_rules.yaml`. Unroutable tasks go to `loom.tasks.dead_letter`.
 - **Workers have strict I/O contracts** validated by `core/contracts.py`. Input and output schemas are defined per-worker in their YAML config. Boolean values are correctly distinguished from integers.
-- **Three model tiers exist:** `local` (Ollama), `standard` (Claude Sonnet etc.), `frontier` (Claude Opus etc.). The router and task metadata decide which tier handles each task.
+- **Three model tiers exist:** `local` (Ollama), `standard` (Claude Sonnet), `frontier` (Claude Opus). The router and task metadata decide which tier handles each task.
+- **Three LLM backends:** `AnthropicBackend` (Claude API, version 2024-10-22), `OllamaBackend` (local models), `OpenAICompatibleBackend` (vLLM, llama.cpp, LiteLLM, etc.). All support tool-use.
 - **Rate limiting:** Token-bucket rate limiter enforces per-tier dispatch throttling based on `rate_limits` in `router_rules.yaml`.
 - **NATS subject convention:**
   - `loom.tasks.incoming` — Router picks up tasks here
@@ -73,37 +174,68 @@ loom router --nats-url nats://localhost:4222
 loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
 
 # Run a pipeline
-loom pipeline --config configs/orchestrators/doc_pipeline.yaml --nats-url nats://localhost:4222
+loom pipeline --config configs/orchestrators/rag_pipeline.yaml --nats-url nats://localhost:4222
 
 # Run the scheduler (needs NATS running, optional: pip install loom[scheduler])
 loom scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
 
 # Submit a test goal
 loom submit "some goal text" --nats-url nats://localhost:4222
+
+# Run an MCP server (needs NATS + workers running, optional: pip install loom[mcp])
+loom mcp --config configs/mcp/docman.yaml
+loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
 ```
 
-## Current state
+## Optional dependencies
 
-All major components are implemented and functional:
+```bash
+pip install loom[redis]       # Redis-backed CheckpointStore
+pip install loom[local]       # Ollama client for local models
+pip install loom[docproc]     # Docling for document extraction (PDF, DOCX)
+pip install loom[duckdb]      # DuckDB embedded analytics
+pip install loom[rag]         # RAG pipeline (DuckDB + requests for Ollama)
+pip install loom[scheduler]   # Cron expression parsing (croniter)
+pip install loom[mcp]         # MCP gateway (Model Context Protocol SDK)
+pip install loom[dev]         # All dev/test dependencies
+```
 
-- **Core:** Message schemas, contract validation (with correct bool/int handling), base actor (with signal handling and configurable concurrency), config loader (with schema validation).
-- **Worker:** LLMWorker with resilient JSON parsing (strips markdown fences, handles preamble), `reset()` hook after each task, knowledge source injection, file-ref resolution via WorkspaceManager, multi-turn tool-use loop, knowledge silo loading/write-back. Backends updated to current Anthropic API version (2024-10-22) with tool-use support (tools/messages params).
-- **Tool-Use:** ToolProvider ABC and SyncToolProvider in `worker/tools.py`. Dynamic class loading via `load_tool_provider()`. LLMWorker runs a multi-turn tool execution loop (max 10 rounds) when tools are configured.
-- **Knowledge Silos:** Folder-based knowledge injection (`knowledge_silos` config key). Read-only folders prepend content to system prompt. Read-write folders accept `silo_updates` from LLM output (add/modify/delete actions). Tool-type silos load ToolProvider instances for LLM function-calling.
-- **Embeddings:** EmbeddingProvider ABC and OllamaEmbeddingProvider in `worker/embeddings.py`. Generates vector embeddings via Ollama `/api/embed` endpoint. Supports single and batch embedding. Lazy dimension detection.
-- **Router:** Deterministic routing with dead-letter subject for unroutable tasks, token-bucket rate limiting per tier.
-- **Bus abstraction:** `MessageBus` ABC + `Subscription` ABC in `bus/base.py`. `InMemoryBus` for testing (no infra needed). `NATSBus` for production. `BaseActor` accepts `bus=` kwarg for injection.
-- **Orchestrator:** Full OrchestratorActor with decompose/dispatch/collect/synthesize loop. GoalDecomposer (LLM-based task decomposition), ResultSynthesizer (merge + LLM synthesis modes), CheckpointManager (pluggable store, configurable TTL).
-- **CheckpointStore:** `CheckpointStore` ABC in `orchestrator/store.py`. `InMemoryCheckpointStore` for testing. `RedisCheckpointStore` in `contrib/redis/store.py` (optional: `pip install loom[redis]`).
-- **PipelineOrchestrator:** Fully functional sequential stage execution with input mapping, conditions, timeouts.
-- **ProcessorWorker:** Non-LLM backend support with BackendError hierarchy and SyncProcessingBackend for CPU-bound backends.
-- **WorkspaceManager:** Centralized file-ref resolution with path traversal protection, JSON/text read/write helpers.
-- **Scheduler:** SchedulerActor for time-driven dispatch. Supports cron expressions (via croniter) and fixed-interval timers. Each schedule entry dispatches either an OrchestratorGoal or TaskMessage. Config-only — no runtime control messages. Optional dependency: `pip install loom[scheduler]`.
-- **CLI:** All 7 commands registered (worker, processor, pipeline, orchestrator, scheduler, router, submit). Tier mismatch warnings on worker startup.
-- **Contrib DuckDB:** `loom.contrib.duckdb` — DuckDBViewTool (view-based LLM tool), DuckDBVectorTool (semantic similarity search), DuckDBQueryBackend (action-dispatch query backend with FTS, filtering, stats, get, vector search). All configurable via constructor params. Optional dependency: `pip install loom[duckdb]`.
-- **Contrib Redis:** `loom.contrib.redis` — RedisCheckpointStore for production checkpoint persistence. Optional dependency: `pip install loom[redis]`.
-- **Tests:** 424 unit tests pass (messages, contracts, checkpoint, pipeline, workers, processor, workspace, tools, tool-use, knowledge silos, embeddings, contrib/duckdb, contrib/rag, scheduler). Integration test has `@pytest.mark.integration` marker and polling-based result collection.
-- **Infrastructure:** Dockerfiles (in `docker/`) and k8s manifests updated with correct CMDs and no stale FIXMEs.
+## MCP gateway
+
+Any LOOM system can become an MCP server with a single YAML config — zero MCP-specific code needed.
+
+**Config structure** (`configs/mcp/docman.yaml`):
+```yaml
+name: "docman"
+nats_url: "nats://localhost:4222"
+tools:
+  workers:                    # Each worker config → one MCP tool
+    - config: "configs/workers/summarizer.yaml"
+    - config: "configs/workers/classifier.yaml"
+      name: "classify_document"          # Optional name/description override
+      description: "Classify document type"
+  pipelines:                  # Each pipeline config → one MCP tool
+    - config: "configs/orchestrators/rag_pipeline.yaml"
+      name: "ingest_document"            # Required (pipeline has no natural tool name)
+  queries:                    # Each backend action → one MCP tool
+    - backend: "loom.contrib.duckdb.query_backend.DuckDBQueryBackend"
+      actions: ["search", "filter", "stats", "get"]
+      name_prefix: "docs"               # → docs_search, docs_filter, etc.
+      backend_config:
+        db_path: "/tmp/docman-workspace/docman.duckdb"
+resources:
+  workspace_dir: "/tmp/docman-workspace"
+  patterns: ["*.pdf", "*.json"]
+```
+
+**Tool discovery flow:** Worker YAML `name` + `input_schema` + `description` → MCP tool definition. Pipeline `input_mapping` `goal.context.*` fields → tool input schema. Query backend `_get_handlers()` → per-action tools with auto-generated schemas.
+
+**Public API:**
+```python
+from loom.mcp import create_server, run_stdio, run_streamable_http, MCPGateway
+server, gateway = create_server("configs/mcp/docman.yaml")
+run_stdio(server, gateway)
+```
 
 ## Known issues
 
@@ -111,9 +243,8 @@ All major components are implemented and functional:
 
 ## What to implement next
 
-1. **Orchestrator tests** — unit tests for OrchestratorActor (decompose/dispatch/synthesize loop)
-2. **End-to-end integration test** — full goal submission through router/workers/orchestrator
-3. **Router dead-letter consumer** — implement a dead-letter processor for monitoring/retry
+1. **End-to-end integration test** — full goal submission through router/workers/orchestrator
+2. **Router dead-letter consumer** — implement a dead-letter processor for monitoring/retry
 
 ## What NOT to do
 

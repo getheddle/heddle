@@ -1,0 +1,48 @@
+# Docman MCP server — exposes document processing workers and query backend.
+#
+# Run with:
+#   loom mcp --config configs/mcp/docman.yaml
+#   loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
+#
+# Requires:
+#   pip install loom[mcp,duckdb]
+#   NATS running at nats://localhost:4222
+#   Workers started for summarizer, classifier, extractor
+
+name: "docman"
+description: "Document management — classify, extract, summarize, and query documents"
+nats_url: "nats://localhost:4222"
+
+tools:
+  workers:
+    - config: "configs/workers/summarizer.yaml"
+    - config: "configs/workers/classifier.yaml"
+      name: "classify_document"
+      description: "Classify a document by type (e.g., invoice, contract, report)"
+    - config: "configs/workers/extractor.yaml"
+
+  pipelines:
+    - config: "configs/orchestrators/rag_pipeline.yaml"
+      name: "ingest_document"
+      description: "Ingest a document: parse, chunk, and store vector embeddings"
+
+  queries:
+    - backend: "loom.contrib.duckdb.query_backend.DuckDBQueryBackend"
+      actions: ["search", "filter", "stats", "get"]
+      name_prefix: "docs"
+      backend_config:
+        db_path: "/tmp/docman-workspace/docman.duckdb"
+        table_name: "documents"
+        result_columns: ["id", "filename", "doc_type", "summary", "created_at"]
+        id_column: "id"
+        full_text_column: "full_text"
+        fts_fields: "full_text,summary"
+        filter_fields:
+          doc_type: "doc_type = ?"
+          has_summary: "summary IS NOT NULL"
+        stats_groups: ["doc_type"]
+        stats_aggregates: ["COUNT(*) AS doc_count"]
+
+resources:
+  workspace_dir: "/tmp/docman-workspace"
+  patterns: ["*.pdf", "*.docx", "*.json"]

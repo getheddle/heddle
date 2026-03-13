@@ -68,9 +68,9 @@ infrastructure (NATS, Redis, Ollama). Use `InMemoryBus` and
 
 - New worker configurations for specific domains
 - New contrib packages (databases, search engines, monitoring integrations)
-- Orchestrator unit tests (decompose/dispatch/synthesize loop)
 - End-to-end integration tests
 - Dead-letter consumer implementation for monitoring/retry
+- MCP gateway examples and transport extensions
 - Documentation improvements and examples
 - Bug reports with reproducible steps
 

@@ -692,3 +692,83 @@ class MyQueryBackend(DuckDBQueryBackend):
 ```
 
 The backend accepts payloads with `action` set to `search`, `filter`, `stats`, `get`, or `vector_search`, plus action-specific parameters.
+
+## Part 11: MCP gateway (expose LOOM as an MCP server)
+
+Any LOOM system can become a Model Context Protocol (MCP) server with a single YAML config — zero MCP-specific code needed. Workers, pipelines, and query backends are automatically discovered as MCP tools with typed input schemas.
+
+Install the optional dependency:
+
+```bash
+pip install loom[mcp]
+```
+
+### Step 1: Create an MCP gateway config
+
+```yaml
+# configs/mcp/my_server.yaml
+name: "my_server"
+description: "My LOOM system as an MCP server"
+nats_url: "nats://localhost:4222"
+
+tools:
+  workers:
+    - config: "configs/workers/summarizer.yaml"
+    - config: "configs/workers/classifier.yaml"
+      name: "classify_document"           # optional name override
+      description: "Classify a document"  # optional description override
+
+  pipelines:
+    - config: "configs/orchestrators/rag_pipeline.yaml"
+      name: "ingest_document"             # required (pipeline has no natural name)
+      description: "Ingest and vectorize a document"
+
+  queries:
+    - backend: "loom.contrib.duckdb.query_backend.DuckDBQueryBackend"
+      actions: ["search", "filter", "stats", "get"]
+      name_prefix: "docs"                # → docs_search, docs_filter, etc.
+      backend_config:
+        db_path: "/tmp/workspace/data.duckdb"
+        table_name: "documents"
+        result_columns: ["id", "title", "summary"]
+
+resources:
+  workspace_dir: "/tmp/workspace"
+  patterns: ["*.pdf", "*.json"]           # optional glob filter
+```
+
+### Step 2: How tool discovery works
+
+**Worker tools:** Each worker YAML becomes one MCP tool. The tool name comes from `name` in the worker config (or the MCP entry override). The input schema comes from the worker's `input_schema`. The description comes from the MCP entry override, the worker config `description` field, or the first line of `system_prompt` (in that priority order).
+
+**Pipeline tools:** Each pipeline becomes one MCP tool. The input schema is derived from the first stage's `input_mapping` — keys where the source starts with `goal.context.` become tool input properties.
+
+**Query tools:** Each backend action becomes a separate MCP tool named `{name_prefix}_{action}`. Schemas are auto-generated from the backend configuration (filter fields, stats groups, etc.).
+
+### Step 3: Run the MCP server
+
+```bash
+# stdio transport (default — for Claude Desktop, Cursor, etc.)
+loom mcp --config configs/mcp/my_server.yaml
+
+# streamable-http transport (for web clients)
+loom mcp --config configs/mcp/my_server.yaml --transport streamable-http --port 8000
+```
+
+### Step 4: Workspace resources
+
+If `resources.workspace_dir` is configured, workspace files are exposed as MCP resources with `workspace:///` URIs. Clients can list and read files matching the configured patterns. After each tool call, the gateway checks for new or modified files and emits change notifications.
+
+### Programmatic usage
+
+```python
+from loom.mcp import create_server, run_stdio, run_streamable_http
+
+server, gateway = create_server("configs/mcp/my_server.yaml")
+
+# stdio (for MCP clients like Claude Desktop)
+run_stdio(server, gateway)
+
+# or HTTP
+run_streamable_http(server, gateway, host="0.0.0.0", port=8000)
+```
