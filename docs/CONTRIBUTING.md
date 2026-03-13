@@ -1,0 +1,115 @@
+# Contributing
+
+Thank you for your interest in contributing to Loom.
+
+---
+
+## Before You Contribute
+
+**Read [`GOVERNANCE.md`](../GOVERNANCE.md) first.** This project has a mission constraint:
+reliable, well-tested, openly available infrastructure for AI workflow orchestration.
+Contributions that compromise the framework's generality, introduce vendor lock-in,
+or bypass architectural invariants will not be merged regardless of their other merits.
+
+---
+
+## Contributor License Agreement (CLA)
+
+**All contributors must sign the CLA before any pull request is merged.**
+
+This is not negotiable and is not bureaucratic friction — it exists to preserve
+the project's ability to offer alternative licensing to organizations that cannot
+accept copyleft terms, while keeping the public license open for everyone else.
+
+**What the CLA does:**
+- Grants the project the right to sublicense your contribution
+- Does NOT transfer your copyright — you retain full ownership of your work
+- Applies to all future contributions once signed
+
+**How to sign:**
+The CLA bot will prompt you automatically when you open your first pull request.
+Sign electronically in that flow. It takes under a minute.
+
+If you have questions about the CLA before contributing, contact: hooman@mac.com
+
+---
+
+## Technical Standards
+
+Contributions must adhere to the project's architectural invariants:
+
+**Worker statelessness:**
+Workers process one task and reset. No state carries between tasks — this is
+enforced, not optional. Contributions that introduce shared mutable state
+between workers will be rejected.
+
+**Typed messages:**
+All inter-actor communication uses typed Pydantic messages (`TaskMessage`,
+`TaskResult`, `OrchestratorGoal`, `CheckpointState`). Raw dictionaries or
+untyped payloads are not acceptable.
+
+**I/O contract validation:**
+Workers have strict I/O contracts validated by `core/contracts.py`. Every
+worker must define input and output schemas in its YAML config, and all
+outputs must conform to the declared schema.
+
+**Deterministic routing:**
+The router does not use an LLM. It routes by `worker_type` and `model_tier`
+using rules in `configs/router_rules.yaml`. Do not add LLM logic to the router.
+
+**Test coverage:**
+All new functionality must include unit tests. Tests must pass without
+infrastructure (NATS, Redis, Ollama). Use `InMemoryBus` and
+`InMemoryCheckpointStore` for testing.
+
+---
+
+## What We Need Most
+
+- New worker configurations for specific domains
+- New contrib packages (databases, search engines, monitoring integrations)
+- Orchestrator unit tests (decompose/dispatch/synthesize loop)
+- End-to-end integration tests
+- Dead-letter consumer implementation for monitoring/retry
+- Documentation improvements and examples
+- Bug reports with reproducible steps
+
+---
+
+## What We Are Not Looking For
+
+- Shared mutable state between workers
+- LLM logic in the router
+- Monolithic worker configs that combine multiple responsibilities
+- Contributions that skip I/O contract validation
+- Dependencies on specific LLM providers without abstraction
+
+---
+
+## Pull Request Process
+
+1. Fork the repo
+2. Make changes in a feature branch
+3. Sign the CLA when prompted
+4. Ensure all tests pass: `pytest tests/ -v -m "not integration"`
+5. Lint your code: `ruff check src/`
+6. Submit a pull request with a clear description of what changed and why
+
+Expect review feedback focused on architectural compliance and test coverage.
+
+---
+
+## AI-Assisted Development
+
+This project uses Claude (Anthropic) as a development tool. The `CLAUDE.md` file
+documents the project's architecture, design rules, and current state for AI-assisted
+sessions.
+
+AI-generated code is subject to the same standards as human contributions: typed
+messages, stateless workers, validated I/O contracts, and test coverage.
+
+---
+
+## Contact
+
+hooman@mac.com

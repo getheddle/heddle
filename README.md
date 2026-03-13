@@ -1,210 +1,156 @@
-# LOOM — Lightweight Orchestrated Operational Mesh
+# Loom — Lightweight Orchestrated Operational Mesh
 
-Loom is a Python framework for building AI workflows where a single monolithic LLM conversation breaks down — large databases, complex knowledge graphs, tasks that need multiple model tiers working together.
+**Actor-based Python framework for orchestrating multi-LLM AI workflows via NATS messaging.**
 
-Instead of one big prompt, Loom splits work across **narrowly-scoped worker actors** coordinated by an **orchestrator** through a message bus. Each worker has a single system prompt, strict I/O contracts, and resets after every task. The orchestrator decomposes goals, routes subtasks, and synthesizes results — checkpointing its own context when it gets too large.
+---
 
-**Status:** All major components implemented and tested. 223 unit tests pass. See `docs/building-workflows.md` for a guide to building your own AI workflows with Loom.
+## Why This Project Exists
 
-## What's here
+A single monolithic LLM conversation breaks down when you need to work with
+large databases, complex knowledge graphs, or tasks that require multiple model
+tiers working together. Context windows fill up, prompts become unwieldy, and
+there is no clean way to split cognitive work across specialized agents.
 
-```
-src/loom/
-├── core/
-│   ├── messages.py      # Pydantic schemas: TaskMessage, TaskResult, OrchestratorGoal, CheckpointState
-│   ├── actor.py          # Base actor class (NATS subscribe/publish lifecycle)
-│   ├── contracts.py      # Lightweight JSON Schema validation for worker I/O
-│   ├── workspace.py      # File-ref resolution with path traversal protection
-│   └── config.py         # YAML config loader
-├── worker/
-│   ├── runner.py         # LLM worker: validate → resolve files → inject knowledge → call LLM → tool loop → validate → publish
-│   ├── processor.py      # Non-LLM worker: ProcessingBackend, SyncProcessingBackend, BackendError
-│   ├── backends.py       # LLM adapters: Anthropic, Ollama, OpenAI-compatible (with tool-use support)
-│   ├── tools.py          # ToolProvider ABC, SyncToolProvider, dynamic tool loader
-│   ├── knowledge.py      # Knowledge sources + knowledge silos (folder read/write, tool injection)
-│   └── embeddings.py     # EmbeddingProvider ABC, OllamaEmbeddingProvider (/api/embed)
-├── orchestrator/
-│   ├── runner.py         # Orchestrator actor: decompose → dispatch → collect → synthesize
-│   ├── pipeline.py       # Pipeline orchestrator: sequential stage execution with input mapping
-│   ├── checkpoint.py     # Self-summarization: compresses orchestrator context to Redis snapshots
-│   ├── decomposer.py     # LLM-driven goal → subtask decomposition with worker manifest grounding
-│   └── synthesizer.py    # Multi-result aggregation (deterministic merge + LLM synthesis modes)
-├── router/
-│   └── router.py         # Deterministic task routing with dead-letter handling and rate limiting
-├── bus/
-│   └── nats_adapter.py   # NATS pub/sub/request wrapper
-├── cli/
-│   └── main.py           # Click CLI: worker, processor, pipeline, orchestrator, router, submit
-└── contrib/
-    └── duckdb/            # DuckDB tools and backends (optional: pip install loom[duckdb])
+Loom solves this by decomposing AI work across narrowly-scoped stateless worker
+actors coordinated by an orchestrator through a message bus. Each worker has a
+single system prompt, strict I/O contracts, and resets after every task. The
+orchestrator decomposes goals, routes subtasks, and synthesizes results —
+checkpointing its own context when it gets too large.
 
-configs/
-├── workers/
-│   ├── _template.yaml    # Copy this to create new workers
-│   ├── summarizer.yaml   # Text → structured summary (local tier)
-│   ├── classifier.yaml   # Text → category with confidence (local tier)
-│   └── extractor.yaml    # Text → structured fields (standard tier)
-├── orchestrators/
-│   └── default.yaml      # General-purpose orchestrator config
-└── router_rules.yaml     # Tier overrides and rate limits
+The result is an AI workflow system that scales with complexity instead of
+collapsing under it.
 
-docs/
-└── building-workflows.md # Getting started guide for building AI workflows
+---
 
-k8s/                      # Kubernetes manifests (Minikube-ready)
-Dockerfile.{worker,router,orchestrator}
-```
+## What This Project Provides
 
-## How the pieces connect
+**Stateless LLM Workers** — each worker has a single system prompt and strict
+JSON Schema I/O contracts. Workers call LLM backends (Anthropic, Ollama, or
+any OpenAI-compatible API), support multi-turn tool-use, knowledge injection,
+and file-ref resolution. They reset after every task.
 
-1. **You submit a goal** via CLI or publish to `loom.goals.incoming`
-2. **The orchestrator** decomposes it into subtasks (via LLM-driven GoalDecomposer), each targeting a `worker_type`
-3. **The router** picks up tasks from `loom.tasks.incoming`, resolves the model tier, enforces rate limits, and publishes to `loom.tasks.{worker_type}.{tier}` (unroutable tasks go to `loom.tasks.dead_letter`)
-4. **Workers** (competing consumers via NATS queue groups) pick up tasks, call the appropriate LLM backend, validate the output, and publish results to `loom.results.{goal_id}`
-5. **The orchestrator** collects results, decides if more subtasks are needed, and eventually produces a final answer
+**Processing Workers** — non-LLM backends for CPU-bound or deterministic tasks.
+Implement the `ProcessingBackend` ABC and plug into the same messaging
+infrastructure.
 
-Workers are stateless — they reset after every task. The orchestrator is longer-lived but checkpoints itself to Redis when its context grows too large, compressing history into a structured summary.
+**Goal Decomposition and Synthesis** — an LLM-driven orchestrator breaks
+complex goals into subtasks, dispatches them to appropriate workers, collects
+results, and synthesizes final answers. Self-checkpointing to Redis prevents
+context overflow.
 
-## Getting started
+**Pipeline Orchestration** — sequential multi-stage pipelines where each stage
+maps inputs from previous stage outputs, with conditions and timeouts.
 
-### 1. Install Python dependencies
+**Deterministic Routing** — a pure-logic router dispatches tasks by worker type
+and model tier with token-bucket rate limiting and dead-letter handling. No LLM
+in the routing path.
+
+**Contrib Ecosystem** — optional packages for DuckDB (analytics, vector search),
+Redis (checkpoint persistence), and RAG (ingestion, chunking, embedding, analysis).
+
+---
+
+## Who This Is For
+
+**AI/ML engineers** building multi-agent systems who need worker isolation,
+typed messaging, and structured orchestration instead of ad-hoc prompt chaining.
+
+**Platform teams** deploying AI infrastructure who need rate limiting, model tier
+management, dead-letter handling, and Kubernetes-ready containerization.
+
+**Researchers and experimenters** who want to prototype multi-LLM workflows
+quickly using YAML worker configs and a local Ollama backend.
+
+**Anyone** who has outgrown single-prompt LLM applications and needs a framework
+that separates concerns across specialized actors.
+
+---
+
+## Current State
+
+| Component | Status |
+|-----------|--------|
+| Core (messages, contracts, config, workspace) | Complete |
+| LLM Worker (Anthropic, Ollama, OpenAI-compatible) | Complete |
+| Processing Worker (sync/async backends) | Complete |
+| Tool-use (multi-turn, dynamic loading) | Complete |
+| Knowledge sources and silos | Complete |
+| Orchestrator (decompose/dispatch/synthesize) | Complete |
+| Pipeline orchestrator (sequential stages) | Complete |
+| Router (deterministic, rate-limited) | Complete |
+| Checkpoint (Redis + in-memory) | Complete |
+| Contrib: DuckDB, Redis, RAG | Complete |
+| Unit tests | 302 passing |
+
+---
+
+## Quick Start
 
 ```bash
 # Requires Python 3.11+
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-```
 
-Loom has optional extras for integrations:
-
-```bash
-pip install loom[duckdb]   # DuckDB tools and query backends
-```
-
-### 2. Run the unit tests (no infrastructure needed)
-
-```bash
+# Run unit tests (no infrastructure needed)
 pytest tests/ -v -m "not integration"
 ```
 
-This runs all unit tests (messages, contracts, checkpoint, pipeline, workers, processor, tools, tool-use, knowledge silos, embeddings, contrib/duckdb) without needing NATS or Redis. The integration test is excluded by marker.
+For the full 7-step setup with infrastructure and LLM backends, see
+[Getting Started](docs/GETTING_STARTED.md).
 
-### 3. Set up infrastructure (NATS + Redis)
+---
 
-The simplest path — run NATS and Redis locally:
+## Documentation
 
-```bash
-# Install via Homebrew (Mac) or use Docker
-brew install nats-server redis
+- **[Architecture](docs/ARCHITECTURE.md)** — Source tree, message flow, NATS
+  subjects, design rules, component details
+- **[Getting Started](docs/GETTING_STARTED.md)** — Installation, infrastructure
+  setup, LLM backend configuration, running your first workflow
+- **[Building Workflows](docs/building-workflows.md)** — Comprehensive 10-part
+  guide: workers, pipelines, knowledge, file-refs, routing, silos, tools,
+  embeddings, DuckDB
+- **[RAG Pipeline](docs/rag-howto.md)** — Social media stream ingestion,
+  chunking, vector storage, and analysis
+- **[Kubernetes Deployment](docs/KUBERNETES.md)** — Minikube manifests,
+  container builds, environment variables
+- **[Contributing](docs/CONTRIBUTING.md)** — CLA, technical standards, PR process
 
-# Start them
-nats-server &
-redis-server &
-```
+---
 
-Or with Docker:
+## Get Involved
 
-```bash
-docker run -d --name nats -p 4222:4222 nats:2.10-alpine
-docker run -d --name redis -p 6379:6379 redis:7-alpine
-```
+**Use the framework.** Build workers for your domain, create pipelines,
+experiment with orchestration patterns. Copy `configs/workers/_template.yaml`
+to get started.
 
-### 4. Connect an LLM backend
+**Contribute.** New worker types, contrib packages, test coverage, and
+documentation improvements are all welcome.
+See [Contributing](docs/CONTRIBUTING.md).
 
-Loom supports three backend types. You need at least one.
+**Report issues.** Bug reports with reproducible steps help the most.
 
-**Option A: Ollama (free, local, recommended to start)**
+---
 
-```bash
-brew install ollama
-ollama serve &
-ollama pull llama3.2:3b
-export OLLAMA_URL=http://localhost:11434
-```
+## AI-Assisted Development
 
-**Option B: Anthropic API**
+This project uses Claude (Anthropic) as a development and maintenance tool.
+The [`CLAUDE.md`](CLAUDE.md) file documents the project's architecture, design
+rules, and current state for AI-assisted sessions.
 
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-```
+AI-generated code is subject to the same standards as human contributions:
+typed messages, stateless workers, validated I/O contracts, and test coverage.
 
-**Option C: Any OpenAI-compatible API** (vLLM, LiteLLM, llama.cpp server, etc.)
+---
 
-Configure via the `OpenAICompatibleBackend` in `src/loom/worker/backends.py`.
+## License
 
-### 5. Start the router, orchestrator, and a worker
+[MPL 2.0](LICENSE) — Mozilla Public License 2.0. Modified source files must
+remain open; unmodified files can be combined with proprietary code in a
+Larger Work.
 
-```bash
-# Terminal 1: Start the router
-loom router --nats-url nats://localhost:4222
+Alternative licensing available for organizations with copyleft constraints.
+Contact: hooman@mac.com
 
-# Terminal 2: Start the orchestrator
-loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
+---
 
-# Terminal 3: Start a summarizer worker
-loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
-```
-
-### 6. Submit a test task
-
-```bash
-# Terminal 4: Send a task through the system
-loom submit "Summarize the main points of the UN Charter preamble" --nats-url nats://localhost:4222
-```
-
-Monitor what's happening:
-
-```bash
-# Install NATS CLI to watch all messages
-brew tap nats-io/nats-tools && brew install nats-io/nats-tools/nats
-nats sub "loom.>" --server=nats://localhost:4222
-```
-
-### 7. Create your own worker
-
-```bash
-cp configs/workers/_template.yaml configs/workers/my_worker.yaml
-```
-
-Edit the file — define a system prompt, input/output schemas, and default tier. Then start it:
-
-```bash
-loom worker --config configs/workers/my_worker.yaml --tier local
-```
-
-## Kubernetes deployment
-
-For running the full mesh on Minikube:
-
-```bash
-minikube start --cpus=4 --memory=8192 --driver=docker
-eval $(minikube docker-env)
-
-# Build images inside Minikube's Docker
-docker build -f Dockerfile.worker -t loom-worker:latest .
-docker build -f Dockerfile.router -t loom-router:latest .
-docker build -f Dockerfile.orchestrator -t loom-orchestrator:latest .
-
-# Create namespace and API key secret
-kubectl create namespace loom
-kubectl create secret generic loom-secrets \
-  --namespace loom \
-  --from-literal=anthropic-api-key="$ANTHROPIC_API_KEY"
-
-# Deploy
-kubectl apply -k k8s/
-kubectl get pods -n loom -w
-```
-
-For Ollama on Mac with Minikube, run Ollama natively on the host and point workers to `http://host.minikube.internal:11434`.
-
-## What to build next
-
-The core framework is functional. Key extension points:
-
-1. **New worker configs** — Add workers specific to your domain (e.g., entity resolver, relationship mapper, evidence grader). See `docs/building-workflows.md` for a walkthrough.
-2. **New contrib packages** — Add optional integrations (like `loom.contrib.duckdb`) for databases, search engines, or other backends your workers need.
-3. **Dead-letter consumer** — Implement a monitoring/retry service for tasks landing on `loom.tasks.dead_letter`
-4. **Orchestrator tests** — Unit tests for the decompose/dispatch/collect/synthesize loop
-5. **End-to-end integration test** — Full goal submission through router/workers/orchestrator
+*For governance, succession, and contributor rights, see [GOVERNANCE.md](GOVERNANCE.md).*
