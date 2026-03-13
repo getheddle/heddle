@@ -1,10 +1,20 @@
 """
-Pipeline orchestrator for multi-stage sequential processing.
+Pipeline orchestrator for multi-stage processing with automatic parallelism.
 
 Executes a defined sequence of stages, passing results from each stage
-as input to the next. Each stage maps to a worker_type. Stages can be
+as input to later stages. Each stage maps to a worker_type. Stages can be
 LLM workers, processor workers, or any other actor — the pipeline
 doesn't care about the implementation, only the message contract.
+
+Stage dependencies are **automatically inferred** from ``input_mapping``
+paths: if stage B references ``"A.output.field"``, then B depends on A.
+Stages with no inter-stage dependencies (only ``goal.*`` paths) are
+independent and execute in parallel. Alternatively, explicit
+``depends_on`` lists in the YAML config override automatic inference.
+
+Execution proceeds in *levels* — each level contains stages whose
+dependencies are all satisfied by earlier levels. Stages within a level
+run concurrently via ``asyncio.gather``.
 
 Pipeline definition comes from YAML config with stages, input mappings,
 and optional conditions.
@@ -15,12 +25,15 @@ Data flow through the pipeline:
         ↓
     context = { "goal": { "instruction": ..., "context": { ... } } }
         ↓
-    For each stage in pipeline_stages:
-        1. Evaluate condition (skip if false)
-        2. Build payload via input_mapping (dot-notation paths into context)
-        3. Publish TaskMessage to loom.tasks.incoming
-        4. Wait for TaskResult on loom.results.{goal_id}
-        5. Store result: context[stage_name] = { "output": ..., ... }
+    Build execution levels from stage dependencies (Kahn's algorithm)
+        ↓
+    For each level:
+        For each stage in level (concurrently if >1):
+            1. Evaluate condition (skip if false)
+            2. Build payload via input_mapping (dot-notation paths into context)
+            3. Publish TaskMessage to loom.tasks.incoming
+            4. Wait for TaskResult on loom.results.{goal_id}
+            5. Store result: context[stage_name] = { "output": ..., ... }
         ↓
     Publish final TaskResult with all stage outputs
 
@@ -59,15 +72,29 @@ from loom.core.messages import (
 logger = structlog.get_logger()
 
 
+class PipelineStageError(Exception):
+    """Raised when a pipeline stage fails or times out."""
+
+    def __init__(self, stage_name: str, message: str):
+        self.stage_name = stage_name
+        super().__init__(message)
+
+
 class PipelineOrchestrator(BaseActor):
     """
-    Sequential pipeline orchestrator.
+    Pipeline orchestrator with automatic stage parallelism.
 
-    Processes an OrchestratorGoal by running it through a series of stages.
-    Each stage dispatches a task to a worker and waits for the result before
-    proceeding to the next stage. Stage outputs are accumulated in a context
-    dict and can be referenced by subsequent stages via input_mapping.
+    Processes an OrchestratorGoal by running it through a series of stages
+    organized into execution levels based on their dependencies. Stages
+    within the same level run concurrently; levels execute sequentially.
+    Stage outputs are accumulated in a context dict and can be referenced
+    by subsequent stages via input_mapping.
     """
+
+    # TODO: Read max_concurrent_goals from pipeline config and pass to
+    #   BaseActor.max_concurrent (like OrchestratorActor does in runner.py).
+    #   Currently pipeline instances process one goal at a time; horizontal
+    #   scaling via multiple instances is the workaround.
 
     def __init__(
         self,
@@ -82,17 +109,200 @@ class PipelineOrchestrator(BaseActor):
         with open(path) as f:
             return yaml.safe_load(f)
 
+    # ------------------------------------------------------------------
+    # Dependency inference and execution level construction
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _infer_dependencies(
+        stages: list[dict[str, Any]],
+    ) -> dict[str, set[str]]:
+        """Infer stage dependencies from input_mapping paths.
+
+        For each stage, parse the first segment of every ``input_mapping``
+        source path.  If that segment matches another stage's name (and
+        is not ``"goal"``), record it as a dependency.
+
+        If a stage has an explicit ``depends_on`` list in its config, that
+        takes precedence over automatic inference.
+
+        Returns a dict mapping stage name → set of stage names it depends on.
+        """
+        stage_names = {s["name"] for s in stages}
+        deps: dict[str, set[str]] = {}
+
+        for stage in stages:
+            name = stage["name"]
+
+            if "depends_on" in stage:
+                # Explicit override — use as-is (filtered to known stages).
+                deps[name] = {d for d in stage["depends_on"] if d in stage_names}
+                continue
+
+            # Automatic inference from input_mapping paths.
+            mapping = stage.get("input_mapping", {})
+            inferred: set[str] = set()
+            for source_path in mapping.values():
+                first_segment = source_path.split(".")[0]
+                if first_segment != "goal" and first_segment in stage_names:
+                    inferred.add(first_segment)
+            deps[name] = inferred
+
+        return deps
+
+    @staticmethod
+    def _build_execution_levels(
+        stages: list[dict[str, Any]],
+        deps: dict[str, set[str]],
+    ) -> list[list[dict[str, Any]]]:
+        """Group stages into execution levels using Kahn's algorithm.
+
+        Stages with all dependencies satisfied by earlier levels are placed
+        in the same level and can run concurrently.  Within each level,
+        stages are sorted alphabetically for deterministic ordering.
+
+        Raises ``ValueError`` if the dependency graph contains a cycle.
+        """
+        # Build adjacency and in-degree maps.
+        stage_by_name = {s["name"]: s for s in stages}
+        in_degree: dict[str, int] = {s["name"]: 0 for s in stages}
+        dependents: dict[str, list[str]] = {s["name"]: [] for s in stages}
+
+        for name, dep_set in deps.items():
+            in_degree[name] = len(dep_set)
+            for dep in dep_set:
+                dependents[dep].append(name)
+
+        levels: list[list[dict[str, Any]]] = []
+        remaining = set(in_degree.keys())
+
+        while remaining:
+            # Collect all nodes with in-degree 0 (no unresolved deps).
+            ready = sorted(n for n in remaining if in_degree[n] == 0)
+            if not ready:
+                raise ValueError(
+                    f"Circular dependency detected among stages: "
+                    f"{sorted(remaining)}"
+                )
+
+            level = [stage_by_name[n] for n in ready]
+            levels.append(level)
+
+            for n in ready:
+                remaining.discard(n)
+                for dep in dependents[n]:
+                    in_degree[dep] -= 1
+
+        return levels
+
+    # ------------------------------------------------------------------
+    # Single-stage execution
+    # ------------------------------------------------------------------
+
+    async def _execute_stage(
+        self,
+        stage: dict[str, Any],
+        context: dict[str, Any],
+        goal: OrchestratorGoal,
+        timeout: float,
+        log: Any,
+    ) -> tuple[str, dict[str, Any]]:
+        """Execute a single pipeline stage: build payload, dispatch, wait.
+
+        Returns ``(stage_name, result_dict)`` on success where result_dict
+        has keys ``output``, ``model_used``, ``processing_time_ms``.
+
+        Raises ``PipelineStageError`` on mapping errors, timeouts, or
+        worker failures.
+        """
+        stage_name = stage["name"]
+        stage_log = log.bind(stage=stage_name)
+
+        # Check condition (if present) — skipped stages return empty output.
+        condition = stage.get("condition")
+        if condition and not self._evaluate_condition(condition, context):
+            stage_log.info("pipeline.stage_skipped", reason="condition_false")
+            return stage_name, {
+                "output": None,
+                "model_used": None,
+                "processing_time_ms": 0,
+                "_skipped": True,
+            }
+
+        # Build task payload from input_mapping.
+        try:
+            payload = self._build_stage_payload(stage, context)
+        except (KeyError, ValueError) as e:
+            raise PipelineStageError(
+                stage_name, f"Stage '{stage_name}' mapping error: {e}"
+            )
+
+        task = TaskMessage(
+            worker_type=stage["worker_type"],
+            payload=payload,
+            model_tier=ModelTier(stage.get("tier", "local")),
+            parent_task_id=goal.goal_id,
+            metadata={
+                "stage_name": stage_name,
+                "model_tier": stage.get("tier", "local"),
+            },
+        )
+
+        stage_log.info("pipeline.stage_dispatching", worker_type=stage["worker_type"])
+        await self.publish("loom.tasks.incoming", task.model_dump(mode="json"))
+
+        # Wait for result.
+        stage_timeout = stage.get("timeout_seconds", timeout)
+        result = await self._wait_for_result(
+            task.task_id, goal.goal_id, stage_timeout
+        )
+
+        if result is None:
+            raise PipelineStageError(
+                stage_name,
+                f"Stage '{stage_name}' timed out after {stage_timeout}s",
+            )
+
+        if result.status == TaskStatus.FAILED:
+            raise PipelineStageError(
+                stage_name,
+                f"Stage '{stage_name}' failed: {result.error}",
+            )
+
+        stage_log.info("pipeline.stage_completed", ms=result.processing_time_ms)
+        return stage_name, {
+            "output": result.output,
+            "model_used": result.model_used,
+            "processing_time_ms": result.processing_time_ms,
+        }
+
+    # ------------------------------------------------------------------
+    # Core message handler
+    # ------------------------------------------------------------------
+
     async def handle_message(self, data: dict[str, Any]) -> None:
         goal = OrchestratorGoal(**data)
         stages = self.config["pipeline_stages"]
         timeout = self.config.get("timeout_seconds", 300)
 
         log = logger.bind(goal_id=goal.goal_id, pipeline=self.config["name"])
-        log.info("pipeline.started", stages=len(stages))
+
+        # Build execution levels from dependency graph.
+        deps = self._infer_dependencies(stages)
+        levels = self._build_execution_levels(stages, deps)
+
+        # Log execution plan.
+        level_summary = [
+            [s["name"] for s in level] for level in levels
+        ]
+        log.info(
+            "pipeline.started",
+            stages=len(stages),
+            levels=len(levels),
+            execution_plan=level_summary,
+        )
 
         # Accumulated context: goal info + results from each completed stage.
-        # Each completed stage adds: context[stage_name] = {"output": ..., "model_used": ..., ...}
-        # Subsequent stages reference these via dot-notation in their input_mapping.
         context: dict[str, Any] = {
             "goal": {
                 "instruction": goal.instruction,
@@ -102,78 +312,59 @@ class PipelineOrchestrator(BaseActor):
 
         start = time.monotonic()
 
-        for i, stage in enumerate(stages):
-            stage_name = stage["name"]
-            stage_log = log.bind(stage=stage_name, stage_index=i)
+        try:
+            for level_idx, level in enumerate(levels):
+                level_log = log.bind(level=level_idx)
 
-            # Check condition (if present)
-            condition = stage.get("condition")
-            if condition and not self._evaluate_condition(condition, context):
-                stage_log.info("pipeline.stage_skipped", reason="condition_false")
-                continue
+                if len(level) == 1:
+                    # Single stage — no gather overhead.
+                    stage = level[0]
+                    name, result_dict = await self._execute_stage(
+                        stage, context, goal, timeout, level_log,
+                    )
+                    if not result_dict.get("_skipped"):
+                        context[name] = result_dict
+                else:
+                    # Multiple stages — run concurrently.
+                    level_log.info(
+                        "pipeline.level_parallel",
+                        stages=[s["name"] for s in level],
+                    )
+                    coros = [
+                        self._execute_stage(s, context, goal, timeout, level_log)
+                        for s in level
+                    ]
+                    results = await asyncio.gather(
+                        *coros, return_exceptions=True,
+                    )
 
-            # Build task payload from input_mapping
-            try:
-                payload = self._build_stage_payload(stage, context)
-            except (KeyError, ValueError) as e:
-                stage_log.error("pipeline.mapping_error", error=str(e))
-                await self._publish_pipeline_result(
-                    goal, TaskStatus.FAILED,
-                    error=f"Stage '{stage_name}' mapping error: {e}",
-                )
-                return
+                    # Check for failures.
+                    for r in results:
+                        if isinstance(r, PipelineStageError):
+                            raise r
+                        if isinstance(r, Exception):
+                            raise r
 
-            # Create and dispatch task.
-            # Tasks are sent to loom.tasks.incoming (the router's subject),
-            # which resolves the tier and forwards to loom.tasks.{worker_type}.{tier}.
-            task = TaskMessage(
-                worker_type=stage["worker_type"],
-                payload=payload,
-                model_tier=ModelTier(stage.get("tier", "local")),
-                parent_task_id=goal.goal_id,
-                metadata={
-                    "pipeline_stage": i,
-                    "stage_name": stage_name,
-                    "model_tier": stage.get("tier", "local"),
-                },
+                    # Store all results in context.
+                    for name, result_dict in results:
+                        if not result_dict.get("_skipped"):
+                            context[name] = result_dict
+
+        except PipelineStageError as e:
+            log.error("pipeline.stage_failed", error=str(e))
+            elapsed = int((time.monotonic() - start) * 1000)
+            await self._publish_pipeline_result(
+                goal, TaskStatus.FAILED,
+                error=str(e),
+                elapsed=elapsed,
             )
+            return
 
-            stage_log.info("pipeline.stage_dispatching", worker_type=stage["worker_type"])
-            await self.publish("loom.tasks.incoming", task.model_dump(mode="json"))
-
-            # Wait for result
-            stage_timeout = stage.get("timeout_seconds", timeout)
-            result = await self._wait_for_result(task.task_id, goal.goal_id, stage_timeout)
-
-            if result is None:
-                stage_log.error("pipeline.stage_timeout")
-                await self._publish_pipeline_result(
-                    goal, TaskStatus.FAILED,
-                    error=f"Stage '{stage_name}' timed out after {stage_timeout}s",
-                )
-                return
-
-            if result.status == TaskStatus.FAILED:
-                stage_log.error("pipeline.stage_failed", error=result.error)
-                await self._publish_pipeline_result(
-                    goal, TaskStatus.FAILED,
-                    error=f"Stage '{stage_name}' failed: {result.error}",
-                )
-                return
-
-            # Store result in context for subsequent stages
-            context[stage_name] = {
-                "output": result.output,
-                "model_used": result.model_used,
-                "processing_time_ms": result.processing_time_ms,
-            }
-            stage_log.info("pipeline.stage_completed", ms=result.processing_time_ms)
-
-        # All stages complete
+        # All stages complete.
         elapsed = int((time.monotonic() - start) * 1000)
         log.info("pipeline.completed", ms=elapsed, stages_run=len(context) - 1)
 
-        # Build final output from all stage results
+        # Build final output from all stage results.
         final_output = {
             name: data["output"]
             for name, data in context.items()
@@ -184,6 +375,10 @@ class PipelineOrchestrator(BaseActor):
             output=final_output,
             elapsed=elapsed,
         )
+
+    # ------------------------------------------------------------------
+    # Payload building and path resolution
+    # ------------------------------------------------------------------
 
     def _build_stage_payload(
         self, stage: dict[str, Any], context: dict[str, Any],
@@ -257,6 +452,10 @@ class PipelineOrchestrator(BaseActor):
         else:
             logger.warning("pipeline.unsupported_operator", op=op)
             return True
+
+    # ------------------------------------------------------------------
+    # Result waiting and publishing
+    # ------------------------------------------------------------------
 
     async def _wait_for_result(
         self, task_id: str, goal_id: str, timeout: float,

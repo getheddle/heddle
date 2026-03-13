@@ -21,11 +21,13 @@ Message flow::
         --> Publishes final TaskResult to loom.results.{goal_id}
 
 Concurrency model:
-    Each goal is processed sequentially within a single OrchestratorActor
-    instance (max_concurrent=1 by default from BaseActor).  Multiple goals
-    are queued in the NATS subscription and processed one at a time.  For
-    horizontal scaling, run multiple OrchestratorActor instances with a
-    NATS queue group -- each goal will be handled by exactly one instance.
+    The ``max_concurrent_goals`` config setting (default 1) controls how many
+    goals a single OrchestratorActor instance can process simultaneously.
+    With the default of 1, goals are queued and processed one at a time
+    (strict ordering).  Higher values enable concurrent goal processing
+    within a single instance — shared mutable state is protected by an
+    asyncio lock.  For horizontal scaling, run multiple OrchestratorActor
+    instances with a NATS queue group.
 
     Within a single goal, subtasks are dispatched concurrently (all published
     to loom.tasks.incoming at once) and results are collected as they arrive.
@@ -183,9 +185,14 @@ class OrchestratorActor(BaseActor):
         backend: LLMBackend,
         nats_url: str = "nats://nats:4222",
         checkpoint_store: CheckpointStore | None = None,
+        *,
+        bus: Any | None = None,
     ):
-        super().__init__(actor_id, nats_url)
+        # Load config first so we can read max_concurrent_goals before
+        # passing it to BaseActor.
         self.config = self._load_config(config_path)
+        max_goals = self.config.get("max_concurrent_goals", 1)
+        super().__init__(actor_id, nats_url, max_concurrent=max_goals, bus=bus)
         self.backend = backend
 
         # Build the decomposer from config-defined available workers.
@@ -227,15 +234,19 @@ class OrchestratorActor(BaseActor):
 
         # ---------- Mutable state ----------
         # Active goals being processed.  Keyed by goal_id.
-        # In the default single-concurrency mode (max_concurrent=1), there
-        # is at most one entry at a time.  With higher concurrency, multiple
-        # goals can be in-flight simultaneously.
+        # With max_concurrent_goals > 1, multiple goals can be in-flight
+        # simultaneously.  _active_goals itself is safe because each goal
+        # uses its own key; the lock protects shared history/checkpoint state.
         self._active_goals: dict[str, GoalState] = {}
 
         # Conversation history for checkpoint decisions.  Accumulates across
         # multiple goals within the same actor lifetime.  Reset on checkpoint.
         self._conversation_history: list[dict[str, Any]] = []
         self._checkpoint_counter: int = 0
+
+        # Lock protects _conversation_history and _checkpoint_counter when
+        # multiple goals are processed concurrently (max_concurrent_goals > 1).
+        self._state_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Config loading
@@ -325,7 +336,7 @@ class OrchestratorActor(BaseActor):
             log.info("orchestrator.goal_completed", ms=elapsed)
 
             # -- 7. Record in conversation history and check for checkpoint --
-            self._record_in_history(goal, results, synthesis)
+            await self._record_in_history(goal, results, synthesis)
             await self._maybe_checkpoint(goal, goal_state, log)
 
         except Exception as e:
@@ -413,6 +424,11 @@ class OrchestratorActor(BaseActor):
     # ------------------------------------------------------------------
     # Step 4: Result collection
     # ------------------------------------------------------------------
+
+    # TODO(Strategy A): Refactor _collect_results to stream results to the
+    #   synthesizer as they arrive, rather than waiting for all subtasks.
+    #   This would reduce end-to-end latency for goals with many independent
+    #   subtasks (the synthesizer could start merging partial results).
 
     async def _collect_results(
         self,
@@ -594,7 +610,7 @@ class OrchestratorActor(BaseActor):
     # Step 7: Conversation history and checkpointing
     # ------------------------------------------------------------------
 
-    def _record_in_history(
+    async def _record_in_history(
         self,
         goal: OrchestratorGoal,
         results: list[TaskResult],
@@ -607,6 +623,9 @@ class OrchestratorActor(BaseActor):
         CheckpointManager compresses it.
 
         Each history entry is a compact summary -- not the full result data.
+
+        This method is async and uses ``_state_lock`` so multiple concurrent
+        goals don't produce lost writes to the shared history list.
         """
         result_summaries = []
         for r in results:
@@ -631,7 +650,8 @@ class OrchestratorActor(BaseActor):
             "synthesis_confidence": synthesis.get("confidence"),
             "timestamp": time.time(),
         }
-        self._conversation_history.append(entry)
+        async with self._state_lock:
+            self._conversation_history.append(entry)
 
     async def _maybe_checkpoint(
         self,
@@ -644,51 +664,55 @@ class OrchestratorActor(BaseActor):
         If a CheckpointManager is configured and the history exceeds the
         token threshold, creates a checkpoint and resets the history to
         only the most recent entries (the "recent window").
+
+        Uses ``_state_lock`` to protect the read-modify-write of
+        ``_conversation_history`` and ``_checkpoint_counter``.
         """
         if self._checkpoint_manager is None:
             return
 
-        if not self._checkpoint_manager.should_checkpoint(
-            self._conversation_history
-        ):
-            return
+        async with self._state_lock:
+            if not self._checkpoint_manager.should_checkpoint(
+                self._conversation_history
+            ):
+                return
 
-        log.info("orchestrator.checkpoint_triggered")
-        self._checkpoint_counter += 1
+            log.info("orchestrator.checkpoint_triggered")
+            self._checkpoint_counter += 1
 
-        # Build completed/pending task summaries for the checkpoint.
-        completed_tasks = []
-        for entry in self._conversation_history:
-            for r in entry.get("results", []):
-                completed_tasks.append({
-                    "task_id": r.get("task_id"),
-                    "worker_type": r.get("worker_type"),
-                    "status": r.get("status"),
-                    "summary": r.get("output_preview", r.get("error", "")),
-                })
+            # Build completed/pending task summaries for the checkpoint.
+            completed_tasks = []
+            for entry in self._conversation_history:
+                for r in entry.get("results", []):
+                    completed_tasks.append({
+                        "task_id": r.get("task_id"),
+                        "worker_type": r.get("worker_type"),
+                        "status": r.get("status"),
+                        "summary": r.get("output_preview", r.get("error", "")),
+                    })
 
-        try:
-            checkpoint = await self._checkpoint_manager.create_checkpoint(
-                goal_id=goal.goal_id,
-                original_instruction=goal.instruction,
-                completed_tasks=completed_tasks,
-                pending_tasks=[],  # No pending tasks at checkpoint time
-                open_issues=[],
-                decisions_made=[],
-                checkpoint_number=self._checkpoint_counter,
-            )
+            try:
+                checkpoint = await self._checkpoint_manager.create_checkpoint(
+                    goal_id=goal.goal_id,
+                    original_instruction=goal.instruction,
+                    completed_tasks=completed_tasks,
+                    pending_tasks=[],  # No pending tasks at checkpoint time
+                    open_issues=[],
+                    decisions_made=[],
+                    checkpoint_number=self._checkpoint_counter,
+                )
 
-            # Reset conversation history, keeping only the recent window.
-            window = self._checkpoint_manager.recent_window_size
-            self._conversation_history = self._conversation_history[-window:]
+                # Reset conversation history, keeping only the recent window.
+                window = self._checkpoint_manager.recent_window_size
+                self._conversation_history = self._conversation_history[-window:]
 
-            log.info(
-                "orchestrator.checkpoint_created",
-                checkpoint_number=checkpoint.checkpoint_number,
-                token_count=checkpoint.context_token_count,
-                history_entries_kept=len(self._conversation_history),
-            )
-        except Exception as e:
-            # Checkpoint failure is non-fatal -- the orchestrator continues
-            # with a growing history.  The next goal will try again.
-            log.error("orchestrator.checkpoint_failed", error=str(e))
+                log.info(
+                    "orchestrator.checkpoint_created",
+                    checkpoint_number=checkpoint.checkpoint_number,
+                    token_count=checkpoint.context_token_count,
+                    history_entries_kept=len(self._conversation_history),
+                )
+            except Exception as e:
+                # Checkpoint failure is non-fatal -- the orchestrator continues
+                # with a growing history.  The next goal will try again.
+                log.error("orchestrator.checkpoint_failed", error=str(e))

@@ -7,11 +7,13 @@ Tests cover:
 - Timeout and partial collection behaviour
 - Checkpoint triggering
 - Error handling (parse errors, decomposition failure)
+- Concurrent goal processing (max_concurrent_goals)
 
 All tests use InMemoryBus -- no NATS or external infrastructure required.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import tempfile
@@ -63,6 +65,7 @@ class MockOrchestratorBackend(LLMBackend):
 def _write_config(
     available_workers: list[dict] | None = None,
     timeout_seconds: int = 5,
+    max_concurrent_goals: int | None = None,
 ) -> str:
     """Write a minimal orchestrator config to a temp file."""
     config = {
@@ -78,6 +81,8 @@ def _write_config(
             },
         ],
     }
+    if max_concurrent_goals is not None:
+        config["max_concurrent_goals"] = max_concurrent_goals
     fd, path = tempfile.mkstemp(suffix=".yaml")
     with os.fdopen(fd, "w") as f:
         yaml.dump(config, f)
@@ -283,7 +288,7 @@ class TestRecordInHistory:
             ]
             synthesis = {"confidence": "high"}
 
-            actor._record_in_history(goal, results, synthesis)
+            await actor._record_in_history(goal, results, synthesis)
             assert len(actor._conversation_history) == 1
 
             entry = actor._conversation_history[0]
@@ -314,9 +319,95 @@ class TestRecordInHistory:
                     processing_time_ms=0,
                 ),
             ]
-            actor._record_in_history(goal, results, {})
+            await actor._record_in_history(goal, results, {})
 
             entry = actor._conversation_history[0]
             assert entry["results"][0]["error"] == "timeout"
+        finally:
+            os.unlink(config_path)
+
+
+# ---------------------------------------------------------------------------
+# Concurrent goal processing tests
+# ---------------------------------------------------------------------------
+
+
+class TestConcurrentGoals:
+    @pytest.mark.asyncio
+    async def test_default_max_concurrent_goals_is_one(self):
+        """Without config, max_concurrent_goals defaults to 1."""
+        config_path = _write_config()
+        try:
+            backend = MockOrchestratorBackend("[]")
+            actor = OrchestratorActor(
+                actor_id="test-orch",
+                config_path=config_path,
+                backend=backend,
+            )
+            assert actor.max_concurrent == 1
+        finally:
+            os.unlink(config_path)
+
+    @pytest.mark.asyncio
+    async def test_max_concurrent_goals_from_config(self):
+        """Config value is passed through to BaseActor.max_concurrent."""
+        config_path = _write_config(max_concurrent_goals=4)
+        try:
+            backend = MockOrchestratorBackend("[]")
+            actor = OrchestratorActor(
+                actor_id="test-orch",
+                config_path=config_path,
+                backend=backend,
+            )
+            assert actor.max_concurrent == 4
+        finally:
+            os.unlink(config_path)
+
+    @pytest.mark.asyncio
+    async def test_concurrent_record_in_history_no_lost_writes(self):
+        """Concurrent _record_in_history calls produce no lost writes."""
+        config_path = _write_config(max_concurrent_goals=4)
+        try:
+            backend = MockOrchestratorBackend("[]")
+            actor = OrchestratorActor(
+                actor_id="test-orch",
+                config_path=config_path,
+                backend=backend,
+            )
+
+            async def record_one(i: int):
+                goal = OrchestratorGoal(instruction=f"Goal {i}")
+                results = [
+                    TaskResult(
+                        task_id=f"t{i}",
+                        worker_type="summarizer",
+                        status=TaskStatus.COMPLETED,
+                        output={"n": i},
+                        processing_time_ms=10,
+                    ),
+                ]
+                await actor._record_in_history(goal, results, {"confidence": "high"})
+
+            # Fire 20 concurrent writes
+            await asyncio.gather(*(record_one(i) for i in range(20)))
+
+            assert len(actor._conversation_history) == 20
+        finally:
+            os.unlink(config_path)
+
+    @pytest.mark.asyncio
+    async def test_bus_injection_via_constructor(self):
+        """The bus= keyword argument is forwarded to BaseActor."""
+        config_path = _write_config()
+        try:
+            backend = MockOrchestratorBackend("[]")
+            bus = InMemoryBus()
+            actor = OrchestratorActor(
+                actor_id="test-orch",
+                config_path=config_path,
+                backend=backend,
+                bus=bus,
+            )
+            assert actor._bus is bus
         finally:
             os.unlink(config_path)

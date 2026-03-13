@@ -40,5 +40,6 @@ checkpoint:
   token_threshold: 50000      # Compress when context exceeds this many tokens
   recent_window: 5            # Keep last N interactions alongside the checkpoint
 
+max_concurrent_goals: 1       # Max goals processed simultaneously (>1 enables concurrent goal handling)
 max_concurrent_tasks: 5       # Max subtasks the orchestrator can dispatch at once
 timeout_seconds: 300          # Per-subtask timeout in seconds

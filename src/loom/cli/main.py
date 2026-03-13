@@ -308,12 +308,13 @@ def orchestrator(config: str, nats_url: str, redis_url: str):
     Config fields (see configs/orchestrators/default.yaml):
 
     \b
-        name                -- Unique orchestrator identifier
-        system_prompt       -- LLM prompt governing decomposition behavior
-        checkpoint          -- Context compression settings (token_threshold,
-                               recent_window)
+        name                 -- Unique orchestrator identifier
+        system_prompt        -- LLM prompt governing decomposition behavior
+        checkpoint           -- Context compression settings (token_threshold,
+                                recent_window)
+        max_concurrent_goals -- Max goals processed simultaneously (default 1)
         max_concurrent_tasks -- Max subtasks dispatched at once
-        timeout_seconds     -- Per-subtask timeout
+        timeout_seconds      -- Per-subtask timeout
 
     Subscribes to: loom.goals.incoming
     Queue group: orchestrators
@@ -351,6 +352,7 @@ def orchestrator(config: str, nats_url: str, redis_url: str):
         config_path=config,
         nats_url=nats_url,
         checkpointing="enabled" if checkpoint_store else "disabled",
+        max_concurrent_goals=cfg.get("max_concurrent_goals", 1),
         max_concurrent_tasks=cfg.get("max_concurrent_tasks", "not set"),
         timeout_seconds=cfg.get("timeout_seconds", "not set"),
     )
