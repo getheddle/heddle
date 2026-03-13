@@ -199,9 +199,9 @@ class OrchestratorActor(BaseActor):
                 "orchestrator.no_available_workers",
                 hint="Add 'available_workers' list to orchestrator config",
             )
-        self.decomposer = GoalDecomposer(
+        self.decomposer = GoalDecomposer.from_worker_configs(
             backend=backend,
-            available_workers=available_workers,
+            configs=available_workers,
         )
 
         # Synthesizer uses the same backend for LLM-based synthesis.
@@ -360,7 +360,12 @@ class OrchestratorActor(BaseActor):
         """
         log.info("orchestrator.decomposing")
         try:
-            subtasks = await self.decomposer.decompose(goal)
+            subtasks = await self.decomposer.decompose(
+                goal=goal.instruction,
+                context=goal.context,
+                parent_task_id=goal.goal_id,
+                priority=goal.priority,
+            )
             log.info("orchestrator.decomposed", subtask_count=len(subtasks))
             return subtasks
         except (ValueError, RuntimeError) as e:

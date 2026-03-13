@@ -1,5 +1,7 @@
 # Loom — Lightweight Orchestrated Operational Mesh
 
+[![CI](https://github.com/IranTransitionProject/loom/actions/workflows/ci.yml/badge.svg)](https://github.com/IranTransitionProject/loom/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/IranTransitionProject/loom/branch/main/graph/badge.svg)](https://codecov.io/gh/IranTransitionProject/loom)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Status: Active Development](https://img.shields.io/badge/status-active_development-brightgreen.svg)]()
@@ -84,7 +86,7 @@ that separates concerns across specialized actors.
 | Router (deterministic, rate-limited) | Complete |
 | Checkpoint (Redis + in-memory) | Complete |
 | Contrib: DuckDB, Redis, RAG | Complete |
-| Unit tests | 302 passing |
+| Unit tests | 382 passing |
 
 ---
 

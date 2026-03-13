@@ -33,6 +33,7 @@ rag = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0.0",
     "ruff>=0.3.0",
     "duckdb>=1.0.0",
     "redis>=5.0.0",            # Needed for contrib/redis tests
@@ -53,6 +54,20 @@ markers = [
     "integration: requires running infrastructure (NATS, workers, Ollama)",
 ]
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["loom"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 70
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__",
+    "if TYPE_CHECKING",
+    "raise NotImplementedError",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
