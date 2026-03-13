@@ -134,6 +134,11 @@ class TaskRouter:
     This is NOT an LLM component. It contains zero inference logic. It reads
     routing rules from a YAML config and applies them mechanically:
 
+    .. todo:: Strategy D — Worker-side batching. A batching layer between the
+       router and workers could accumulate similar tasks (same worker_type + tier)
+       and dispatch them as a single batch to reduce LLM API call overhead.
+       This would sit here in the routing pipeline, before the publish step.
+
         incoming task --> resolve tier --> check rate limit --> publish to worker queue
                                       |                   |
                                       |                   +--> dead-letter (rate limited)

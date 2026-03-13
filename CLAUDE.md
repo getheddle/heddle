@@ -28,10 +28,10 @@ src/loom/
     embeddings.py         # EmbeddingProvider ABC, OllamaEmbeddingProvider (Ollama /api/embed)
 
   orchestrator/
-    runner.py             # OrchestratorActor — decompose/dispatch/collect/synthesize loop
+    runner.py             # OrchestratorActor — decompose/dispatch/collect/synthesize loop (concurrent goals via max_concurrent_goals)
     decomposer.py         # GoalDecomposer — LLM-based task decomposition, WorkerDescriptor
     synthesizer.py        # ResultSynthesizer — merge + LLM synthesis modes
-    pipeline.py           # PipelineOrchestrator — sequential stage execution with input mapping
+    pipeline.py           # PipelineOrchestrator — dependency-aware parallel stage execution with input mapping
     checkpoint.py         # CheckpointManager — pluggable store, configurable TTL
     store.py              # CheckpointStore ABC + InMemoryCheckpointStore
 
@@ -117,7 +117,7 @@ examples/
 docker/                   # Dockerfiles (orchestrator, router, worker) + entrypoint.sh
 k8s/                      # Kubernetes manifests (namespace, NATS, Redis, workers, Kustomize)
 
-tests/                    # 32 test files, 498 unit tests + 1 integration test
+tests/                    # 32 test files, 519 unit tests + 1 integration test
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -237,6 +237,52 @@ server, gateway = create_server("configs/mcp/docman.yaml")
 run_stdio(server, gateway)
 ```
 
+## Scaling and performance
+
+### Orchestrator bottleneck and mitigations
+
+The orchestrator is the throughput bottleneck: all goals funnel through a single actor. Five strategies address this at different levels:
+
+**Implemented (v0.3.0):**
+
+- **B — Concurrent goal processing.** `OrchestratorActor` reads `max_concurrent_goals` from YAML config and passes it to `BaseActor.max_concurrent`. An `asyncio.Lock` protects shared state (`_conversation_history`, `_checkpoint_counter`). Set `max_concurrent_goals: N` in the orchestrator config to process N goals simultaneously within a single instance.
+
+- **C — Pipeline stage parallelism.** `PipelineOrchestrator` now auto-infers stage dependencies from `input_mapping` paths and builds execution levels using Kahn's topological sort. Stages within the same level run concurrently via `asyncio.gather`. Existing configs with genuinely sequential dependencies (like Docman's pipeline) produce the same execution order — no config changes needed. To benefit, design pipelines where independent stages reference only `goal.*` paths or shared earlier stages.
+
+**Free horizontal scaling (no code changes needed):**
+
+NATS queue groups provide horizontal scaling with zero code changes. Run multiple instances of any actor and they automatically load-balance:
+
+```bash
+# Run 3 summarizer replicas — NATS distributes tasks across them
+loom worker --config configs/workers/summarizer.yaml --tier local &
+loom worker --config configs/workers/summarizer.yaml --tier local &
+loom worker --config configs/workers/summarizer.yaml --tier local &
+
+# Run 2 pipeline orchestrator replicas
+loom pipeline --config configs/orchestrators/my_pipeline.yaml &
+loom pipeline --config configs/orchestrators/my_pipeline.yaml &
+```
+
+Workers subscribe with queue groups by default (`loom.tasks.{worker_type}.{tier}`). Pipeline orchestrators subscribe to `loom.goals.incoming` with queue groups. Each message is delivered to exactly one replica. This is the preferred scaling path — it preserves per-message isolation without shared state.
+
+In Kubernetes, scale replicas via `kubectl scale deployment/loom-worker --replicas=N` or HPA auto-scaling.
+
+**Not yet implemented (future work):**
+
+- **A — Streaming result collection.** Process subtask results as they arrive rather than waiting for all. Would reduce end-to-end latency for goals with many independent subtasks. Requires changing the collect phase in `OrchestratorActor` to a streaming model.
+- **D — Worker-side batching.** Batch multiple similar tasks into a single LLM call. Would reduce API call overhead for high-volume identical worker types. Requires a batching layer between the router and workers.
+- **E — Decomposition caching.** Cache goal decomposition plans for structurally similar goals. Would skip the decomposition LLM call for repeated goal patterns. Requires a cache keyed by goal structure fingerprints.
+
+### MCP gateway considerations
+
+The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mesh. Current state and needed improvements:
+
+- **Pipeline parallelism (C) already benefits MCP.** The `MCPBridge.call_pipeline()` dispatches a goal and the pipeline runs stages concurrently. The bridge's `_collect_pipeline_results()` correctly filters intermediate stage results from the final result.
+- **Concurrent MCP calls are supported** — the bridge is fully async. Multiple MCP clients can call tools simultaneously. However, if all calls target the same single-instance orchestrator, they queue at the orchestrator's semaphore.
+- **PipelineOrchestrator needs `max_concurrent_goals`** — unlike `OrchestratorActor`, the pipeline orchestrator doesn't yet read this config. This means pipeline MCP calls still process one goal at a time per instance. Use horizontal scaling (multiple pipeline instances) as the workaround.
+- **MCP progress notifications** — the bridge has a `progress_callback` parameter but the MCP server doesn't wire it to MCP progress tokens yet. This would let MCP clients show per-stage progress during pipeline execution.
+
 ## Known issues
 
 - None currently blocking.
@@ -245,6 +291,11 @@ run_stdio(server, gateway)
 
 1. **End-to-end integration test** — full goal submission through router/workers/orchestrator
 2. **Router dead-letter consumer** — implement a dead-letter processor for monitoring/retry
+3. **PipelineOrchestrator concurrent goals** — read `max_concurrent_goals` from pipeline config (like OrchestratorActor does)
+4. **MCP progress notifications** — wire `MCPBridge.call_pipeline()` progress_callback to MCP progress tokens
+5. **Streaming result collection (Strategy A)** — process subtask results as they arrive
+6. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
+7. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
 
 ## What NOT to do
 

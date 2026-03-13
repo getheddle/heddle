@@ -13,7 +13,7 @@ There are two kinds of workers:
 - **LLM workers** call a language model (Ollama, Anthropic, OpenAI-compatible). They're defined by a system prompt and I/O schemas.
 - **Processor workers** run non-LLM code (Docling for PDFs, ffmpeg for media, scikit-learn, custom Python). They implement a `ProcessingBackend` interface.
 
-**Orchestrators** coordinate workers. A `PipelineOrchestrator` runs stages sequentially, wiring outputs from one stage as inputs to the next. A `OrchestratorActor` uses an LLM to dynamically decompose goals into subtasks.
+**Orchestrators** coordinate workers. A `PipelineOrchestrator` runs stages with automatic dependency-aware parallelism, wiring outputs from one stage as inputs to the next. Independent stages run concurrently. An `OrchestratorActor` uses an LLM to dynamically decompose goals into subtasks and supports concurrent goal processing.
 
 **The router** sits between orchestrators and workers. It's deterministic (no LLM) — it reads the `worker_type` and `model_tier` from each task message and publishes it to the right NATS subject. It enforces rate limits and sends unroutable tasks to a dead-letter subject.
 
@@ -221,7 +221,7 @@ loom processor --config configs/workers/my_processor.yaml
 
 ## Part 3: Chain workers into a pipeline
 
-Pipelines run workers in sequence, wiring outputs from one stage as inputs to the next.
+Pipelines run stages with automatic dependency-aware parallelism, wiring outputs from one stage as inputs to the next. Stage dependencies are inferred from `input_mapping` paths — stages that only reference `goal.*` paths or shared earlier stages are independent and run concurrently.
 
 ### Step 1: Create a pipeline config
 
@@ -254,6 +254,23 @@ The `input_mapping` wires data between stages:
 
 - `"goal.context.file_ref"` — reads from the original goal's context
 - `"extract.output.text_preview"` — reads from the `extract` stage's output
+
+**Automatic parallelism:** In this example, both `classify` and `summarize` depend only on `extract` (not on each other), so the pipeline automatically runs them concurrently:
+
+```
+Level 0: extract          (only goal.* deps)
+Level 1: classify + summarize  (both depend on extract, run in parallel)
+```
+
+To override automatic inference, add explicit `depends_on` lists:
+
+```yaml
+  - name: "summarize"
+    worker_type: "entity_extractor"
+    depends_on: ["extract", "classify"]  # Force sequential after classify
+    input_mapping:
+      text: "extract.output.text_preview"
+```
 
 ### Step 2: Run the pipeline
 

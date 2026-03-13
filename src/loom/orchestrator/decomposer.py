@@ -315,6 +315,12 @@ class GoalDecomposer:
     # Public API
     # ------------------------------------------------------------------
 
+    # TODO(Strategy E): Add decomposition caching. Goals with structurally
+    #   similar instructions (same intent, same worker set) often produce
+    #   identical decomposition plans. A cache keyed by a goal fingerprint
+    #   (e.g. instruction template + available worker types) would skip the
+    #   LLM call entirely for repeated patterns.
+
     async def decompose(
         self,
         goal: str,

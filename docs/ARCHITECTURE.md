@@ -34,8 +34,8 @@ src/loom/
 │   └── embeddings.py    # EmbeddingProvider ABC, OllamaEmbeddingProvider (/api/embed)
 │
 ├── orchestrator/
-│   ├── runner.py        # Orchestrator actor: decompose → dispatch → collect → synthesize
-│   ├── pipeline.py      # Pipeline orchestrator: sequential stage execution with input mapping
+│   ├── runner.py        # Orchestrator actor: decompose → dispatch → collect → synthesize (concurrent goals)
+│   ├── pipeline.py      # Pipeline orchestrator: dependency-aware parallel stage execution
 │   ├── checkpoint.py    # Self-summarization: compresses orchestrator context to Redis snapshots
 │   ├── store.py         # CheckpointStore ABC (pluggable persistence backend)
 │   ├── decomposer.py    # LLM-driven goal → subtask decomposition with worker manifest grounding
@@ -181,11 +181,20 @@ Full decompose → dispatch → collect → synthesize loop:
 - **GoalDecomposer:** LLM-based task decomposition grounded in a worker manifest
 - **ResultSynthesizer:** Deterministic merge + optional LLM synthesis modes
 - **CheckpointManager:** Pluggable store (in-memory for testing, Redis for production), configurable TTL
+- **Concurrent goals:** Set `max_concurrent_goals: N` in config to process multiple goals simultaneously within one instance. An `asyncio.Lock` protects shared state.
 
 ### Pipeline Orchestrator (`orchestrator/pipeline.py`)
 
-Sequential stage execution where each stage maps inputs from previous stage
-outputs. Supports conditions, timeouts, and input mapping expressions.
+Dependency-aware stage execution with automatic parallelism. Stage dependencies
+are inferred from `input_mapping` paths — if stage B references `"A.output.field"`,
+then B depends on A. Stages with no inter-stage dependencies run concurrently.
+
+Execution proceeds in levels (Kahn's topological sort):
+- Level 0: stages with only `goal.*` dependencies (run first, concurrently)
+- Level 1+: stages whose dependencies are all in earlier levels
+
+Explicit `depends_on` lists in stage config override automatic inference.
+Supports conditions, per-stage timeouts, and input mapping expressions.
 
 ### Scheduler (`scheduler/scheduler.py`)
 
@@ -267,6 +276,38 @@ output_schema:
 
 Copy `configs/workers/_template.yaml` to create new workers. See
 [Building Workflows](building-workflows.md) for a comprehensive guide.
+
+---
+
+## Scaling
+
+### Horizontal scaling (preferred)
+
+NATS queue groups provide horizontal scaling with zero code changes. Run multiple
+instances of any actor and they automatically load-balance — each message is
+delivered to exactly one instance within the queue group.
+
+Workers, orchestrators, and pipeline orchestrators all subscribe with queue groups
+by default. In Kubernetes, scale via replica count or HPA.
+
+### Vertical scaling (within a single instance)
+
+- **OrchestratorActor:** Set `max_concurrent_goals` in orchestrator config to
+  process multiple goals concurrently within one process.
+- **PipelineOrchestrator:** Independent stages run concurrently within a single
+  goal (automatic from dependency inference). Multiple goals require horizontal
+  scaling (multiple pipeline instances).
+- **Workers:** Workers are single-task actors (`max_concurrent=1`). Scale
+  horizontally via replicas, not vertically.
+
+### Bottleneck strategies (future)
+
+- **Streaming result collection:** Process subtask results as they arrive instead
+  of waiting for all, reducing end-to-end latency.
+- **Worker-side batching:** Batch similar tasks into single LLM calls, reducing
+  API overhead.
+- **Decomposition caching:** Cache goal decomposition plans for repeated patterns,
+  skipping the decomposition LLM call.
 
 ---
 

@@ -233,6 +233,9 @@ async def _dispatch_tool(
         )
 
     if entry.kind == "pipeline":
+        # TODO: Pass a progress_callback that emits MCP progress notifications
+        #   so clients can track per-stage pipeline progress. Requires access to
+        #   the MCP session context (not available in low-level call_tool handler).
         return await gateway.bridge.call_pipeline(
             goal_context=arguments,
             timeout=meta.get("timeout", 300),
@@ -289,7 +292,6 @@ def run_streamable_http(
 
     async def _run():
         import uvicorn
-        from mcp.server.fastmcp import FastMCP
 
         await gateway.bridge.connect()
         logger.info("mcp.gateway.connected", nats_url=gateway.config.get("nats_url"))
