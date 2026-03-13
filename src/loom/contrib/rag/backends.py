@@ -18,14 +18,12 @@ SyncProcessingBackend which automatically offloads to a thread pool.
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 from loom.worker.processor import SyncProcessingBackend
 
 from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
-from loom.contrib.rag.mux.stream_mux import StreamMux, merge_from_ingestors
+from loom.contrib.rag.mux.stream_mux import StreamMux
 from loom.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post
 from loom.contrib.rag.schemas.post import NormalizedPost
 from loom.contrib.rag.schemas.mux import MuxWindowConfig

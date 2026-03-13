@@ -189,7 +189,6 @@ class TelegramIngestor:
 
     def _normalize_message(self, msg: RawTelegramMessage) -> NormalizedPost | None:
         ch = self._channel
-        profile = self._profile
 
         plain = msg.plain_text
         if self.skip_empty and not plain.strip():

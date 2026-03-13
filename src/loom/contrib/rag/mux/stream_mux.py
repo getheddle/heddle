@@ -19,9 +19,8 @@ NATS actor contract:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
 from itertools import chain
-from typing import Iterable, Iterator
+from typing import Iterable
 
 from ..schemas.post import NormalizedPost
 from ..schemas.mux import MuxEntry, MuxedStream, MuxWindowConfig

@@ -14,7 +14,7 @@ Operates on any sequence of objects that have a .timestamp (datetime) attribute.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Generic, Iterator, Protocol, Sequence, TypeVar
 
 
