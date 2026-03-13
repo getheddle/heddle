@@ -37,6 +37,7 @@ src/loom/
 │   ├── runner.py        # Orchestrator actor: decompose → dispatch → collect → synthesize
 │   ├── pipeline.py      # Pipeline orchestrator: sequential stage execution with input mapping
 │   ├── checkpoint.py    # Self-summarization: compresses orchestrator context to Redis snapshots
+│   ├── store.py         # CheckpointStore ABC (pluggable persistence backend)
 │   ├── decomposer.py    # LLM-driven goal → subtask decomposition with worker manifest grounding
 │   └── synthesizer.py   # Multi-result aggregation (deterministic merge + LLM synthesis modes)
 │
@@ -45,7 +46,7 @@ src/loom/
 │
 ├── bus/
 │   ├── base.py          # MessageBus ABC, Subscription ABC
-│   ├── memory_bus.py    # InMemoryBus for testing (no infrastructure needed)
+│   ├── memory.py        # InMemoryBus for testing (no infrastructure needed)
 │   └── nats_adapter.py  # NATS pub/sub/request wrapper
 │
 ├── cli/
@@ -58,14 +59,21 @@ src/loom/
 
 configs/
 ├── workers/
-│   ├── _template.yaml   # Copy this to create new workers
-│   ├── summarizer.yaml  # Text → structured summary (local tier)
-│   ├── classifier.yaml  # Text → category with confidence (local tier)
-│   └── extractor.yaml   # Text → structured fields (standard tier)
+│   ├── _template.yaml          # Copy this to create new workers
+│   ├── summarizer.yaml         # Text → structured summary (local tier)
+│   ├── classifier.yaml         # Text → category with confidence (local tier)
+│   ├── extractor.yaml          # Text → structured fields (standard tier)
+│   ├── rag_ingestor.yaml       # RAG: Telegram stream ingestion
+│   ├── rag_chunker.yaml        # RAG: Text chunking
+│   ├── rag_vectorstore.yaml    # RAG: Embedding + vector storage
+│   ├── rag_mux.yaml            # RAG: Stream multiplexer
+│   └── rag_trend_analyzer.yaml # RAG: LLM trend analysis
 ├── orchestrators/
-│   └── default.yaml     # General-purpose orchestrator config
-└── router_rules.yaml    # Tier overrides and rate limits
+│   ├── default.yaml            # General-purpose orchestrator config
+│   └── rag_pipeline.yaml       # RAG pipeline orchestrator config
+└── router_rules.yaml           # Tier overrides and rate limits
 
+docker/                   # Dockerfiles and entrypoint script
 docs/                     # Documentation
 k8s/                      # Kubernetes manifests (Minikube-ready)
 tests/                    # Unit + integration tests

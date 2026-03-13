@@ -19,10 +19,12 @@ src/loom/
   contrib/      # Optional integrations (Django-style contrib namespace)
     duckdb/     # DuckDB tools and backends: DuckDBViewTool, DuckDBVectorTool, DuckDBQueryBackend
     redis/      # Redis-backed CheckpointStore (optional: pip install loom[redis])
+    rag/        # RAG pipeline: ingestion, chunking, embedding, vector storage, LLM analysis
 configs/
   workers/      # YAML configs defining each worker's system prompt, I/O schema, default tier
-  orchestrators/# Orchestrator configs
+  orchestrators/# Orchestrator configs (default + RAG pipeline)
   router_rules.yaml  # Tier overrides and rate limits (enforced by token-bucket limiter)
+docker/         # Dockerfiles (orchestrator, router, worker) and entrypoint script
 k8s/            # Kubernetes manifests (Minikube-ready, Kustomize)
 tests/          # Unit tests (messages, contracts, checkpoint, pipeline, workers, processor) and integration test
 ```
@@ -93,8 +95,8 @@ All major components are implemented and functional:
 - **CLI:** All 6 commands registered (worker, processor, pipeline, orchestrator, router, submit). Tier mismatch warnings on worker startup.
 - **Contrib DuckDB:** `loom.contrib.duckdb` — DuckDBViewTool (view-based LLM tool), DuckDBVectorTool (semantic similarity search), DuckDBQueryBackend (action-dispatch query backend with FTS, filtering, stats, get, vector search). All configurable via constructor params. Optional dependency: `pip install loom[duckdb]`.
 - **Contrib Redis:** `loom.contrib.redis` — RedisCheckpointStore for production checkpoint persistence. Optional dependency: `pip install loom[redis]`.
-- **Tests:** 302 unit tests pass (messages, contracts, checkpoint, pipeline, workers, processor, workspace, tools, tool-use, knowledge silos, embeddings, contrib/duckdb, contrib/rag). Integration test has `@pytest.mark.integration` marker and polling-based result collection.
-- **Infrastructure:** Dockerfiles and k8s manifests updated with correct CMDs and no stale FIXMEs.
+- **Tests:** 382 unit tests pass (messages, contracts, checkpoint, pipeline, workers, processor, workspace, tools, tool-use, knowledge silos, embeddings, contrib/duckdb, contrib/rag). Integration test has `@pytest.mark.integration` marker and polling-based result collection.
+- **Infrastructure:** Dockerfiles (in `docker/`) and k8s manifests updated with correct CMDs and no stale FIXMEs.
 
 ## Known issues
 

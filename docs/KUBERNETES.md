@@ -27,9 +27,9 @@ Build images inside Minikube's Docker daemon so they're available to pods
 without a registry:
 
 ```bash
-docker build -f Dockerfile.worker -t loom-worker:latest .
-docker build -f Dockerfile.router -t loom-router:latest .
-docker build -f Dockerfile.orchestrator -t loom-orchestrator:latest .
+docker build -f docker/Dockerfile.worker -t loom-worker:latest .
+docker build -f docker/Dockerfile.router -t loom-router:latest .
+docker build -f docker/Dockerfile.orchestrator -t loom-orchestrator:latest .
 ```
 
 ### Create Namespace and Secrets

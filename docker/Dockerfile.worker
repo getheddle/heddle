@@ -1,5 +1,5 @@
 # Dockerfile for Loom LLM/processor workers.
-# Build: docker build -f Dockerfile.worker -t loom-worker .
+# Build: docker build -f docker/Dockerfile.worker -t loom-worker .
 # Run:   docker run -e WORKER_CONFIG=configs/workers/summarizer.yaml \
 #                   -e MODEL_TIER=local \
 #                   -e NATS_URL=nats://nats:4222 \
@@ -23,6 +23,6 @@ ENV WORKER_CONFIG="configs/workers/summarizer.yaml"
 ENV MODEL_TIER="local"
 ENV NATS_URL="nats://nats:4222"
 
-COPY entrypoint.sh /entrypoint.sh
+COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]

@@ -4,11 +4,7 @@
 # dispatches them to workers via the router, and synthesizes the results.
 # It requires both NATS (messaging) and Redis (checkpoint state).
 #
-# Note: OrchestratorActor is currently a stub -- the decompose/dispatch/
-# synthesize loop is not yet implemented. The container will start and
-# subscribe to loom.goals.incoming, but will only log received messages.
-#
-# Build:  docker build -f Dockerfile.orchestrator -t loom-orchestrator .
+# Build:  docker build -f docker/Dockerfile.orchestrator -t loom-orchestrator .
 # Run:    docker run -e NATS_URL=nats://nats:4222 -e REDIS_URL=redis://redis:6379 loom-orchestrator
 FROM python:3.12-slim
 

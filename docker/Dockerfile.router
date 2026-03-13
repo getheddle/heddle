@@ -5,7 +5,7 @@
 # on worker_type and model_tier.  It runs as a long-lived process, blocking
 # on an asyncio Event after subscribing to NATS.
 #
-# Build:  docker build -f Dockerfile.router -t loom-router .
+# Build:  docker build -f docker/Dockerfile.router -t loom-router .
 # Run:    docker run -e NATS_URL=nats://nats:4222 loom-router
 FROM python:3.12-slim
 
