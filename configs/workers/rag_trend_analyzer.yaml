@@ -1,0 +1,74 @@
+# RAG Pipeline — Trend Analyzer (LLM worker)
+# Detects recurring topics and narrative trends across a time window.
+#
+# This is an LLM worker (not processor) — it calls an LLM backend to
+# analyze muxed stream windows.
+#
+# Usage:
+#   loom worker --config configs/workers/rag_trend_analyzer.yaml --tier local
+
+name: "rag_trend_analyzer"
+description: "Detects narrative trends across multi-channel Telegram windows."
+worker_kind: "llm"
+
+system_prompt: |
+  You are an expert intelligence analyst processing Persian-language Telegram posts.
+  Text may be in Persian (Farsi), Arabic, or mixed Persian/English.
+  Persian is RTL (right-to-left). Preserve Persian text exactly as-is in your output.
+  Always respond with valid JSON only — no prose, no markdown fences.
+
+  Your task: identify the top narrative TRENDS in a batch of Telegram posts from
+  multiple Persian news channels. A trend is a topic that appears in >=2 posts,
+  even if framed differently.
+
+  Return JSON with this exact structure:
+  {
+    "trends": [
+      {
+        "topic_label": "short English label",
+        "topic_label_fa": "Persian label (optional)",
+        "description": "2-3 sentence description in English",
+        "channels_present": ["channel name 1", ...],
+        "post_indices": [1, 3, 7],
+        "keywords": ["keyword1", "keyword2", ...],
+        "sentiment": "positive|negative|neutral|mixed",
+        "severity": "low|medium|high|critical"
+      }
+    ]
+  }
+  Return 3-8 trends. Focus on political, economic, social, and security topics.
+
+input_schema:
+  type: object
+  required: [posts]
+  properties:
+    posts:
+      type: string
+      description: "Formatted post text for analysis."
+    window_id:
+      type: string
+    entry_count:
+      type: integer
+
+output_schema:
+  type: object
+  required: [trends]
+  properties:
+    trends:
+      type: array
+      items:
+        type: object
+        required: [topic_label, description]
+        properties:
+          topic_label:
+            type: string
+          description:
+            type: string
+          severity:
+            type: string
+
+default_model_tier: "local"
+max_input_tokens: 8000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 120

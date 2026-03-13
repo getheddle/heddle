@@ -1,0 +1,37 @@
+# RAG Pipeline — Multi-channel Telegram stream analysis.
+# Run with:  loom pipeline --config configs/orchestrators/rag_pipeline.yaml \
+#                          --nats-url nats://localhost:4222
+# Submit:    loom submit "Analyze Telegram streams" \
+#                --context source_paths='["/data/result-1.json","/data/result-2.json"]'
+#
+# Data flow:
+#   1. ingest:     Read Telegram JSON exports → NormalizedPost objects
+#   2. mux:        Merge multi-channel posts chronologically with time windows
+#   3. chunk:      Split post text into sentence-level chunks
+#   4. vectorize:  Embed chunks and store in DuckDB vector store
+#
+# LLM analysis actors (trend, corroboration, anomaly, extraction) run
+# independently on muxed windows — see the test project for batch usage.
+
+name: "rag_pipeline"
+timeout_seconds: 300
+
+pipeline_stages:
+  - name: "ingest"
+    worker_type: "rag_ingestor"
+    tier: "local"
+    input_mapping:
+      source_path: "goal.context.source_path"
+
+  - name: "chunk"
+    worker_type: "rag_chunker"
+    tier: "local"
+    input_mapping:
+      posts: "ingest.output.posts"
+
+  - name: "vectorize"
+    worker_type: "rag_vectorstore"
+    tier: "local"
+    input_mapping:
+      action: "'store'"
+      chunks: "chunk.output.chunks"

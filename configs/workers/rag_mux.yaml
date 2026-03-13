@@ -1,0 +1,46 @@
+# RAG Pipeline — Stream Multiplexer (processor worker)
+# Merges multi-channel post streams into a chronological MuxedStream.
+#
+# Usage:
+#   loom processor --config configs/workers/rag_mux.yaml
+
+name: "rag_mux"
+description: "Multiplexes multi-channel post streams with time windowing."
+worker_kind: "processor"
+
+processing_backend: "loom.contrib.rag.backends.MuxBackend"
+backend_config: {}
+
+input_schema:
+  type: object
+  required: [posts_by_channel]
+  properties:
+    posts_by_channel:
+      type: array
+      items:
+        type: array
+        items:
+          type: object
+      description: "List of channel post lists (each a list of NormalizedPost dicts)."
+    window_hours:
+      type: number
+      default: 6.0
+      description: "Window duration in hours."
+    sliding_step_hours:
+      type: number
+      description: "Step interval for sliding windows (omit for tumbling)."
+
+output_schema:
+  type: object
+  required: [stream, total_entries, window_count]
+  properties:
+    stream:
+      type: object
+    total_entries:
+      type: integer
+    window_count:
+      type: integer
+
+default_model_tier: "local"
+reset_after_task: true
+timeout_seconds: 120

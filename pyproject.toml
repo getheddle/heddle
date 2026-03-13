@@ -24,6 +24,10 @@ docproc = [
 duckdb = [
     "duckdb>=1.0.0",           # Embedded analytics database
 ]
+rag = [
+    "duckdb>=1.0.0",           # Vector store backend
+    "requests>=2.31.0",        # Ollama HTTP calls from LLM analyzers
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

@@ -1,0 +1,56 @@
+# RAG Pipeline — Vector Store (processor worker)
+# DuckDB-backed embedding storage and similarity search.
+#
+# Usage:
+#   loom processor --config configs/workers/rag_vectorstore.yaml
+
+name: "rag_vectorstore"
+description: "Vector store for embedding storage and semantic search."
+worker_kind: "processor"
+
+processing_backend: "loom.contrib.rag.backends.VectorStoreBackend"
+backend_config:
+  db_path: "/tmp/rag-vectors.duckdb"
+  embedding_model: "nomic-embed-text"
+  ollama_url: "http://localhost:11434"
+
+input_schema:
+  type: object
+  required: [action]
+  properties:
+    action:
+      type: string
+      enum: [store, search, stats]
+    chunks:
+      type: array
+      items:
+        type: object
+      description: "TextChunk dicts (for 'store' action)."
+    query:
+      type: string
+      description: "Search query (for 'search' action)."
+    limit:
+      type: integer
+      default: 10
+    channel_ids:
+      type: array
+      items:
+        type: integer
+
+output_schema:
+  type: object
+  properties:
+    stored_count:
+      type: integer
+    total:
+      type: integer
+    results:
+      type: array
+      items:
+        type: object
+    count:
+      type: integer
+
+default_model_tier: "local"
+reset_after_task: true
+timeout_seconds: 300

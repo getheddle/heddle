@@ -1,0 +1,39 @@
+# RAG Pipeline — Telegram Ingestor (processor worker)
+# Reads a Telegram JSON export and produces NormalizedPost objects.
+#
+# Usage:
+#   loom processor --config configs/workers/rag_ingestor.yaml
+
+name: "rag_ingestor"
+description: "Ingests Telegram JSON exports into NormalizedPost objects."
+worker_kind: "processor"
+
+processing_backend: "loom.contrib.rag.backends.IngestorBackend"
+backend_config: {}
+
+input_schema:
+  type: object
+  required: [source_path]
+  properties:
+    source_path:
+      type: string
+      description: "Absolute path to a Telegram JSON export file."
+
+output_schema:
+  type: object
+  required: [posts, channel_id, channel_name, post_count]
+  properties:
+    posts:
+      type: array
+      items:
+        type: object
+    channel_id:
+      type: integer
+    channel_name:
+      type: string
+    post_count:
+      type: integer
+
+default_model_tier: "local"
+reset_after_task: true
+timeout_seconds: 120

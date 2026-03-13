@@ -1,0 +1,45 @@
+# RAG Pipeline — Sentence Chunker (processor worker)
+# Splits NormalizedPost texts into TextChunk fragments for embedding.
+#
+# Usage:
+#   loom processor --config configs/workers/rag_chunker.yaml
+
+name: "rag_chunker"
+description: "Persian-aware sentence chunker for RAG text splitting."
+worker_kind: "processor"
+
+processing_backend: "loom.contrib.rag.backends.ChunkerBackend"
+backend_config:
+  target_chars: 400
+  max_chars: 600
+
+input_schema:
+  type: object
+  required: [posts]
+  properties:
+    posts:
+      type: array
+      items:
+        type: object
+      description: "List of NormalizedPost dicts."
+    target_chars:
+      type: integer
+      default: 400
+    max_chars:
+      type: integer
+      default: 600
+
+output_schema:
+  type: object
+  required: [chunks, chunk_count]
+  properties:
+    chunks:
+      type: array
+      items:
+        type: object
+    chunk_count:
+      type: integer
+
+default_model_tier: "local"
+reset_after_task: true
+timeout_seconds: 120
