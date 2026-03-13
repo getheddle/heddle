@@ -13,9 +13,10 @@ src/loom/
   core/         # Message schemas (Pydantic), base actor class, I/O contract validation, workspace manager, config loader
   worker/       # Stateless LLM worker actor, processor worker, LLM backend adapters, knowledge loader, tool-use, embeddings
   orchestrator/ # Orchestrator actor, checkpoint system (pluggable store), goal decomposer, result synthesizer, pipeline orchestrator
+  scheduler/    # Time-driven scheduler actor (cron + interval dispatch of goals/tasks)
   router/       # Deterministic task router with dead-letter handling and rate limiting (not an LLM — pure logic)
   bus/          # Message bus abstraction (MessageBus ABC, InMemoryBus, NATSBus)
-  cli/          # Click CLI entry point (worker, processor, pipeline, orchestrator, router, submit commands)
+  cli/          # Click CLI entry point (worker, processor, pipeline, orchestrator, scheduler, router, submit commands)
   contrib/      # Optional integrations (Django-style contrib namespace)
     duckdb/     # DuckDB tools and backends: DuckDBViewTool, DuckDBVectorTool, DuckDBQueryBackend
     redis/      # Redis-backed CheckpointStore (optional: pip install loom[redis])
@@ -23,6 +24,7 @@ src/loom/
 configs/
   workers/      # YAML configs defining each worker's system prompt, I/O schema, default tier
   orchestrators/# Orchestrator configs (default + RAG pipeline)
+  schedulers/   # Scheduler configs (cron + interval schedule definitions)
   router_rules.yaml  # Tier overrides and rate limits (enforced by token-bucket limiter)
 docker/         # Dockerfiles (orchestrator, router, worker) and entrypoint script
 k8s/            # Kubernetes manifests (Minikube-ready, Kustomize)
@@ -43,6 +45,7 @@ tests/          # Unit tests (messages, contracts, checkpoint, pipeline, workers
   - `loom.tasks.dead_letter` — Unroutable/rate-limited tasks land here
   - `loom.results.{goal_id}` — Results flow back to orchestrators
   - `loom.goals.incoming` — Top-level goals for orchestrators
+  - `loom.scheduler.{name}` — Scheduler health-check subject
 
 ## Build and test commands
 
@@ -72,6 +75,9 @@ loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://
 # Run a pipeline
 loom pipeline --config configs/orchestrators/doc_pipeline.yaml --nats-url nats://localhost:4222
 
+# Run the scheduler (needs NATS running, optional: pip install loom[scheduler])
+loom scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
+
 # Submit a test goal
 loom submit "some goal text" --nats-url nats://localhost:4222
 ```
@@ -92,10 +98,11 @@ All major components are implemented and functional:
 - **PipelineOrchestrator:** Fully functional sequential stage execution with input mapping, conditions, timeouts.
 - **ProcessorWorker:** Non-LLM backend support with BackendError hierarchy and SyncProcessingBackend for CPU-bound backends.
 - **WorkspaceManager:** Centralized file-ref resolution with path traversal protection, JSON/text read/write helpers.
-- **CLI:** All 6 commands registered (worker, processor, pipeline, orchestrator, router, submit). Tier mismatch warnings on worker startup.
+- **Scheduler:** SchedulerActor for time-driven dispatch. Supports cron expressions (via croniter) and fixed-interval timers. Each schedule entry dispatches either an OrchestratorGoal or TaskMessage. Config-only — no runtime control messages. Optional dependency: `pip install loom[scheduler]`.
+- **CLI:** All 7 commands registered (worker, processor, pipeline, orchestrator, scheduler, router, submit). Tier mismatch warnings on worker startup.
 - **Contrib DuckDB:** `loom.contrib.duckdb` — DuckDBViewTool (view-based LLM tool), DuckDBVectorTool (semantic similarity search), DuckDBQueryBackend (action-dispatch query backend with FTS, filtering, stats, get, vector search). All configurable via constructor params. Optional dependency: `pip install loom[duckdb]`.
 - **Contrib Redis:** `loom.contrib.redis` — RedisCheckpointStore for production checkpoint persistence. Optional dependency: `pip install loom[redis]`.
-- **Tests:** 382 unit tests pass (messages, contracts, checkpoint, pipeline, workers, processor, workspace, tools, tool-use, knowledge silos, embeddings, contrib/duckdb, contrib/rag). Integration test has `@pytest.mark.integration` marker and polling-based result collection.
+- **Tests:** 424 unit tests pass (messages, contracts, checkpoint, pipeline, workers, processor, workspace, tools, tool-use, knowledge silos, embeddings, contrib/duckdb, contrib/rag, scheduler). Integration test has `@pytest.mark.integration` marker and polling-based result collection.
 - **Infrastructure:** Dockerfiles (in `docker/`) and k8s manifests updated with correct CMDs and no stale FIXMEs.
 
 ## Known issues

@@ -1,0 +1,33 @@
+# Example scheduler configuration.
+#
+# Each schedule entry fires on a cron expression or fixed interval and
+# dispatches either an OrchestratorGoal or a TaskMessage into the
+# existing NATS message flow.
+#
+# Usage:
+#   loom scheduler --config configs/schedulers/example.yaml \
+#                  --nats-url nats://localhost:4222
+
+name: "default_scheduler"
+
+schedules:
+  # --- Cron-based goal dispatch ---
+  - name: "hourly_summarize"
+    cron: "0 * * * *"               # Top of every hour
+    dispatch_type: "goal"
+    goal:
+      instruction: "Summarize all new documents from the last hour"
+      context:
+        source: "incoming_docs"
+      priority: "normal"            # low | normal | high | critical
+
+  # --- Interval-based task dispatch ---
+  - name: "every_5m_healthcheck"
+    interval_seconds: 300            # Every 5 minutes
+    dispatch_type: "task"
+    task:
+      worker_type: "health_checker"
+      payload:
+        check: "system_status"
+      model_tier: "local"           # local | standard | frontier
+      priority: "low"

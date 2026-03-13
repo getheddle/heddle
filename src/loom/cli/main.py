@@ -10,6 +10,7 @@ Commands:
     loom processor    -- Start a non-LLM processor worker (e.g., DoclingBackend)
     loom pipeline     -- Start a pipeline orchestrator (sequential stage execution)
     loom orchestrator -- Start the dynamic LLM-based orchestrator (OrchestratorActor)
+    loom scheduler    -- Start the time-driven scheduler (cron + interval dispatch)
     loom router       -- Start the deterministic task router
     loom submit       -- Submit a goal to the orchestrator
 
@@ -355,6 +356,67 @@ def orchestrator(config: str, nats_url: str, redis_url: str):
     )
 
     asyncio.run(actor.run("loom.goals.incoming", queue_group="orchestrators"))
+
+
+# ---------------------------------------------------------------------------
+# scheduler command
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option("--config", required=True, help="Path to scheduler config YAML")
+@click.option("--nats-url", default="nats://nats:4222", help="NATS server URL")
+def scheduler(config: str, nats_url: str):
+    """Start the time-driven scheduler (cron + interval dispatch).
+
+    The scheduler reads a YAML config defining cron expressions and/or
+    fixed-interval timers.  When a timer fires, it publishes an
+    OrchestratorGoal or TaskMessage to the appropriate NATS subject.
+
+    All schedules are defined at startup via config.  There are no
+    runtime control messages.
+
+    Requires the 'croniter' package for cron expression support:
+
+    \b
+        pip install loom[scheduler]
+
+    Subscribes to: loom.scheduler.{name}  (health checks)
+    Publishes to:  loom.goals.incoming / loom.tasks.incoming
+
+    See configs/schedulers/example.yaml for a reference config.
+    """
+    import yaml
+
+    from loom.scheduler.config import validate_scheduler_config
+    from loom.scheduler.scheduler import SchedulerActor
+
+    with open(config) as f:
+        cfg = yaml.safe_load(f)
+
+    errors = validate_scheduler_config(cfg, config)
+    if errors:
+        for err in errors:
+            logger.error("scheduler.config_error", error=err)
+        raise click.ClickException(
+            f"Scheduler config has {len(errors)} error(s). See log above."
+        )
+
+    actor = SchedulerActor(
+        actor_id=f"scheduler-{cfg['name']}",
+        config_path=config,
+        nats_url=nats_url,
+    )
+
+    subject = f"loom.scheduler.{cfg['name']}"
+    logger.info(
+        "scheduler.starting",
+        name=cfg["name"],
+        config_path=config,
+        schedule_count=len(cfg.get("schedules", [])),
+    )
+
+    asyncio.run(actor.run(subject))
 
 
 # ---------------------------------------------------------------------------

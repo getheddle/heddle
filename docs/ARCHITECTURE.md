@@ -41,6 +41,10 @@ src/loom/
 │   ├── decomposer.py    # LLM-driven goal → subtask decomposition with worker manifest grounding
 │   └── synthesizer.py   # Multi-result aggregation (deterministic merge + LLM synthesis modes)
 │
+├── scheduler/
+│   ├── scheduler.py     # Time-driven dispatch actor (cron + interval)
+│   └── config.py        # Scheduler config validation
+│
 ├── router/
 │   └── router.py        # Deterministic task routing with dead-letter handling and rate limiting
 │
@@ -50,7 +54,7 @@ src/loom/
 │   └── nats_adapter.py  # NATS pub/sub/request wrapper
 │
 ├── cli/
-│   └── main.py          # Click CLI: worker, processor, pipeline, orchestrator, router, submit
+│   └── main.py          # Click CLI: worker, processor, pipeline, orchestrator, scheduler, router, submit
 │
 └── contrib/
     ├── duckdb/          # DuckDB tools and backends (optional: pip install loom[duckdb])
@@ -71,6 +75,8 @@ configs/
 ├── orchestrators/
 │   ├── default.yaml            # General-purpose orchestrator config
 │   └── rag_pipeline.yaml       # RAG pipeline orchestrator config
+├── schedulers/
+│   └── example.yaml            # Reference scheduler config (cron + interval examples)
 └── router_rules.yaml           # Tier overrides and rate limits
 
 docker/                   # Dockerfiles and entrypoint script
@@ -84,6 +90,7 @@ tests/                    # Unit + integration tests
 ## How the Pieces Connect
 
 1. **You submit a goal** via CLI or publish to `loom.goals.incoming`
+   (optionally, **the scheduler** fires goals or tasks on cron/interval timers)
 2. **The orchestrator** decomposes it into subtasks (via LLM-driven GoalDecomposer), each targeting a `worker_type`
 3. **The router** picks up tasks from `loom.tasks.incoming`, resolves the model tier, enforces rate limits, and publishes to `loom.tasks.{worker_type}.{tier}` (unroutable tasks go to `loom.tasks.dead_letter`)
 4. **Workers** (competing consumers via NATS queue groups) pick up tasks, call the appropriate LLM backend, validate the output, and publish results to `loom.results.{goal_id}`
@@ -104,6 +111,7 @@ into a structured summary.
 | `loom.tasks.{worker_type}.{tier}` | Routed tasks; workers subscribe with queue groups |
 | `loom.tasks.dead_letter` | Unroutable or rate-limited tasks |
 | `loom.results.{goal_id}` | Results flow back to orchestrators |
+| `loom.scheduler.{name}` | Scheduler health-check subject |
 
 ---
 
@@ -169,6 +177,19 @@ Full decompose → dispatch → collect → synthesize loop:
 
 Sequential stage execution where each stage maps inputs from previous stage
 outputs. Supports conditions, timeouts, and input mapping expressions.
+
+### Scheduler (`scheduler/scheduler.py`)
+
+Time-driven actor that dispatches goals and tasks on schedules defined
+in YAML config. Supports cron expressions (via `croniter`) and fixed-interval
+timers. Each schedule entry publishes either an `OrchestratorGoal` to
+`loom.goals.incoming` or a `TaskMessage` to `loom.tasks.incoming`.
+
+Config-only design: all schedules are defined at startup. No runtime
+control messages. The scheduler extends `BaseActor` with a background
+timer loop running alongside the standard message subscription.
+
+Optional dependency: `pip install loom[scheduler]` (for cron support).
 
 ### Router (`router/router.py`)
 
