@@ -287,11 +287,17 @@ def run_streamable_http(
 ) -> None:
     """Run the MCP server on streamable HTTP transport (blocking).
 
-    Requires ``uvicorn`` to be installed.
+    Requires ``uvicorn`` to be installed.  Uses the MCP SDK's
+    ``StreamableHTTPSessionManager`` to handle MCP protocol messages
+    over HTTP, with a ``/health`` convenience endpoint.
     """
 
     async def _run():
         import uvicorn
+        from starlette.applications import Starlette
+        from starlette.routing import Route
+        from starlette.responses import JSONResponse
+        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
         await gateway.bridge.connect()
         logger.info("mcp.gateway.connected", nats_url=gateway.config.get("nats_url"))
@@ -299,19 +305,33 @@ def run_streamable_http(
         if gateway.resources:
             gateway.resources.snapshot()
 
-        # Wrap the low-level server in a Starlette app.
-        # The FastMCP streamable_http_app() helper is the simplest path.
-        # We'll create a minimal ASGI app from the low-level server instead.
-        from starlette.applications import Starlette
-        from starlette.routing import Route
-        from starlette.responses import JSONResponse
+        # Session manager wraps the low-level MCP server and handles
+        # session lifecycle, transport creation, and request dispatch.
+        session_manager = StreamableHTTPSessionManager(
+            app=server,
+            stateless=True,
+        )
+
+        # Thin ASGI callable that delegates to the session manager.
+        async def mcp_asgi_handler(scope, receive, send):
+            await session_manager.handle_request(scope, receive, send)
 
         async def health(request):
             return JSONResponse({"status": "ok", "name": gateway.config["name"]})
 
-        app = Starlette(routes=[Route("/health", health)])
+        async def lifespan(app):
+            async with session_manager.run():
+                yield
 
-        config = uvicorn.Config(app, host=host, port=port)
+        starlette_app = Starlette(
+            routes=[
+                Route("/health", health),
+                Route("/mcp", endpoint=mcp_asgi_handler, methods=["GET", "POST", "DELETE"]),
+            ],
+            lifespan=lifespan,
+        )
+
+        config = uvicorn.Config(starlette_app, host=host, port=port, log_level="info")
         uv_server = uvicorn.Server(config)
 
         try:
