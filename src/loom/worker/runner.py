@@ -20,41 +20,46 @@ from loom.worker.tools import MAX_TOOL_ROUNDS, ToolProvider, load_tool_provider
 
 logger = structlog.get_logger()
 
-# Regex to strip markdown code fences that LLMs commonly wrap JSON in.
-# Matches ```json ... ``` or ``` ... ``` with optional whitespace.
-_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?\s*```$", re.DOTALL)
+# Regex to strip markdown code fences that LLMs commonly wrap output in.
+# Matches ```json, ```yaml, or bare ``` blocks — anchored version for clean responses.
+_FENCE_RE = re.compile(r"^```(?:json|ya?ml)?\s*\n?(.*?)\n?\s*```$", re.DOTALL)
+# Unanchored version: finds the first code fence anywhere (handles preamble text).
+_FENCE_SEARCH_RE = re.compile(r"```(?:json|ya?ml)?\s*\n?(.*?)\n?\s*```", re.DOTALL)
 
 
 def _extract_json(raw: str) -> dict:
-    """Extract a JSON object from an LLM response, handling common quirks.
+    """Extract a structured dict from an LLM response (JSON or YAML).
 
-    LLMs frequently wrap valid JSON in markdown code fences (```json ... ```)
-    or add explanatory text before/after the JSON object. This function
-    handles those cases in order of preference:
+    LLMs frequently wrap output in markdown code fences or add explanatory
+    text.  This function tries parsers in order of preference:
 
-    1. Direct parse (ideal — model returned clean JSON)
-    2. Strip markdown fences and parse
-    3. Extract the first { ... } block via regex (fallback for preamble/postamble)
+    1. Direct JSON parse (ideal — model returned clean JSON)
+    2. Strip markdown fences and parse as JSON
+    3. Extract the first { ... } block via regex and parse as JSON
+    4. Strip markdown fences and parse as YAML (handles yaml_only workers)
+    5. Direct YAML parse of the full response
 
-    Raises ValueError if no valid JSON object can be extracted.
+    Raises ValueError if no valid structured output can be extracted.
     """
-    # 1. Try direct parse
     stripped = raw.strip()
+
+    # --- JSON attempts ---
+    # 1. Direct JSON parse
     try:
         return json.loads(stripped)
     except json.JSONDecodeError:
         pass
 
-    # 2. Try stripping markdown fences
-    fence_match = _FENCE_RE.match(stripped)
-    if fence_match:
+    # 2. Strip markdown fences and try JSON
+    fence_match = _FENCE_RE.match(stripped) or _FENCE_SEARCH_RE.search(stripped)
+    fence_content = fence_match.group(1).strip() if fence_match else None
+    if fence_content:
         try:
-            return json.loads(fence_match.group(1).strip())
+            return json.loads(fence_content)
         except json.JSONDecodeError:
             pass
 
-    # 3. Fallback: extract the first JSON object from anywhere in the response.
-    # This handles cases where the LLM adds prose before/after the JSON.
+    # 3. Extract the first { ... } JSON block from anywhere in the response
     obj_match = re.search(r"\{.*\}", stripped, re.DOTALL)
     if obj_match:
         try:
@@ -62,7 +67,30 @@ def _extract_json(raw: str) -> dict:
         except json.JSONDecodeError:
             pass
 
-    raise ValueError(f"LLM returned non-JSON: {raw[:200]}")
+    # --- YAML fallback (for workers with output_constraints.format: yaml_only) ---
+    try:
+        import yaml
+    except ImportError:
+        raise ValueError(f"LLM returned non-JSON: {raw[:200]}")
+
+    # 4. Parse fenced content as YAML
+    if fence_content:
+        try:
+            parsed = yaml.safe_load(fence_content)
+            if isinstance(parsed, dict):
+                return parsed
+        except yaml.YAMLError:
+            pass
+
+    # 5. Direct YAML parse
+    try:
+        parsed = yaml.safe_load(stripped)
+        if isinstance(parsed, dict):
+            return parsed
+    except yaml.YAMLError:
+        pass
+
+    raise ValueError(f"LLM returned non-JSON/YAML: {raw[:200]}")
 
 
 class LLMWorker(TaskWorker):
@@ -132,7 +160,10 @@ class LLMWorker(TaskWorker):
         tool_defs = [p.get_definition() for p in tool_providers.values()] or None
 
         # 3. Resolve backend from task metadata or config default
-        tier = metadata.get("model_tier", self.config.get("default_model_tier", "standard"))
+        tier = metadata.get(
+            "model_tier",
+            self.config.get("default_model_tier", self.config.get("default_tier", "standard")),
+        )
         backend = self.backends.get(tier)
         if not backend:
             raise RuntimeError(f"No backend for tier: {tier}")

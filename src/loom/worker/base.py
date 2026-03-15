@@ -64,8 +64,10 @@ class TaskWorker(BaseActor):
                 await self._publish_result(task, TaskStatus.FAILED, error=f"Input validation: {errors}")
                 return
 
-            # 2. Delegate to subclass
-            result = await self.process(task.payload, task.metadata)
+            # 2. Delegate to subclass — inject model_tier into metadata
+            #    so process() can resolve the correct LLM backend.
+            enriched_metadata = {**task.metadata, "model_tier": task.model_tier.value}
+            result = await self.process(task.payload, enriched_metadata)
 
             # 3. Validate output
             output = result["output"]
