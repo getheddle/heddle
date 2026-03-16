@@ -56,7 +56,8 @@ class NATSSubscription(Subscription):
         """
         try:
             msg = await self._sub.next_msg(timeout=None)
-        except Exception:
+        except Exception as e:
+            logger.error("nats.subscription_error", error=str(e), error_type=type(e).__name__)
             raise StopAsyncIteration
         return json.loads(msg.data.decode())
 
