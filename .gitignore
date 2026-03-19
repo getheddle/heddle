@@ -8,6 +8,7 @@ dist/
 build/
 .DS_Store
 .coverage
+coverage.json
 coverage.xml
 htmlcov/
 
