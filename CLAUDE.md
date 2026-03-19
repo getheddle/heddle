@@ -151,53 +151,52 @@ tests/                    # 32 test files, 519 unit tests + 1 integration test
 ## Build and test commands
 
 ```bash
-# Create venv and install (Python 3.11+ required)
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+# Install all dependencies (Python 3.11+ required, uses uv)
+uv sync --all-extras
 
 # Run unit tests (no infrastructure needed — excludes integration tests)
-pytest tests/ -v -m "not integration"
+uv run pytest tests/ -v -m "not integration"
 
 # Run ALL tests including integration (needs NATS + workers running)
-pytest tests/ -v
+uv run pytest tests/ -v
 
 # Lint
-ruff check src/
+uv run ruff check src/
 
 # Run a worker locally (needs NATS running)
-loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
+uv run loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
 
 # Run the router
-loom router --nats-url nats://localhost:4222
+uv run loom router --nats-url nats://localhost:4222
 
 # Run the orchestrator
-loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
+uv run loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
 
 # Run a pipeline
-loom pipeline --config configs/orchestrators/rag_pipeline.yaml --nats-url nats://localhost:4222
+uv run loom pipeline --config configs/orchestrators/rag_pipeline.yaml --nats-url nats://localhost:4222
 
-# Run the scheduler (needs NATS running, optional: pip install loom[scheduler])
-loom scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
+# Run the scheduler (needs NATS running)
+uv run loom scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
 
 # Submit a test goal
-loom submit "some goal text" --nats-url nats://localhost:4222
+uv run loom submit "some goal text" --nats-url nats://localhost:4222
 
-# Run an MCP server (needs NATS + workers running, optional: pip install loom[mcp])
-loom mcp --config configs/mcp/docman.yaml
-loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
+# Run an MCP server (needs NATS + workers running)
+uv run loom mcp --config configs/mcp/docman.yaml
+uv run loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
 ```
 
 ## Optional dependencies
 
 ```bash
-pip install loom[redis]       # Redis-backed CheckpointStore
-pip install loom[local]       # Ollama client for local models
-pip install loom[docproc]     # Docling for document extraction (PDF, DOCX)
-pip install loom[duckdb]      # DuckDB embedded analytics
-pip install loom[rag]         # RAG pipeline (DuckDB + requests for Ollama)
-pip install loom[scheduler]   # Cron expression parsing (croniter)
-pip install loom[mcp]         # MCP gateway (Model Context Protocol SDK)
-pip install loom[dev]         # All dev/test dependencies
+uv sync --extra redis         # Redis-backed CheckpointStore
+uv sync --extra local         # Ollama client for local models
+uv sync --extra docproc       # Docling for document extraction (PDF, DOCX)
+uv sync --extra duckdb        # DuckDB embedded analytics
+uv sync --extra rag           # RAG pipeline (DuckDB + requests for Ollama)
+uv sync --extra scheduler     # Cron expression parsing (croniter)
+uv sync --extra mcp           # MCP gateway (Model Context Protocol SDK)
+uv sync --all-extras          # All dependencies including dev/test
 ```
 
 ## MCP gateway

@@ -51,8 +51,8 @@ dev = [
 loom = "loom.cli.main:cli"
 
 [build-system]
-requires = ["setuptools>=69.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 # Register custom markers so pytest does not emit "PytestUnknownMarkWarning".
@@ -77,5 +77,5 @@ exclude_lines = [
     "raise NotImplementedError",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/loom"]

@@ -103,12 +103,11 @@ that separates concerns across specialized actors.
 ## Quick Start
 
 ```bash
-# Requires Python 3.11+
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+# Requires Python 3.11+ and uv (https://docs.astral.sh/uv/)
+uv sync --all-extras
 
 # Run unit tests (no infrastructure needed)
-pytest tests/ -v -m "not integration"
+uv run pytest tests/ -v -m "not integration"
 ```
 
 For the full 7-step setup with infrastructure and LLM backends, see

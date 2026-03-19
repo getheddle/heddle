@@ -7,6 +7,7 @@
 ## Prerequisites
 
 - Python 3.11+
+- [uv](https://docs.astral.sh/uv/) package manager
 - At least one LLM backend (Ollama recommended to start)
 - NATS and Redis for full infrastructure (not needed for unit tests)
 
@@ -15,20 +16,19 @@
 ## 1. Install Python Dependencies
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+# Requires uv (https://docs.astral.sh/uv/)
+uv sync --all-extras
 ```
 
 Loom has optional extras for integrations:
 
 ```bash
-pip install loom[duckdb]      # DuckDB tools and query backends
-pip install loom[redis]       # Redis-backed checkpoint store
-pip install loom[local]       # Ollama client
-pip install loom[rag]         # RAG pipeline (DuckDB + Ollama)
-pip install loom[scheduler]   # Cron expression parsing (croniter)
-pip install loom[mcp]         # MCP gateway (Model Context Protocol SDK)
+uv sync --extra duckdb        # DuckDB tools and query backends
+uv sync --extra redis         # Redis-backed checkpoint store
+uv sync --extra local         # Ollama client
+uv sync --extra rag           # RAG pipeline (DuckDB + Ollama)
+uv sync --extra scheduler     # Cron expression parsing (croniter)
+uv sync --extra mcp           # MCP gateway (Model Context Protocol SDK)
 ```
 
 ---
@@ -36,7 +36,7 @@ pip install loom[mcp]         # MCP gateway (Model Context Protocol SDK)
 ## 2. Run the Unit Tests (No Infrastructure Needed)
 
 ```bash
-pytest tests/ -v -m "not integration"
+uv run pytest tests/ -v -m "not integration"
 ```
 
 This runs all unit tests (messages, contracts, checkpoint, pipeline, workers,
@@ -96,13 +96,13 @@ Configure via the `OpenAICompatibleBackend` in `src/loom/worker/backends.py`.
 
 ```bash
 # Terminal 1: Start the router
-loom router --nats-url nats://localhost:4222
+uv run loom router --nats-url nats://localhost:4222
 
 # Terminal 2: Start the orchestrator
-loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
+uv run loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
 
 # Terminal 3: Start a summarizer worker
-loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
+uv run loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
 ```
 
 ---
@@ -111,7 +111,7 @@ loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nat
 
 ```bash
 # Terminal 4: Send a task through the system
-loom submit "Summarize the main points of the UN Charter preamble" --nats-url nats://localhost:4222
+uv run loom submit "Summarize the main points of the UN Charter preamble" --nats-url nats://localhost:4222
 ```
 
 Monitor what's happening:
@@ -134,7 +134,7 @@ Edit the file — define a system prompt, input/output schemas, and default tier
 Then start it:
 
 ```bash
-loom worker --config configs/workers/my_worker.yaml --tier local
+uv run loom worker --config configs/workers/my_worker.yaml --tier local
 ```
 
 For a comprehensive guide to building workers, pipelines, knowledge injection,
@@ -146,34 +146,34 @@ tool-use, and more, see [Building Workflows](building-workflows.md).
 
 ```bash
 # Run a worker locally
-loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
+uv run loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
 
 # Run a processor worker
-loom processor --config configs/workers/my_processor.yaml --nats-url nats://localhost:4222
+uv run loom processor --config configs/workers/my_processor.yaml --nats-url nats://localhost:4222
 
 # Run the router
-loom router --nats-url nats://localhost:4222
+uv run loom router --nats-url nats://localhost:4222
 
 # Run the orchestrator
-loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
+uv run loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
 
 # Run a pipeline
-loom pipeline --config configs/orchestrators/my_pipeline.yaml --nats-url nats://localhost:4222
+uv run loom pipeline --config configs/orchestrators/my_pipeline.yaml --nats-url nats://localhost:4222
 
 # Run the scheduler
-loom scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
+uv run loom scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
 
 # Submit a goal
-loom submit "some goal text" --nats-url nats://localhost:4222
+uv run loom submit "some goal text" --nats-url nats://localhost:4222
 
 # Run an MCP server (stdio transport, default)
-loom mcp --config configs/mcp/docman.yaml
+uv run loom mcp --config configs/mcp/docman.yaml
 
 # Run an MCP server (streamable-http transport)
-loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
+uv run loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
 
 # Lint
-ruff check src/
+uv run ruff check src/
 ```
 
 ---
