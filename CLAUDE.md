@@ -117,13 +117,16 @@ examples/
 docker/                   # Dockerfiles (orchestrator, router, worker) + entrypoint.sh
 k8s/                      # Kubernetes manifests (namespace, NATS, Redis, workers, Kustomize)
 
-tests/                    # 32 test files, 519 unit tests + 1 integration test
+tests/                    # 42 test files, 692 unit tests + 1 integration test
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
   test_embeddings.py      test_workspace.py       test_decomposer.py
   test_synthesizer.py     test_orchestrator.py    test_pipeline.py
-  test_router.py          test_scheduler.py
+  test_router.py          test_scheduler.py       test_extract_json.py
+  test_backends.py        test_config_validation.py  test_scheduler_config.py
+  test_store.py           test_actor.py           test_nats_adapter.py
+  test_cli.py             test_redis_store.py     test_extract_json_extended.py
   test_contrib_duckdb_query.py  test_contrib_duckdb_vector.py  test_contrib_duckdb_view.py
   test_mcp_config.py      test_mcp_discovery.py   test_mcp_bridge.py
   test_mcp_resources.py   test_mcp_server.py

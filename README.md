@@ -96,7 +96,7 @@ that separates concerns across specialized actors.
 | Scheduler (cron + interval dispatch) | Complete |
 | MCP gateway (config-driven tool server) | Complete |
 | Contrib: DuckDB, Redis, RAG | Complete |
-| Unit tests | 498 passing |
+| Unit tests | 692 passing |
 
 ---
 
