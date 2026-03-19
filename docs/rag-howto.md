@@ -9,10 +9,7 @@ It is designed for Persian/RTL text but works with any language.
 ## Installation
 
 ```bash
-pip install loom[rag]
-
-# Or in development mode from the loom repo:
-pip install -e ".[rag]"
+uv sync --extra rag
 ```
 
 Dependencies added by `[rag]`: `duckdb>=1.0.0`, `requests>=2.31.0`.
@@ -404,15 +401,15 @@ Then use it with `merge_from_ingestors()` just like `TelegramIngestor`.
 
 ```bash
 # Run all RAG tests
-pytest tests/contrib/rag/ -v
+uv run pytest tests/contrib/rag/ -v
 
 # Run specific module tests
-pytest tests/contrib/rag/test_schemas.py -v
-pytest tests/contrib/rag/test_ingestion.py -v
-pytest tests/contrib/rag/test_mux.py -v
-pytest tests/contrib/rag/test_chunker.py -v
-pytest tests/contrib/rag/test_tools.py -v
-pytest tests/contrib/rag/test_backends.py -v
+uv run pytest tests/contrib/rag/test_schemas.py -v
+uv run pytest tests/contrib/rag/test_ingestion.py -v
+uv run pytest tests/contrib/rag/test_mux.py -v
+uv run pytest tests/contrib/rag/test_chunker.py -v
+uv run pytest tests/contrib/rag/test_tools.py -v
+uv run pytest tests/contrib/rag/test_backends.py -v
 ```
 
 All tests run without infrastructure (no NATS, no Ollama, no DuckDB server). DuckDB runs in-memory for tests.

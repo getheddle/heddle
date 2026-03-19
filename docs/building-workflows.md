@@ -25,14 +25,14 @@ Goal → Orchestrator → Router → Worker(s) → Results → Orchestrator → 
 
 Before building workflows, complete the setup in the main README:
 
-1. Python 3.11+ with `pip install -e ".[dev]"`
+1. Python 3.11+ with `uv sync --all-extras`
 2. NATS server running (e.g., `docker run -d -p 4222:4222 nats:2.10-alpine`)
 3. At least one LLM backend (Ollama recommended: `ollama pull llama3.2:3b`)
 
 Verify the setup:
 
 ```bash
-pytest tests/ -v -m "not integration"   # all unit tests should pass
+uv run pytest tests/ -v -m "not integration"   # all unit tests should pass
 ```
 
 ## Part 1: Create an LLM worker
@@ -631,7 +631,7 @@ Loom includes optional DuckDB tools and backends for workflows that need embedde
 Install the optional dependency:
 
 ```bash
-pip install loom[duckdb]
+uv sync --extra duckdb
 ```
 
 ### DuckDBViewTool — expose a DuckDB view as an LLM tool
@@ -717,7 +717,7 @@ Any LOOM system can become a Model Context Protocol (MCP) server with a single Y
 Install the optional dependency:
 
 ```bash
-pip install loom[mcp]
+uv sync --extra mcp
 ```
 
 ### Step 1: Create an MCP gateway config

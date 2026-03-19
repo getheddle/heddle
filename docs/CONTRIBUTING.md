@@ -91,8 +91,8 @@ infrastructure (NATS, Redis, Ollama). Use `InMemoryBus` and
 1. Fork the repo
 2. Make changes in a feature branch
 3. Sign the CLA when prompted
-4. Ensure all tests pass: `pytest tests/ -v -m "not integration"`
-5. Lint your code: `ruff check src/`
+4. Ensure all tests pass: `uv run pytest tests/ -v -m "not integration"`
+5. Lint your code: `uv run ruff check src/`
 6. Submit a pull request with a clear description of what changed and why
 
 Expect review feedback focused on architectural compliance and test coverage.

@@ -64,8 +64,8 @@ src/loom/
 │   └── main.py          # Click CLI: worker, processor, pipeline, orchestrator, scheduler, router, submit, mcp
 │
 └── contrib/
-    ├── duckdb/          # DuckDB tools and backends (optional: pip install loom[duckdb])
-    ├── redis/           # Redis-backed CheckpointStore (optional: pip install loom[redis])
+    ├── duckdb/          # DuckDB tools and backends (optional: uv sync --extra duckdb)
+    ├── redis/           # Redis-backed CheckpointStore (optional: uv sync --extra redis)
     └── rag/             # RAG pipeline: ingestion, chunking, embedding, analysis
 
 configs/
@@ -207,7 +207,7 @@ Config-only design: all schedules are defined at startup. No runtime
 control messages. The scheduler extends `BaseActor` with a background
 timer loop running alongside the standard message subscription.
 
-Optional dependency: `pip install loom[scheduler]` (for cron support).
+Optional dependency: `uv sync --extra scheduler` (for cron support).
 
 ### Router (`router/router.py`)
 
