@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% set active_nav = "pipelines" %}
+{% block title %}Pipelines — Loom Workshop{% endblock %}
+{% block content %}
+<h1>Pipelines</h1>
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Stages</th>
+            <th>Type</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in pipelines %}
+        <tr>
+            <td><a href="/pipelines/{{ p.name }}">{{ p.name }}</a></td>
+            <td>{{ p.stage_count }}</td>
+            <td>{% if p.has_pipeline_stages %}Pipeline{% else %}Orchestrator{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3">No pipeline configs found in <code>configs/orchestrators/</code></td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

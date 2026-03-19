@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Loom Workshop{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="/static/workshop.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+    <nav class="container-fluid">
+        <ul>
+            <li><strong>Loom Workshop</strong></li>
+        </ul>
+        <ul>
+            <li><a href="/workers" {% if active_nav == 'workers' %}aria-current="page"{% endif %}>Workers</a></li>
+            <li><a href="/pipelines" {% if active_nav == 'pipelines' %}aria-current="page"{% endif %}>Pipelines</a></li>
+        </ul>
+    </nav>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="container">
+        <small>Loom Workshop v0.1</small>
+    </footer>
+</body>
+</html>

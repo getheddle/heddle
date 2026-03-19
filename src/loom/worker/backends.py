@@ -21,6 +21,7 @@ Tool-use support:
 from __future__ import annotations
 
 import json
+import os
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -427,3 +428,35 @@ def _openai_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             })
 
     return result
+
+
+def build_backends_from_env() -> dict[str, LLMBackend]:
+    """Build LLM backends from environment variables.
+
+    Resolves available backends based on which env vars are set:
+
+    - ``OLLAMA_URL`` → OllamaBackend for the ``local`` tier
+    - ``OLLAMA_MODEL`` → Override Ollama model (default: ``llama3.2:3b``)
+    - ``ANTHROPIC_API_KEY`` → AnthropicBackend for ``standard`` + ``frontier``
+    - ``FRONTIER_MODEL`` → Override frontier model (default: ``claude-opus-4-20250514``)
+
+    Returns:
+        Dict mapping tier name → LLMBackend instance. May be empty if no
+        environment variables are set.
+    """
+    backends: dict[str, LLMBackend] = {}
+
+    if os.getenv("OLLAMA_URL"):
+        ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+        backends["local"] = OllamaBackend(
+            model=ollama_model, base_url=os.getenv("OLLAMA_URL")
+        )
+
+    if os.getenv("ANTHROPIC_API_KEY"):
+        backends["standard"] = AnthropicBackend(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        backends["frontier"] = AnthropicBackend(
+            api_key=os.getenv("ANTHROPIC_API_KEY"),
+            model=os.getenv("FRONTIER_MODEL", "claude-opus-4-20250514"),
+        )
+
+    return backends

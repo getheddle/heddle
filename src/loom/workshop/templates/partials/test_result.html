@@ -1,0 +1,59 @@
+{% if error %}
+<article aria-label="Error">
+    <header>Error</header>
+    <pre><code>{{ error }}</code></pre>
+</article>
+{% elif result %}
+<article aria-label="Test Result">
+    <header>
+        {% if result.success %}
+        <mark>PASS</mark>
+        {% else %}
+        <mark style="background:#d32f2f;color:#fff">FAIL</mark>
+        {% endif %}
+        &nbsp; {{ result.model_used or 'unknown model' }} &middot; {{ result.latency_ms }}ms
+        &middot; {{ result.token_usage.get('prompt_tokens', 0) }}+{{ result.token_usage.get('completion_tokens', 0) }} tokens
+    </header>
+
+    {% if result.input_validation_errors %}
+    <details>
+        <summary>Input Validation Errors ({{ result.input_validation_errors | length }})</summary>
+        <ul>
+            {% for e in result.input_validation_errors %}
+            <li>{{ e }}</li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+
+    {% if result.validation_errors %}
+    <details open>
+        <summary>Output Validation Errors ({{ result.validation_errors | length }})</summary>
+        <ul>
+            {% for e in result.validation_errors %}
+            <li>{{ e }}</li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+
+    {% if result.error %}
+    <details open>
+        <summary>Error</summary>
+        <pre><code>{{ result.error }}</code></pre>
+    </details>
+    {% endif %}
+
+    {% if result.output %}
+    <h4>Output</h4>
+    <pre><code>{{ result.output | tojson(indent=2) }}</code></pre>
+    {% endif %}
+
+    {% if result.raw_response %}
+    <details>
+        <summary>Raw LLM Response</summary>
+        <pre><code>{{ result.raw_response }}</code></pre>
+    </details>
+    {% endif %}
+</article>
+{% endif %}

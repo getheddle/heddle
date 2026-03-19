@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% set active_nav = "workers" %}
+{% block title %}Eval: {{ name }} — Loom Workshop{% endblock %}
+{% block content %}
+<hgroup>
+    <h1>Eval Dashboard: {{ name }}</h1>
+    <p>Run test suites and track quality across versions.</p>
+</hgroup>
+
+<h2>Run New Eval</h2>
+<form method="post" action="/workers/{{ name }}/eval/run">
+    <label for="test_suite">Test Suite (YAML list)</label>
+    <textarea name="test_suite" id="test_suite" rows="12" style="font-family:monospace;font-size:0.85rem" placeholder='- name: basic_test
+  input:
+    text: "Hello world"
+  expected_output:
+    summary: "A greeting"'></textarea>
+
+    <div class="grid">
+        <div>
+            <label for="tier">Tier</label>
+            <select name="tier" id="tier">
+                <option value="">Default ({{ config.get('default_model_tier', 'standard') }})</option>
+                {% for t in available_tiers %}
+                <option value="{{ t }}">{{ t }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="scoring">Scoring</label>
+            <select name="scoring" id="scoring">
+                <option value="field_match">Field Match</option>
+                <option value="exact_match">Exact Match</option>
+            </select>
+        </div>
+    </div>
+
+    <button type="submit">Run Eval Suite</button>
+</form>
+
+{% if runs %}
+<h2>Past Runs</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Run ID</th>
+            <th>Tier</th>
+            <th>Status</th>
+            <th>Cases</th>
+            <th>Passed</th>
+            <th>Failed</th>
+            <th>Avg Latency</th>
+            <th>Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in runs %}
+        <tr>
+            <td><a href="/workers/{{ name }}/eval/{{ r.id }}"><code>{{ r.id[:8] }}</code></a></td>
+            <td><kbd>{{ r.tier }}</kbd></td>
+            <td>{{ r.status }}</td>
+            <td>{{ r.total_cases }}</td>
+            <td>{{ r.passed_cases }}</td>
+            <td>{{ r.failed_cases }}</td>
+            <td>{{ '%.0f' | format(r.avg_latency_ms or 0) }}ms</td>
+            <td>{{ r.started_at }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}

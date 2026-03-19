@@ -560,5 +560,65 @@ def mcp(config: str, transport: str, host: str, port: int):
         run_streamable_http(server, gateway, host=host, port=port)
 
 
+# ---------------------------------------------------------------------------
+# workshop command
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option("--port", default=8080, type=int, help="HTTP port")
+@click.option("--host", default="127.0.0.1", help="Bind address")
+@click.option("--configs-dir", default="configs/", help="Path to configs directory")
+@click.option("--db-path", default="~/.loom/workshop.duckdb", help="DuckDB database path")
+@click.option("--nats-url", default=None, help="NATS URL for live metrics (optional)")
+def workshop(port: int, host: str, configs_dir: str, db_path: str, nats_url: str | None):
+    """Start the LLM Worker Workshop web UI.
+
+    A browser-based tool for defining, testing, evaluating, and deploying
+    LLM workers.  Provides a test bench for running worker configs against
+    payloads, an eval dashboard for systematic quality assessment, and a
+    pipeline editor for stage management.
+
+    \b
+    Features:
+        - Worker config editor (system prompt, schemas, tier)
+        - Interactive test bench (send payloads, see results)
+        - Eval suite runner (test cases with scoring)
+        - Pipeline stage editor (insert, swap, branch, remove)
+        - Live metrics dashboard (optional, needs NATS)
+
+    Requires the 'workshop' package extras:
+
+    \b
+        uv sync --extra workshop
+
+    LLM backends are resolved from environment variables:
+
+    \b
+        OLLAMA_URL        -> local tier
+        ANTHROPIC_API_KEY -> standard + frontier tiers
+    """
+    from loom.workshop.app import create_app
+
+    import uvicorn
+
+    app = create_app(
+        configs_dir=configs_dir,
+        db_path=db_path,
+        nats_url=nats_url,
+    )
+
+    logger.info(
+        "workshop.starting",
+        host=host,
+        port=port,
+        configs_dir=configs_dir,
+        db_path=db_path,
+        nats="enabled" if nats_url else "disabled",
+    )
+
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
 if __name__ == "__main__":
     cli()

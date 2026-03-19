@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% set active_nav = "workers" %}
+{% block title %}{{ name }} — Loom Workshop{% endblock %}
+{% block content %}
+<hgroup>
+    <h1>{{ name }}</h1>
+    <p>{{ config.description or 'No description' }} &middot; <kbd>{{ config.get('worker_kind', 'llm') }}</kbd> &middot; tier: <kbd>{{ config.get('default_model_tier', '—') }}</kbd></p>
+</hgroup>
+
+<div class="grid">
+    <div>
+        <a href="/workers/{{ name }}/test" role="button" class="outline">Test Bench</a>
+    </div>
+    <div>
+        <a href="/workers/{{ name }}/eval" role="button" class="outline">Eval Dashboard</a>
+    </div>
+    <div>
+        <form method="post" action="/workers/{{ name }}/clone" style="display:inline">
+            <input type="text" name="new_name" placeholder="clone_name" required style="display:inline;width:auto">
+            <button type="submit" class="outline">Clone</button>
+        </form>
+    </div>
+</div>
+
+<h2>Config (YAML)</h2>
+<form method="post" action="/workers/{{ name }}">
+    <textarea name="yaml_content" rows="25" style="font-family:monospace;font-size:0.85rem">{{ yaml_content }}</textarea>
+    <input type="text" name="description" placeholder="Version note (optional)">
+    <button type="submit">Save</button>
+</form>
+
+{% if versions %}
+<h2>Version History</h2>
+<table>
+    <thead>
+        <tr><th>Hash</th><th>Date</th><th>Note</th></tr>
+    </thead>
+    <tbody>
+        {% for v in versions %}
+        <tr>
+            <td><code>{{ v.config_hash[:8] }}</code></td>
+            <td>{{ v.created_at }}</td>
+            <td>{{ v.description or '—' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}

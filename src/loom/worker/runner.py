@@ -93,6 +93,103 @@ def _extract_json(raw: str) -> dict:
     raise ValueError(f"LLM returned non-JSON/YAML: {raw[:200]}")
 
 
+async def execute_with_tools(
+    backend: LLMBackend,
+    system_prompt: str,
+    user_message: str,
+    tool_providers: dict[str, ToolProvider],
+    tool_defs: list[dict[str, Any]] | None,
+    max_tokens: int = 2000,
+) -> dict[str, Any]:
+    """Execute an LLM call with multi-round tool-use loop.
+
+    This function encapsulates the core LLM interaction pattern used by both
+    ``LLMWorker.process()`` and ``WorkerTestRunner.run()``.  It handles:
+
+    - Initial LLM call with optional tool definitions
+    - Multi-turn tool execution loop (up to ``MAX_TOOL_ROUNDS``)
+    - Token count aggregation across rounds
+    - Error handling for unknown tools and tool execution failures
+
+    Args:
+        backend: LLM backend to call (Anthropic, Ollama, OpenAI-compatible).
+        system_prompt: Full system prompt (with knowledge silo content prepended).
+        user_message: User message (typically JSON payload).
+        tool_providers: Map of tool name → ToolProvider for execution.
+        tool_defs: Tool definitions list for the LLM (or None for no tools).
+        max_tokens: Maximum output tokens per LLM call.
+
+    Returns:
+        Dict with keys: content, model, prompt_tokens, completion_tokens,
+        tool_calls, stop_reason.  Token counts are aggregated across all
+        tool-use rounds.
+    """
+    result = await backend.complete(
+        system_prompt=system_prompt,
+        user_message=user_message,
+        max_tokens=max_tokens,
+        tools=tool_defs,
+    )
+
+    total_prompt_tokens = result.get("prompt_tokens", 0)
+    total_completion_tokens = result.get("completion_tokens", 0)
+    messages: list[dict[str, Any]] | None = None
+    rounds = 0
+
+    while result.get("tool_calls") and rounds < MAX_TOOL_ROUNDS:
+        rounds += 1
+        logger.info("worker.tool_round", round=rounds, calls=len(result["tool_calls"]))
+
+        # Build message history on first tool round
+        if messages is None:
+            messages = [{"role": "user", "content": user_message}]
+
+        # Append assistant message with tool calls
+        assistant_msg: dict[str, Any] = {"role": "assistant", "tool_calls": result["tool_calls"]}
+        if result.get("content"):
+            assistant_msg["content"] = result["content"]
+        messages.append(assistant_msg)
+
+        # Execute each tool call
+        for call in result["tool_calls"]:
+            tool_name = call["name"]
+            provider = tool_providers.get(tool_name)
+            if provider is None:
+                tool_result = json.dumps({"error": f"Unknown tool: {tool_name}"})
+                logger.warning("worker.unknown_tool", tool=tool_name)
+            else:
+                try:
+                    tool_result = await provider.execute(call["arguments"])
+                except Exception as e:
+                    tool_result = json.dumps({"error": str(e)})
+                    logger.error("worker.tool_execution_failed", tool=tool_name, error=str(e))
+
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call["id"],
+                "content": tool_result,
+            })
+
+        # Call LLM again with updated message history
+        result = await backend.complete(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            messages=messages,
+            max_tokens=max_tokens,
+            tools=tool_defs,
+        )
+        total_prompt_tokens += result.get("prompt_tokens", 0)
+        total_completion_tokens += result.get("completion_tokens", 0)
+
+    if rounds >= MAX_TOOL_ROUNDS:
+        logger.warning("worker.max_tool_rounds_reached", rounds=rounds)
+
+    # Return result with aggregated token counts
+    result["prompt_tokens"] = total_prompt_tokens
+    result["completion_tokens"] = total_completion_tokens
+    return result
+
+
 class LLMWorker(TaskWorker):
     """
     LLM-backed stateless worker.
@@ -168,70 +265,21 @@ class LLMWorker(TaskWorker):
         if not backend:
             raise RuntimeError(f"No backend for tier: {tier}")
 
-        # 4. Call LLM (with tools if available)
+        # 4. Call LLM with tool-use loop
         logger.info("worker.calling_llm", tier=tier, tools=len(tool_providers))
-        result = await backend.complete(
+        max_tokens = self.config.get("max_output_tokens", 2000)
+        result = await execute_with_tools(
+            backend=backend,
             system_prompt=system_prompt,
             user_message=user_message,
-            max_tokens=self.config.get("max_output_tokens", 2000),
-            tools=tool_defs,
+            tool_providers=tool_providers,
+            tool_defs=tool_defs,
+            max_tokens=max_tokens,
         )
+        total_prompt_tokens = result["prompt_tokens"]
+        total_completion_tokens = result["completion_tokens"]
 
-        # 5. Tool execution loop — multi-turn until LLM gives a final answer
-        total_prompt_tokens = result.get("prompt_tokens", 0)
-        total_completion_tokens = result.get("completion_tokens", 0)
-        messages: list[dict[str, Any]] | None = None
-        rounds = 0
-
-        while result.get("tool_calls") and rounds < MAX_TOOL_ROUNDS:
-            rounds += 1
-            logger.info("worker.tool_round", round=rounds, calls=len(result["tool_calls"]))
-
-            # Build message history on first tool round
-            if messages is None:
-                messages = [{"role": "user", "content": user_message}]
-
-            # Append assistant message with tool calls
-            assistant_msg: dict[str, Any] = {"role": "assistant", "tool_calls": result["tool_calls"]}
-            if result.get("content"):
-                assistant_msg["content"] = result["content"]
-            messages.append(assistant_msg)
-
-            # Execute each tool call
-            for call in result["tool_calls"]:
-                tool_name = call["name"]
-                provider = tool_providers.get(tool_name)
-                if provider is None:
-                    tool_result = json.dumps({"error": f"Unknown tool: {tool_name}"})
-                    logger.warning("worker.unknown_tool", tool=tool_name)
-                else:
-                    try:
-                        tool_result = await provider.execute(call["arguments"])
-                    except Exception as e:
-                        tool_result = json.dumps({"error": str(e)})
-                        logger.error("worker.tool_execution_failed", tool=tool_name, error=str(e))
-
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": call["id"],
-                    "content": tool_result,
-                })
-
-            # Call LLM again with updated message history
-            result = await backend.complete(
-                system_prompt=system_prompt,
-                user_message=user_message,
-                messages=messages,
-                max_tokens=self.config.get("max_output_tokens", 2000),
-                tools=tool_defs,
-            )
-            total_prompt_tokens += result.get("prompt_tokens", 0)
-            total_completion_tokens += result.get("completion_tokens", 0)
-
-        if rounds >= MAX_TOOL_ROUNDS:
-            logger.warning("worker.max_tool_rounds_reached", rounds=rounds)
-
-        # 6. Parse JSON output — handles markdown fences and preamble text
+        # 5. Parse JSON output — handles markdown fences and preamble text
         if result.get("content") is None:
             raise ValueError("LLM did not produce a text response after tool-use loop")
 

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% set active_nav = "workers" %}
+{% block title %}Workers — Loom Workshop{% endblock %}
+{% block content %}
+<h1>Workers</h1>
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Description</th>
+            <th>Kind</th>
+            <th>Tier</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for w in workers %}
+        <tr>
+            <td><a href="/workers/{{ w.name }}">{{ w.name }}</a></td>
+            <td>{{ w.description or '—' }}</td>
+            <td><kbd>{{ w.worker_kind }}</kbd></td>
+            <td><kbd>{{ w.default_model_tier or '—' }}</kbd></td>
+            <td>
+                <a href="/workers/{{ w.name }}/test" role="button" class="outline small">Test</a>
+                <a href="/workers/{{ w.name }}/eval" role="button" class="outline small">Eval</a>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">No worker configs found in <code>configs/workers/</code></td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
