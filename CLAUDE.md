@@ -122,6 +122,7 @@ docs/                     # Project documentation
   CONTRIBUTING.md         # Contribution guidelines
   building-workflows.md   # How to build custom workflows
   rag-howto.md            # RAG pipeline setup guide
+  workshop.md             # Workshop web app design, architecture, enhancement guide
 
 examples/
   rag_demo.py             # End-to-end RAG pipeline demo

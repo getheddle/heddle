@@ -128,7 +128,9 @@ For the full 7-step setup with infrastructure and LLM backends, see
   setup, LLM backend configuration, running your first workflow
 - **[Building Workflows](docs/building-workflows.md)** — Comprehensive guide:
   workers, pipelines, knowledge, file-refs, routing, silos, tools, embeddings,
-  DuckDB, MCP gateway, Worker Workshop
+  DuckDB, MCP gateway
+- **[Worker Workshop](docs/workshop.md)** — Workshop web app architecture,
+  component reference, data model, enhancement guide
 - **[RAG Pipeline](docs/rag-howto.md)** — Social media stream ingestion,
   chunking, vector storage, and analysis
 - **[Kubernetes Deployment](docs/KUBERNETES.md)** — Minikube manifests,
