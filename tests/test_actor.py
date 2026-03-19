@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -209,3 +209,155 @@ async def test_process_one_acquires_and_releases_semaphore():
     # After: semaphore is released back (value=1).
     assert actor._semaphore._value == 1
     assert actor.received == [{"data": 1}]
+
+
+# ---------------------------------------------------------------------------
+# 13. run() processes messages then disconnects on shutdown
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_run_processes_messages_and_shuts_down():
+    """run() processes messages from the bus and disconnects on shutdown."""
+    bus = InMemoryBus()
+    actor = EchoActor("test-13", bus=bus)
+
+    async def _feed_and_shutdown():
+        # Wait for actor to subscribe
+        for _ in range(50):
+            if actor._running:
+                break
+            await asyncio.sleep(0.01)
+
+        # Feed messages
+        await bus.publish("test.run", {"msg": 1})
+        await bus.publish("test.run", {"msg": 2})
+        # Give time to process
+        await asyncio.sleep(0.05)
+        # Trigger shutdown — sets _running=False
+        actor._request_shutdown(signal.SIGTERM)
+        # Send one more message to unblock the subscription iterator
+        # (async for waits for next message; the _running check only fires
+        # when a message arrives)
+        await asyncio.sleep(0.01)
+        if actor._sub:
+            await actor._sub.unsubscribe()
+
+    with patch.object(actor, "_install_signal_handlers"):
+        task = asyncio.create_task(actor.run("test.run"))
+        feeder = asyncio.create_task(_feed_and_shutdown())
+        await asyncio.wait_for(asyncio.gather(task, feeder), timeout=3.0)
+
+    assert {"msg": 1} in actor.received
+    assert {"msg": 2} in actor.received
+    assert not bus._connected
+
+
+# ---------------------------------------------------------------------------
+# 14. run() with max_concurrent > 1 fires concurrent tasks
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_run_concurrent_processing():
+    """With max_concurrent > 1, multiple messages are processed concurrently."""
+    bus = InMemoryBus()
+    actor = SlowActor("test-14", bus=bus, max_concurrent=3)
+
+    async def _feed_and_shutdown():
+        for _ in range(50):
+            if actor._running:
+                break
+            await asyncio.sleep(0.01)
+
+        # Feed 3 messages quickly
+        for i in range(3):
+            await bus.publish("test.concurrent", {"seq": i})
+        await asyncio.sleep(0.15)
+        actor._request_shutdown(signal.SIGTERM)
+        await asyncio.sleep(0.01)
+        if actor._sub:
+            await actor._sub.unsubscribe()
+
+    with patch.object(actor, "_install_signal_handlers"):
+        task = asyncio.create_task(actor.run("test.concurrent"))
+        feeder = asyncio.create_task(_feed_and_shutdown())
+        await asyncio.wait_for(asyncio.gather(task, feeder), timeout=5.0)
+
+    # All 3 should have been processed
+    assert sorted(actor.order) == [0, 1, 2]
+
+
+# ---------------------------------------------------------------------------
+# 15. run() handles CancelledError gracefully
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_run_handles_cancelled_error():
+    """Cancelling the run task should not raise."""
+    bus = InMemoryBus()
+    actor = EchoActor("test-15", bus=bus)
+
+    with patch.object(actor, "_install_signal_handlers"):
+        task = asyncio.create_task(actor.run("test.cancel"))
+        # Wait for actor to start
+        for _ in range(50):
+            if actor._running:
+                break
+            await asyncio.sleep(0.01)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    assert not actor._running
+
+
+# ---------------------------------------------------------------------------
+# 16. run() disconnects even on error
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_run_disconnects_on_exit():
+    """run() calls disconnect in finally block regardless of exit reason."""
+    bus = InMemoryBus()
+    actor = EchoActor("test-16", bus=bus)
+
+    with patch.object(actor, "_install_signal_handlers"):
+        task = asyncio.create_task(actor.run("test.disconnect"))
+        for _ in range(50):
+            if actor._running:
+                break
+            await asyncio.sleep(0.01)
+
+        assert bus._connected
+        actor._request_shutdown(signal.SIGTERM)
+        # Unsubscribe to unblock the iteration loop
+        await asyncio.sleep(0.01)
+        if actor._sub:
+            await actor._sub.unsubscribe()
+        await asyncio.wait_for(task, timeout=3.0)
+
+    # Bus should be disconnected after run() exits
+    assert not bus._connected
+
+
+# ---------------------------------------------------------------------------
+# 17. _install_signal_handlers registers SIGTERM and SIGINT
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_install_signal_handlers():
+    """_install_signal_handlers registers handlers for SIGTERM and SIGINT."""
+    bus = InMemoryBus()
+    actor = EchoActor("test-17", bus=bus)
+
+    mock_loop = MagicMock()
+    with patch("asyncio.get_running_loop", return_value=mock_loop):
+        actor._install_signal_handlers()
+
+    assert mock_loop.add_signal_handler.call_count == 2
+    registered_signals = {
+        call.args[0] for call in mock_loop.add_signal_handler.call_args_list
+    }
+    assert signal.SIGTERM in registered_signals
+    assert signal.SIGINT in registered_signals

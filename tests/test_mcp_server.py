@@ -245,3 +245,87 @@ class TestDispatchTool:
         from loom.mcp.bridge import BridgeError
         with pytest.raises(BridgeError, match="Unknown tool kind"):
             await _dispatch_tool(gateway, entry, {})
+
+    async def test_dispatch_pipeline(self, bus_and_bridge):
+        """_dispatch_tool for pipeline kind calls call_pipeline."""
+        bus, bridge = bus_and_bridge
+        gateway = MCPGateway(
+            config={"name": "test"},
+            bridge=bridge,
+            tool_registry={},
+            tool_defs=[],
+        )
+
+        entry = ToolEntry(
+            name="ingest_doc",
+            kind="pipeline",
+            tool_def={},
+            loom_meta={
+                "kind": "pipeline",
+                "timeout": 5,
+            },
+        )
+
+        ready = asyncio.Event()
+
+        async def mock_pipeline():
+            sub = await bus.subscribe("loom.goals.incoming")
+            ready.set()
+            async for data in sub:
+                # Pipeline bridge publishes a goal; respond with final result.
+                # The bridge expects task_id == goal_id for the final result.
+                goal_id = data.get("goal_id")
+                result = TaskResult(
+                    task_id=goal_id,  # Must match goal_id for bridge to recognize as final
+                    parent_task_id=None,
+                    worker_type="pipeline",
+                    status=TaskStatus.COMPLETED,
+                    output={"processed": True},
+                )
+                await bus.publish(
+                    f"loom.results.{goal_id}",
+                    result.model_dump(mode="json"),
+                )
+                await sub.unsubscribe()
+                break
+
+        worker_task = asyncio.create_task(mock_pipeline())
+        await ready.wait()
+
+        result = await _dispatch_tool(gateway, entry, {"file_ref": "test.pdf"})
+        assert result == {"processed": True}
+        await worker_task
+
+
+# ---------------------------------------------------------------------------
+# MCPGateway field tests
+# ---------------------------------------------------------------------------
+
+
+class TestMCPGateway:
+    def test_gateway_defaults(self):
+        bus = InMemoryBus()
+        bridge = MCPBridge(bus)
+        gw = MCPGateway(config={"name": "test"}, bridge=bridge)
+
+        assert gw.tool_registry == {}
+        assert gw.tool_defs == []
+        assert gw.resources is None
+
+    def test_gateway_with_registry(self):
+        bus = InMemoryBus()
+        bridge = MCPBridge(bus)
+        entry = ToolEntry(
+            name="tool1",
+            kind="worker",
+            tool_def={"name": "tool1", "inputSchema": {}},
+            loom_meta={"kind": "worker"},
+        )
+        gw = MCPGateway(
+            config={"name": "test"},
+            bridge=bridge,
+            tool_registry={"tool1": entry},
+            tool_defs=[{"name": "tool1", "inputSchema": {}}],
+        )
+        assert "tool1" in gw.tool_registry
+        assert len(gw.tool_defs) == 1

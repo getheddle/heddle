@@ -14,6 +14,7 @@ All tests use InMemoryBus -- no NATS or external infrastructure required.
 from __future__ import annotations
 
 import asyncio
+import signal
 import time
 from typing import Any
 from unittest.mock import AsyncMock
@@ -603,3 +604,102 @@ class TestLifecycle:
         assert len(actor._schedules) == 2
         assert actor._schedules[0].name == "a"
         assert actor._schedules[1].name == "b"
+
+    @pytest.mark.asyncio
+    async def test_run_lifecycle_with_shutdown(self, tmp_path):
+        """run() starts timer, processes subscription, and shuts down cleanly."""
+        schedules = [_task_schedule(name="fast", interval_seconds=60)]
+        config_file = _write_config(tmp_path, schedules)
+        bus = InMemoryBus()
+        actor = SchedulerActor("s-run", config_file, bus=bus)
+
+        from unittest.mock import patch as _patch
+
+        async def run_and_stop():
+            # Wait for actor to start
+            for _ in range(50):
+                if actor._running:
+                    break
+                await asyncio.sleep(0.01)
+
+            assert actor._running
+            assert actor._timer_task is not None
+            assert not actor._timer_task.done()
+
+            # Trigger shutdown and unsubscribe to unblock the iteration loop
+            actor._request_shutdown(signal.SIGTERM)
+            await asyncio.sleep(0.01)
+            if actor._sub:
+                await actor._sub.unsubscribe()
+
+        with _patch.object(actor, "_install_signal_handlers"):
+            task = asyncio.create_task(actor.run("loom.scheduler.test"))
+            stopper = asyncio.create_task(run_and_stop())
+            await asyncio.wait_for(asyncio.gather(task, stopper), timeout=5.0)
+
+        assert not actor._running
+        assert not bus._connected
+
+
+# ===========================================================================
+# Edge case dispatch tests
+# ===========================================================================
+
+
+class TestDispatchEdgeCases:
+    @pytest.mark.asyncio
+    async def test_unknown_dispatch_type_logs_error(self, tmp_path):
+        """An entry with unknown dispatch_type is handled without crashing."""
+        config_file = _write_config(tmp_path)
+        bus = InMemoryBus()
+        await bus.connect()
+        actor = SchedulerActor("s-bad-type", config_file, bus=bus)
+
+        entry = ScheduleEntry(
+            name="bad",
+            cron=None,
+            interval_seconds=60,
+            dispatch_type="bogus",
+        )
+        # Should not raise — unknown type is logged
+        await actor._fire_schedule(entry)
+
+    @pytest.mark.asyncio
+    async def test_dispatch_goal_with_empty_config(self, tmp_path):
+        """_dispatch_goal handles missing goal_config gracefully (defaults)."""
+        config_file = _write_config(tmp_path)
+        bus = InMemoryBus()
+        await bus.connect()
+        actor = SchedulerActor("s-empty-cfg", config_file, bus=bus)
+
+        sub = await bus.subscribe("loom.goals.incoming")
+
+        entry = ScheduleEntry(
+            name="empty",
+            cron=None,
+            interval_seconds=60,
+            dispatch_type="goal",
+            goal_config=None,  # No config — should use defaults
+        )
+        await actor._dispatch_goal(entry)
+
+        msg = await sub.__anext__()
+        goal = OrchestratorGoal(**msg)
+        assert goal.instruction == ""
+        assert goal.context == {}
+
+    @pytest.mark.asyncio
+    async def test_advance_next_fire_no_cron_no_interval(self, tmp_path):
+        """_advance_next_fire with neither cron nor interval is a no-op."""
+        config_file = _write_config(tmp_path)
+        actor = SchedulerActor("s-noop", config_file, bus=InMemoryBus())
+
+        entry = ScheduleEntry(
+            name="noop",
+            cron=None,
+            interval_seconds=None,
+            dispatch_type="goal",
+        )
+        original_fire = entry.next_fire
+        actor._advance_next_fire(entry)
+        assert entry.next_fire == original_fire

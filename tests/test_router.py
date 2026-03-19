@@ -8,6 +8,7 @@ Tests cover:
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import tempfile
 from typing import Any
@@ -230,3 +231,85 @@ class TestRoute:
         assert "reason" in msg
         assert "original_task" in msg
         assert msg["original_task"] == {"bad": "data"}
+
+
+# ---------------------------------------------------------------------------
+# TaskRouter.run and process_messages tests
+# ---------------------------------------------------------------------------
+
+
+class TestRunAndProcessMessages:
+    @pytest.mark.asyncio
+    async def test_run_connects_and_subscribes(self):
+        """run() connects the bus and subscribes to loom.tasks.incoming."""
+        rules_path = _write_rules({"tier_overrides": {}, "rate_limits": {}})
+        try:
+            bus = InMemoryBus()
+            router = TaskRouter(rules_path, bus)
+            await router.run()
+
+            assert bus._connected
+            assert router._sub is not None
+            assert router._sub.subject == "loom.tasks.incoming"
+            await bus.close()
+        finally:
+            os.unlink(rules_path)
+
+    @pytest.mark.asyncio
+    async def test_process_messages_routes_multiple_tasks(self):
+        """process_messages() routes all incoming tasks until cancelled."""
+        rules_path = _write_rules({"tier_overrides": {}, "rate_limits": {}})
+        try:
+            bus = InMemoryBus()
+            router = TaskRouter(rules_path, bus)
+            await router.run()
+
+            # Subscribe to the destination
+            dest_sub = await bus.subscribe("loom.tasks.summarizer.local")
+            dest_sub2 = await bus.subscribe("loom.tasks.classifier.standard")
+
+            # Start processing in background
+            process_task = asyncio.create_task(router.process_messages())
+
+            # Publish tasks
+            await bus.publish("loom.tasks.incoming", _make_task_data("summarizer", "local"))
+            await bus.publish("loom.tasks.incoming", _make_task_data("classifier", "standard"))
+
+            # Collect results
+            msg1 = await asyncio.wait_for(dest_sub.__anext__(), timeout=2.0)
+            msg2 = await asyncio.wait_for(dest_sub2.__anext__(), timeout=2.0)
+
+            assert msg1["worker_type"] == "summarizer"
+            assert msg2["worker_type"] == "classifier"
+
+            # Clean up
+            process_task.cancel()
+            try:
+                await process_task
+            except asyncio.CancelledError:
+                pass
+            await bus.close()
+        finally:
+            os.unlink(rules_path)
+
+    @pytest.mark.asyncio
+    async def test_route_invalid_tier_override_dead_letters(self):
+        """Invalid tier override sends task to dead letter."""
+        rules_path = _write_rules({
+            "tier_overrides": {"summarizer": "nonexistent_tier"},
+            "rate_limits": {},
+        })
+        try:
+            bus = InMemoryBus()
+            router = TaskRouter(rules_path, bus)
+            await bus.connect()
+
+            dl_sub = await bus.subscribe(DEAD_LETTER_SUBJECT)
+            data = _make_task_data("summarizer", "local")
+            await router.route(data)
+
+            msg = await dl_sub.__anext__()
+            assert "unknown_tier" in msg["reason"]
+            await bus.close()
+        finally:
+            os.unlink(rules_path)

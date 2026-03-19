@@ -490,3 +490,343 @@ class TestGoalIsolation:
             assert not hasattr(actor, "_conversation_history")
         finally:
             os.unlink(config_path)
+
+
+# ---------------------------------------------------------------------------
+# Full lifecycle tests
+# ---------------------------------------------------------------------------
+
+
+class TestFullLifecycle:
+    @pytest.mark.asyncio
+    async def test_full_goal_lifecycle_with_simulated_worker(self):
+        """Full decompose → dispatch → collect → synthesize → publish cycle."""
+        # Backend that returns a valid single-task plan
+        plan = json.dumps([{
+            "worker_type": "summarizer",
+            "payload": {"text": "test content"},
+        }])
+        synthesis = json.dumps({
+            "summary": "synthesized result",
+            "confidence": "high",
+        })
+        backend = MockOrchestratorBackend(plan, synthesis)
+
+        config_path = _write_config(timeout_seconds=5)
+        try:
+            bus = InMemoryBus()
+            await bus.connect()
+
+            actor = OrchestratorActor(
+                actor_id="test-full",
+                config_path=config_path,
+                backend=backend,
+                bus=bus,
+            )
+
+            goal_data = _make_goal_data("Summarize the document")
+            goal_id = goal_data["goal_id"]
+
+            # Subscribe for the final result
+            result_sub = await bus.subscribe(f"loom.results.{goal_id}")
+
+            # Pre-subscribe the worker BEFORE handle_message starts.
+            # This mirrors real deployments where workers are already running.
+            worker_sub = await bus.subscribe("loom.tasks.incoming")
+            ready = asyncio.Event()
+
+            async def worker_simulator():
+                ready.set()
+                async for data in worker_sub:
+                    task = TaskMessage(**data)
+                    # Small delay to let orchestrator set up result subscription
+                    await asyncio.sleep(0.05)
+                    result = TaskResult(
+                        task_id=task.task_id,
+                        parent_task_id=task.parent_task_id,
+                        worker_type=task.worker_type,
+                        status=TaskStatus.COMPLETED,
+                        output={"summary": "Worker produced this"},
+                        model_used="mock",
+                        processing_time_ms=50,
+                        token_usage={"prompt_tokens": 10, "completion_tokens": 5},
+                    )
+                    await bus.publish(
+                        f"loom.results.{task.parent_task_id}",
+                        result.model_dump(mode="json"),
+                    )
+                    await worker_sub.unsubscribe()
+                    break
+
+            worker_task = asyncio.create_task(worker_simulator())
+            await ready.wait()
+            await actor.handle_message(goal_data)
+            await worker_task
+
+            # Verify final result was published. The result subject receives
+            # both worker intermediate results AND the final orchestrator result.
+            # The final result has task_id == goal_id.
+            final = None
+            for _ in range(5):
+                msg = await asyncio.wait_for(result_sub.__anext__(), timeout=2.0)
+                if msg["task_id"] == goal_id:
+                    final = msg
+                    break
+
+            assert final is not None, "Final orchestrator result not found"
+            assert final["status"] == TaskStatus.COMPLETED.value
+            assert final["output"] is not None
+        finally:
+            os.unlink(config_path)
+
+    @pytest.mark.asyncio
+    async def test_subtask_limit_truncates_plan(self):
+        """When decomposition returns more subtasks than max_concurrent_tasks, truncate."""
+        # Return 10 subtasks
+        plan = json.dumps([
+            {"worker_type": "summarizer", "payload": {"text": f"chunk {i}"}}
+            for i in range(10)
+        ])
+        backend = MockOrchestratorBackend(plan)
+
+        config_path = _write_config(timeout_seconds=1)
+        try:
+            bus = InMemoryBus()
+            await bus.connect()
+            actor = OrchestratorActor(
+                actor_id="test-limit",
+                config_path=config_path,
+                backend=backend,
+                bus=bus,
+            )
+            # max_concurrent_tasks defaults to 5 from _write_config
+
+            # Subscribe to tasks to count how many were dispatched
+            task_sub = await bus.subscribe("loom.tasks.incoming")
+
+            goal_data = _make_goal_data("Process many chunks")
+            await actor.handle_message(goal_data)
+
+            # Collect dispatched tasks (should be capped at 5)
+            dispatched = []
+            for _ in range(5):
+                try:
+                    msg = await asyncio.wait_for(task_sub.__anext__(), timeout=0.5)
+                    dispatched.append(msg)
+                except (asyncio.TimeoutError, StopAsyncIteration):
+                    break
+            assert len(dispatched) == 5
+        finally:
+            os.unlink(config_path)
+
+    @pytest.mark.asyncio
+    async def test_decomposition_error_publishes_failure(self):
+        """When decomposition fails, a FAILED result is published."""
+        # Backend that raises RuntimeError — the decomposer catches this
+        # and re-raises as ValueError/RuntimeError which the orchestrator
+        # catches and publishes as FAILED.
+
+        class FailingBackend(LLMBackend):
+            async def complete(self, system_prompt, user_message, max_tokens, temperature, **kw):
+                raise RuntimeError("LLM unavailable")
+
+        config_path = _write_config(timeout_seconds=1)
+        try:
+            bus = InMemoryBus()
+            await bus.connect()
+            actor = OrchestratorActor(
+                actor_id="test-decomp-fail",
+                config_path=config_path,
+                backend=FailingBackend(),
+                bus=bus,
+            )
+
+            goal_data = _make_goal_data("This will fail")
+            goal_id = goal_data["goal_id"]
+            result_sub = await bus.subscribe(f"loom.results.{goal_id}")
+
+            await actor.handle_message(goal_data)
+
+            result = await asyncio.wait_for(result_sub.__anext__(), timeout=2.0)
+            assert result["status"] == TaskStatus.FAILED.value
+            # Either an error message about decomposition/orchestrator failure,
+            # or "no subtasks" if decomposer caught the error and returned empty
+            assert result["error"] is not None
+        finally:
+            os.unlink(config_path)
+
+    @pytest.mark.asyncio
+    async def test_collection_timeout_returns_partial_results(self):
+        """When timeout expires before all results arrive, partial results are synthesized."""
+        # Plan with 3 subtasks, only 1 will respond
+        plan = json.dumps([
+            {"worker_type": "summarizer", "payload": {"text": f"chunk {i}"}}
+            for i in range(3)
+        ])
+        synthesis = json.dumps({"partial": True, "confidence": "low"})
+        backend = MockOrchestratorBackend(plan, synthesis)
+
+        config_path = _write_config(timeout_seconds=1)
+        try:
+            bus = InMemoryBus()
+            await bus.connect()
+            actor = OrchestratorActor(
+                actor_id="test-timeout",
+                config_path=config_path,
+                backend=backend,
+                bus=bus,
+            )
+
+            goal_data = _make_goal_data("Partial timeout test")
+            goal_id = goal_data["goal_id"]
+            result_sub = await bus.subscribe(f"loom.results.{goal_id}")
+
+            # Pre-subscribe the worker before handle_message
+            worker_sub = await bus.subscribe("loom.tasks.incoming")
+
+            # Worker only responds to first task
+            async def partial_worker():
+                data = await worker_sub.__anext__()
+                task = TaskMessage(**data)
+                # Small delay to let orchestrator set up result subscription
+                await asyncio.sleep(0.05)
+                result = TaskResult(
+                    task_id=task.task_id,
+                    parent_task_id=task.parent_task_id,
+                    worker_type=task.worker_type,
+                    status=TaskStatus.COMPLETED,
+                    output={"summary": "partial"},
+                    processing_time_ms=10,
+                )
+                await bus.publish(
+                    f"loom.results.{task.parent_task_id}",
+                    result.model_dump(mode="json"),
+                )
+                # Don't respond to remaining tasks — let timeout fire
+                await worker_sub.unsubscribe()
+
+            worker_task = asyncio.create_task(partial_worker())
+            await actor.handle_message(goal_data)
+            await worker_task
+
+            # Should still get a final result (synthesized from partial)
+            final = await asyncio.wait_for(result_sub.__anext__(), timeout=3.0)
+            assert final["status"] == TaskStatus.COMPLETED.value
+        finally:
+            os.unlink(config_path)
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint tests
+# ---------------------------------------------------------------------------
+
+
+class TestCheckpointing:
+    @pytest.mark.asyncio
+    async def test_checkpoint_triggered_when_threshold_exceeded(self):
+        """Checkpoint is created when conversation history exceeds token threshold."""
+        config_path = _write_config()
+        try:
+            backend = MockOrchestratorBackend("[]")
+            store = InMemoryCheckpointStore()
+            actor = OrchestratorActor(
+                actor_id="test-ckpt",
+                config_path=config_path,
+                backend=backend,
+                checkpoint_store=store,
+            )
+
+            # Configure a very low threshold so checkpoint triggers
+            actor._checkpoint_manager.token_threshold = 10
+
+            goal = OrchestratorGoal(instruction="Test checkpoint")
+            goal_state = GoalState(goal=goal)
+
+            # Add enough history to trigger
+            for i in range(5):
+                results = [
+                    TaskResult(
+                        task_id=f"t{i}",
+                        worker_type="summarizer",
+                        status=TaskStatus.COMPLETED,
+                        output={"data": "x" * 100},
+                        processing_time_ms=10,
+                    ),
+                ]
+                await actor._record_in_history(goal_state, results, {"confidence": "high"})
+
+            import structlog
+            log = structlog.get_logger().bind(goal_id=goal.goal_id)
+            await actor._maybe_checkpoint(goal_state, log)
+
+            # Checkpoint should have been created
+            assert goal_state.checkpoint_counter == 1
+            # History should be trimmed to recent window
+            assert len(goal_state.conversation_history) <= actor._checkpoint_manager.recent_window_size
+        finally:
+            os.unlink(config_path)
+
+    @pytest.mark.asyncio
+    async def test_checkpoint_failure_is_non_fatal(self):
+        """If checkpoint store raises, orchestrator continues without crashing."""
+
+        class FailingStore(InMemoryCheckpointStore):
+            async def save(self, checkpoint):
+                raise RuntimeError("Store unavailable")
+
+        config_path = _write_config()
+        try:
+            backend = MockOrchestratorBackend("[]")
+            actor = OrchestratorActor(
+                actor_id="test-ckpt-fail",
+                config_path=config_path,
+                backend=backend,
+                checkpoint_store=FailingStore(),
+            )
+            actor._checkpoint_manager.token_threshold = 10
+
+            goal = OrchestratorGoal(instruction="Test")
+            goal_state = GoalState(goal=goal)
+
+            for i in range(5):
+                results = [
+                    TaskResult(
+                        task_id=f"t{i}",
+                        worker_type="summarizer",
+                        status=TaskStatus.COMPLETED,
+                        output={"data": "x" * 100},
+                        processing_time_ms=10,
+                    ),
+                ]
+                await actor._record_in_history(goal_state, results, {})
+
+            import structlog
+            log = structlog.get_logger().bind(goal_id=goal.goal_id)
+
+            # Should not raise
+            await actor._maybe_checkpoint(goal_state, log)
+        finally:
+            os.unlink(config_path)
+
+    @pytest.mark.asyncio
+    async def test_no_checkpoint_when_no_store(self):
+        """_maybe_checkpoint is a no-op when no checkpoint store is configured."""
+        config_path = _write_config()
+        try:
+            backend = MockOrchestratorBackend("[]")
+            actor = OrchestratorActor(
+                actor_id="test-no-ckpt",
+                config_path=config_path,
+                backend=backend,
+                checkpoint_store=None,
+            )
+
+            goal = OrchestratorGoal(instruction="Test")
+            goal_state = GoalState(goal=goal)
+
+            import structlog
+            log = structlog.get_logger().bind(goal_id=goal.goal_id)
+            await actor._maybe_checkpoint(goal_state, log)
+            assert goal_state.checkpoint_counter == 0
+        finally:
+            os.unlink(config_path)
