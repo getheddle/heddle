@@ -60,8 +60,18 @@ src/loom/
 │   ├── resources.py     # WorkspaceResources — workspace files as MCP resources
 │   └── server.py        # create_server(), MCPGateway, run_stdio(), run_streamable_http()
 │
+├── workshop/
+│   ├── test_runner.py   # WorkerTestRunner — execute worker configs against LLM backends directly
+│   ├── db.py            # WorkshopDB — DuckDB storage for eval results, versions, metrics
+│   ├── eval_runner.py   # EvalRunner — test suite execution with scoring
+│   ├── config_manager.py # ConfigManager — CRUD for worker/pipeline YAML configs
+│   ├── pipeline_editor.py # PipelineEditor — insert/swap/branch/remove stages
+│   ├── app.py           # FastAPI + HTMX + Jinja2 web application
+│   ├── templates/       # Jinja2 templates (workers, pipelines, partials)
+│   └── static/          # CSS styles
+│
 ├── cli/
-│   └── main.py          # Click CLI: worker, processor, pipeline, orchestrator, scheduler, router, submit, mcp
+│   └── main.py          # Click CLI: worker, processor, pipeline, orchestrator, scheduler, router, submit, mcp, workshop
 │
 └── contrib/
     ├── duckdb/          # DuckDB tools and backends (optional: uv sync --extra duckdb)
@@ -240,6 +250,29 @@ code needed.
 Tool discovery flow: Worker YAML `name` + `input_schema` + `description` → MCP tool.
 Pipeline `input_mapping` `goal.context.*` fields → tool input schema. Query backend
 `_get_handlers()` → per-action tools with auto-generated schemas.
+
+### Worker Workshop (`workshop/`)
+
+Web-based worker builder and eval tool. Operates without NATS — testing and
+evaluation call LLM backends directly via `execute_with_tools()`.
+
+- **WorkerTestRunner** (`test_runner.py`): Execute a worker config against a
+  payload without the actor mesh. Builds the full prompt, calls the LLM, validates
+  I/O contracts.
+- **EvalRunner** (`eval_runner.py`): Run test suites with `field_match` or
+  `exact_match` scoring. Concurrent test case execution with semaphore-bounded
+  parallelism.
+- **ConfigManager** (`config_manager.py`): CRUD for worker/pipeline YAML configs
+  with hash-based version tracking in DuckDB.
+- **PipelineEditor** (`pipeline_editor.py`): Insert, remove, swap, or branch
+  pipeline stages with dependency validation. Reuses
+  `PipelineOrchestrator._infer_dependencies()`.
+- **WorkshopDB** (`db.py`): DuckDB storage for eval runs, results, worker versions,
+  and metrics.
+- **Web UI** (`app.py`): FastAPI + HTMX + Jinja2 + Pico CSS. Worker list/editor,
+  test bench, eval dashboard, pipeline editor with dependency graph.
+
+Optional dependency: `uv sync --extra workshop`.
 
 ### Contrib Packages
 

@@ -29,6 +29,7 @@ uv sync --extra local         # Ollama client
 uv sync --extra rag           # RAG pipeline (DuckDB + Ollama)
 uv sync --extra scheduler     # Cron expression parsing (croniter)
 uv sync --extra mcp           # MCP gateway (Model Context Protocol SDK)
+uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
 ```
 
 ---
@@ -171,6 +172,9 @@ uv run loom mcp --config configs/mcp/docman.yaml
 
 # Run an MCP server (streamable-http transport)
 uv run loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
+
+# Run the Worker Workshop web UI
+uv run loom workshop --port 8080
 
 # Lint
 uv run ruff check src/

@@ -21,7 +21,9 @@ src/loom/
   worker/
     base.py               # TaskWorker base class (abstract)
     runner.py             # LLMWorker — main worker actor (JSON parsing, reset hook, tool-use loop)
+                          #   execute_with_tools() — standalone tool-use loop (shared with Workshop)
     backends.py           # LLMBackend ABC + AnthropicBackend, OllamaBackend, OpenAICompatibleBackend
+                          #   build_backends_from_env() — resolve backends from env vars
     processor.py          # ProcessorWorker, SyncProcessingBackend ABC, BackendError hierarchy
     tools.py              # ToolProvider ABC, SyncToolProvider, load_tool_provider(), MAX_TOOL_ROUNDS=10
     knowledge.py          # Knowledge silo loading and write-back (read-only, read-write, tool silos)
@@ -56,7 +58,17 @@ src/loom/
 
   cli/
     main.py               # Click CLI: worker, processor, pipeline, orchestrator, scheduler,
-                          #   router, submit, mcp (8 commands)
+                          #   router, submit, mcp, workshop (9 commands)
+
+  workshop/               # LLM Worker Workshop — web-based worker builder, test bench, eval tool
+    test_runner.py        # WorkerTestRunner — execute worker configs directly against LLM backends
+    db.py                 # WorkshopDB — DuckDB storage for eval results, worker versions, metrics
+    eval_runner.py        # EvalRunner — systematic test suite execution with field_match/exact_match scoring
+    config_manager.py     # ConfigManager — CRUD for worker/pipeline YAML configs with versioning
+    pipeline_editor.py    # PipelineEditor — insert/swap/branch/remove pipeline stages with dep validation
+    app.py                # FastAPI + HTMX + Jinja2 web application (15 routes)
+    templates/            # Jinja2 templates: workers (list, detail, test, eval), pipelines (list, editor)
+    static/               # CSS (Pico CSS + custom styles)
 
   contrib/                # Optional integrations (Django-style contrib namespace)
     duckdb/
@@ -117,7 +129,7 @@ examples/
 docker/                   # Dockerfiles (orchestrator, router, worker) + entrypoint.sh
 k8s/                      # Kubernetes manifests (namespace, NATS, Redis, workers, Kustomize)
 
-tests/                    # 42 test files, 699 unit tests + 1 integration test
+tests/                    # 50 test files, 831 unit tests + 1 integration test
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -130,6 +142,9 @@ tests/                    # 42 test files, 699 unit tests + 1 integration test
   test_contrib_duckdb_query.py  test_contrib_duckdb_vector.py  test_contrib_duckdb_view.py
   test_mcp_config.py      test_mcp_discovery.py   test_mcp_bridge.py
   test_mcp_resources.py   test_mcp_server.py
+  test_bus_memory.py      test_e2e_operations.py  # InMemoryBus edge cases + E2E integration
+  test_workshop_runner.py test_workshop_db.py     test_workshop_eval.py
+  test_workshop_config.py test_workshop_pipeline_editor.py
   test_integration.py                             # @pytest.mark.integration (needs NATS)
   contrib/rag/            # 6 RAG test files (backends, chunker, ingestion, mux, schemas, tools)
 ```
@@ -187,6 +202,10 @@ uv run loom submit "some goal text" --nats-url nats://localhost:4222
 # Run an MCP server (needs NATS + workers running)
 uv run loom mcp --config configs/mcp/docman.yaml
 uv run loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
+
+# Run the Workshop web UI (no NATS needed for testing/eval)
+uv run loom workshop --port 8080
+uv run loom workshop --port 8080 --nats-url nats://localhost:4222  # with live metrics
 ```
 
 ## Optional dependencies
@@ -199,6 +218,7 @@ uv sync --extra duckdb        # DuckDB embedded analytics
 uv sync --extra rag           # RAG pipeline (DuckDB + requests for Ollama)
 uv sync --extra scheduler     # Cron expression parsing (croniter)
 uv sync --extra mcp           # MCP gateway (Model Context Protocol SDK)
+uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
 uv sync --all-extras          # All dependencies including dev/test
 ```
 
@@ -237,6 +257,33 @@ resources:
 from loom.mcp import create_server, run_stdio, run_streamable_http, MCPGateway
 server, gateway = create_server("configs/mcp/docman.yaml")
 run_stdio(server, gateway)
+```
+
+## Worker Workshop
+
+The Workshop is a web-based tool for the full worker lifecycle: Define → Test → Evaluate → Compare → Deploy. It runs without NATS — testing and evaluation call LLM backends directly.
+
+**Start the Workshop:**
+```bash
+uv sync --extra workshop
+OLLAMA_URL=http://localhost:11434 uv run loom workshop --port 8080
+```
+
+**Components:**
+- **WorkerTestRunner** (`workshop/test_runner.py`): Execute a worker config against a payload without the actor mesh. Builds the full system prompt (with silo injection), calls the LLM backend directly via `execute_with_tools()`, validates I/O contracts, and returns structured results with timing and token usage.
+- **EvalRunner** (`workshop/eval_runner.py`): Run test suites (list of input/expected_output pairs) against a worker config. Supports `field_match` and `exact_match` scoring. Results persist to DuckDB for cross-version comparison.
+- **ConfigManager** (`workshop/config_manager.py`): CRUD for worker and pipeline YAML configs with hash-based version tracking in DuckDB.
+- **PipelineEditor** (`workshop/pipeline_editor.py`): Insert, remove, swap, or branch pipeline stages. Validates dependencies using `PipelineOrchestrator._infer_dependencies()` and Kahn's topological sort.
+- **WorkshopDB** (`workshop/db.py`): DuckDB storage for eval runs, eval results, worker versions, and metrics.
+- **Web UI** (`workshop/app.py`): FastAPI + HTMX + Jinja2 with Pico CSS. Worker list/editor, interactive test bench, eval dashboard with per-case results, pipeline editor with dependency graph visualization.
+
+**Test suite format** (YAML):
+```yaml
+- name: basic_summarization
+  input:
+    text: "The quick brown fox jumps over the lazy dog."
+  expected_output:
+    summary: "A fox jumps over a dog."
 ```
 
 ## Scaling and performance
@@ -291,12 +338,13 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 
 ## What to implement next
 
-1. **End-to-end integration test** — full goal submission through router/workers/orchestrator
-2. **Router dead-letter consumer** — implement a dead-letter processor for monitoring/retry
-3. **MCP progress notifications** — wire `MCPBridge.call_pipeline()` progress_callback to MCP progress tokens
-4. **Streaming result collection (Strategy A)** — process subtask results as they arrive
-5. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
-6. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
+1. **Workshop MetricsCollector** — optional NATS subscriber for live worker metrics in Workshop dashboard
+2. **Workshop LLM-as-judge scoring** — use a separate LLM call to evaluate worker output quality
+3. **Router dead-letter consumer** — implement a dead-letter processor for monitoring/retry
+4. **MCP progress notifications** — wire `MCPBridge.call_pipeline()` progress_callback to MCP progress tokens
+5. **Streaming result collection (Strategy A)** — process subtask results as they arrive
+6. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
+7. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
 
 ## What NOT to do
 

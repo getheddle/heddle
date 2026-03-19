@@ -59,6 +59,10 @@ single YAML config. Workers, pipelines, and query backends are automatically
 discovered as MCP tools with typed input schemas. Supports stdio and
 streamable-http transports.
 
+**Worker Workshop** — a web-based tool for defining, testing, evaluating, and
+deploying LLM workers. Interactive test bench, eval suite runner with scoring,
+pipeline stage editor, and worker version tracking. No NATS needed for testing.
+
 **Contrib Ecosystem** — optional packages for DuckDB (analytics, vector search),
 Redis (checkpoint persistence), and RAG (ingestion, chunking, embedding, analysis).
 
@@ -96,7 +100,8 @@ that separates concerns across specialized actors.
 | Scheduler (cron + interval dispatch) | Complete |
 | MCP gateway (config-driven tool server) | Complete |
 | Contrib: DuckDB, Redis, RAG | Complete |
-| Unit tests | 692 passing |
+| Worker Workshop (web UI) | Complete |
+| Unit tests | 831 passing |
 
 ---
 
@@ -123,7 +128,7 @@ For the full 7-step setup with infrastructure and LLM backends, see
   setup, LLM backend configuration, running your first workflow
 - **[Building Workflows](docs/building-workflows.md)** — Comprehensive guide:
   workers, pipelines, knowledge, file-refs, routing, silos, tools, embeddings,
-  DuckDB, MCP gateway
+  DuckDB, MCP gateway, Worker Workshop
 - **[RAG Pipeline](docs/rag-howto.md)** — Social media stream ingestion,
   chunking, vector storage, and analysis
 - **[Kubernetes Deployment](docs/KUBERNETES.md)** — Minikube manifests,
