@@ -295,7 +295,10 @@ class OpenAICompatibleBackend(LLMBackend):
                 func = call.get("function", {})
                 args = func.get("arguments", "{}")
                 if isinstance(args, str):
-                    args = json.loads(args)
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        args = {"_raw": args}
                 tool_calls.append({
                     "id": call.get("id", ""),
                     "name": func.get("name", ""),
