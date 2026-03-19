@@ -348,7 +348,7 @@ class TestBuildExecutionLevels:
 # --- Parallel execution integration tests (InMemoryBus) ---
 
 
-def _make_pipeline_orchestrator(tmp_path, stages, timeout=5):
+def _make_pipeline_orchestrator(tmp_path, stages, timeout=5, max_concurrent_goals=None):
     """Create a PipelineOrchestrator with given stages and InMemoryBus."""
     import yaml
 
@@ -357,11 +357,12 @@ def _make_pipeline_orchestrator(tmp_path, stages, timeout=5):
         "pipeline_stages": stages,
         "timeout_seconds": timeout,
     }
+    if max_concurrent_goals is not None:
+        config["max_concurrent_goals"] = max_concurrent_goals
     config_file = tmp_path / "pipeline.yaml"
     config_file.write_text(yaml.dump(config))
-    orch = PipelineOrchestrator("test-pipeline", str(config_file))
     bus = InMemoryBus()
-    orch._bus = bus
+    orch = PipelineOrchestrator("test-pipeline", str(config_file), bus=bus)
     return orch, bus
 
 
@@ -589,3 +590,25 @@ class TestParallelExecution:
         assert final["status"] == TaskStatus.COMPLETED.value
         assert final["output"]["first"]["result"] == "first_done"
         assert final["output"]["second"]["result"] == "second_done"
+
+
+# --- max_concurrent_goals tests ---
+
+
+class TestPipelineConcurrentGoals:
+    def test_default_max_concurrent_goals_is_one(self, tmp_path):
+        """Without config, max_concurrent_goals defaults to 1."""
+        orch, _ = _make_pipeline_orchestrator(tmp_path, stages=[])
+        assert orch.max_concurrent == 1
+
+    def test_max_concurrent_goals_from_config(self, tmp_path):
+        """Config value is passed through to BaseActor.max_concurrent."""
+        orch, _ = _make_pipeline_orchestrator(
+            tmp_path, stages=[], max_concurrent_goals=3,
+        )
+        assert orch.max_concurrent == 3
+
+    def test_bus_injection_via_constructor(self, tmp_path):
+        """The bus= keyword argument is forwarded to BaseActor."""
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages=[])
+        assert orch._bus is bus

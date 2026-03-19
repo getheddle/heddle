@@ -91,19 +91,17 @@ class PipelineOrchestrator(BaseActor):
     by subsequent stages via input_mapping.
     """
 
-    # TODO: Read max_concurrent_goals from pipeline config and pass to
-    #   BaseActor.max_concurrent (like OrchestratorActor does in runner.py).
-    #   Currently pipeline instances process one goal at a time; horizontal
-    #   scaling via multiple instances is the workaround.
-
     def __init__(
         self,
         actor_id: str,
         config_path: str,
         nats_url: str = "nats://nats:4222",
+        *,
+        bus: Any | None = None,
     ):
-        super().__init__(actor_id, nats_url)
         self.config = self._load_config(config_path)
+        max_goals = self.config.get("max_concurrent_goals", 1)
+        super().__init__(actor_id, nats_url, max_concurrent=max_goals, bus=bus)
 
     def _load_config(self, path: str) -> dict:
         with open(path) as f:

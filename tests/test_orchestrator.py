@@ -277,6 +277,7 @@ class TestRecordInHistory:
             )
 
             goal = OrchestratorGoal(instruction="Test goal")
+            goal_state = GoalState(goal=goal)
             results = [
                 TaskResult(
                     task_id="t1",
@@ -288,10 +289,10 @@ class TestRecordInHistory:
             ]
             synthesis = {"confidence": "high"}
 
-            await actor._record_in_history(goal, results, synthesis)
-            assert len(actor._conversation_history) == 1
+            await actor._record_in_history(goal_state, results, synthesis)
+            assert len(goal_state.conversation_history) == 1
 
-            entry = actor._conversation_history[0]
+            entry = goal_state.conversation_history[0]
             assert entry["goal_id"] == goal.goal_id
             assert entry["subtask_count"] == 1
             assert entry["synthesis_confidence"] == "high"
@@ -310,6 +311,7 @@ class TestRecordInHistory:
             )
 
             goal = OrchestratorGoal(instruction="Test")
+            goal_state = GoalState(goal=goal)
             results = [
                 TaskResult(
                     task_id="t1",
@@ -319,9 +321,9 @@ class TestRecordInHistory:
                     processing_time_ms=0,
                 ),
             ]
-            await actor._record_in_history(goal, results, {})
+            await actor._record_in_history(goal_state, results, {})
 
-            entry = actor._conversation_history[0]
+            entry = goal_state.conversation_history[0]
             assert entry["results"][0]["error"] == "timeout"
         finally:
             os.unlink(config_path)
@@ -364,8 +366,8 @@ class TestConcurrentGoals:
             os.unlink(config_path)
 
     @pytest.mark.asyncio
-    async def test_concurrent_record_in_history_no_lost_writes(self):
-        """Concurrent _record_in_history calls produce no lost writes."""
+    async def test_concurrent_goals_have_isolated_history(self):
+        """Each GoalState maintains its own conversation history."""
         config_path = _write_config(max_concurrent_goals=4)
         try:
             backend = MockOrchestratorBackend("[]")
@@ -375,8 +377,12 @@ class TestConcurrentGoals:
                 backend=backend,
             )
 
+            goal_states = []
+
             async def record_one(i: int):
                 goal = OrchestratorGoal(instruction=f"Goal {i}")
+                gs = GoalState(goal=goal)
+                goal_states.append(gs)
                 results = [
                     TaskResult(
                         task_id=f"t{i}",
@@ -386,12 +392,15 @@ class TestConcurrentGoals:
                         processing_time_ms=10,
                     ),
                 ]
-                await actor._record_in_history(goal, results, {"confidence": "high"})
+                await actor._record_in_history(gs, results, {"confidence": "high"})
 
-            # Fire 20 concurrent writes
+            # Fire 20 concurrent writes — each to its own GoalState
             await asyncio.gather(*(record_one(i) for i in range(20)))
 
-            assert len(actor._conversation_history) == 20
+            assert len(goal_states) == 20
+            # Each GoalState should have exactly 1 entry (no cross-contamination)
+            for gs in goal_states:
+                assert len(gs.conversation_history) == 1
         finally:
             os.unlink(config_path)
 
@@ -409,5 +418,75 @@ class TestConcurrentGoals:
                 bus=bus,
             )
             assert actor._bus is bus
+        finally:
+            os.unlink(config_path)
+
+
+# ---------------------------------------------------------------------------
+# Per-goal state isolation tests
+# ---------------------------------------------------------------------------
+
+
+class TestGoalIsolation:
+    def test_goalstate_conversation_history_defaults_empty(self):
+        """New GoalState has empty conversation_history."""
+        goal = OrchestratorGoal(instruction="test")
+        state = GoalState(goal=goal)
+        assert state.conversation_history == []
+        assert state.checkpoint_counter == 0
+
+    def test_goalstate_history_not_shared(self):
+        """Two GoalState instances do not share the same history list."""
+        goal_a = OrchestratorGoal(instruction="A")
+        goal_b = OrchestratorGoal(instruction="B")
+        state_a = GoalState(goal=goal_a)
+        state_b = GoalState(goal=goal_b)
+
+        state_a.conversation_history.append({"goal_id": "a"})
+        assert len(state_b.conversation_history) == 0
+
+    def test_checkpoint_counter_per_goal(self):
+        """Checkpoint counters are independent across GoalState instances."""
+        goal_a = OrchestratorGoal(instruction="A")
+        goal_b = OrchestratorGoal(instruction="B")
+        state_a = GoalState(goal=goal_a)
+        state_b = GoalState(goal=goal_b)
+
+        state_a.checkpoint_counter += 1
+        state_a.checkpoint_counter += 1
+        state_b.checkpoint_counter += 1
+
+        assert state_a.checkpoint_counter == 2
+        assert state_b.checkpoint_counter == 1
+
+    @pytest.mark.asyncio
+    async def test_record_in_history_writes_to_goal_state(self):
+        """_record_in_history writes to the GoalState, not the actor."""
+        config_path = _write_config()
+        try:
+            backend = MockOrchestratorBackend("[]")
+            actor = OrchestratorActor(
+                actor_id="test-orch",
+                config_path=config_path,
+                backend=backend,
+            )
+
+            goal = OrchestratorGoal(instruction="Test")
+            gs = GoalState(goal=goal)
+            results = [
+                TaskResult(
+                    task_id="t1",
+                    worker_type="summarizer",
+                    status=TaskStatus.COMPLETED,
+                    output={"data": "x"},
+                    processing_time_ms=10,
+                ),
+            ]
+            await actor._record_in_history(gs, results, {"confidence": "high"})
+
+            assert len(gs.conversation_history) == 1
+            assert gs.conversation_history[0]["goal_id"] == goal.goal_id
+            # Actor should have no shared history attribute
+            assert not hasattr(actor, "_conversation_history")
         finally:
             os.unlink(config_path)

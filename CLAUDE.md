@@ -117,7 +117,7 @@ examples/
 docker/                   # Dockerfiles (orchestrator, router, worker) + entrypoint.sh
 k8s/                      # Kubernetes manifests (namespace, NATS, Redis, workers, Kustomize)
 
-tests/                    # 42 test files, 692 unit tests + 1 integration test
+tests/                    # 42 test files, 699 unit tests + 1 integration test
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -247,9 +247,9 @@ The orchestrator is the throughput bottleneck: all goals funnel through a single
 
 **Implemented (v0.3.0):**
 
-- **B — Concurrent goal processing.** `OrchestratorActor` reads `max_concurrent_goals` from YAML config and passes it to `BaseActor.max_concurrent`. An `asyncio.Lock` protects shared state (`_conversation_history`, `_checkpoint_counter`). Set `max_concurrent_goals: N` in the orchestrator config to process N goals simultaneously within a single instance.
+- **B — Concurrent goal processing.** `OrchestratorActor` reads `max_concurrent_goals` from YAML config and passes it to `BaseActor.max_concurrent`. All mutable state (`conversation_history`, `checkpoint_counter`) is per-goal inside `GoalState` — concurrent goals are fully isolated with no shared mutable data and no locks required. Set `max_concurrent_goals: N` in the orchestrator config to process N goals simultaneously within a single instance.
 
-- **C — Pipeline stage parallelism.** `PipelineOrchestrator` now auto-infers stage dependencies from `input_mapping` paths and builds execution levels using Kahn's topological sort. Stages within the same level run concurrently via `asyncio.gather`. Existing configs with genuinely sequential dependencies (like Docman's pipeline) produce the same execution order — no config changes needed. To benefit, design pipelines where independent stages reference only `goal.*` paths or shared earlier stages.
+- **C — Pipeline stage parallelism.** `PipelineOrchestrator` now auto-infers stage dependencies from `input_mapping` paths and builds execution levels using Kahn's topological sort. Stages within the same level run concurrently via `asyncio.gather`. Existing configs with genuinely sequential dependencies (like Docman's pipeline) produce the same execution order — no config changes needed. To benefit, design pipelines where independent stages reference only `goal.*` paths or shared earlier stages. `PipelineOrchestrator` also supports `max_concurrent_goals` in config (like `OrchestratorActor`), enabling multiple pipeline goals to run concurrently within a single instance.
 
 **Free horizontal scaling (no code changes needed):**
 
@@ -282,7 +282,7 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 
 - **Pipeline parallelism (C) already benefits MCP.** The `MCPBridge.call_pipeline()` dispatches a goal and the pipeline runs stages concurrently. The bridge's `_collect_pipeline_results()` correctly filters intermediate stage results from the final result.
 - **Concurrent MCP calls are supported** — the bridge is fully async. Multiple MCP clients can call tools simultaneously. However, if all calls target the same single-instance orchestrator, they queue at the orchestrator's semaphore.
-- **PipelineOrchestrator needs `max_concurrent_goals`** — unlike `OrchestratorActor`, the pipeline orchestrator doesn't yet read this config. This means pipeline MCP calls still process one goal at a time per instance. Use horizontal scaling (multiple pipeline instances) as the workaround.
+- **PipelineOrchestrator supports `max_concurrent_goals`** — like `OrchestratorActor`, the pipeline orchestrator reads this config and passes it to `BaseActor.max_concurrent`. Set `max_concurrent_goals: N` in pipeline config to process N goals simultaneously. Pipeline execution is stateless per-goal (local `context` dict), so concurrent goals are naturally isolated.
 - **MCP progress notifications** — the bridge has a `progress_callback` parameter but the MCP server doesn't wire it to MCP progress tokens yet. This would let MCP clients show per-stage progress during pipeline execution.
 
 ## Known issues
@@ -293,11 +293,10 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 
 1. **End-to-end integration test** — full goal submission through router/workers/orchestrator
 2. **Router dead-letter consumer** — implement a dead-letter processor for monitoring/retry
-3. **PipelineOrchestrator concurrent goals** — read `max_concurrent_goals` from pipeline config (like OrchestratorActor does)
-4. **MCP progress notifications** — wire `MCPBridge.call_pipeline()` progress_callback to MCP progress tokens
-5. **Streaming result collection (Strategy A)** — process subtask results as they arrive
-6. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
-7. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
+3. **MCP progress notifications** — wire `MCPBridge.call_pipeline()` progress_callback to MCP progress tokens
+4. **Streaming result collection (Strategy A)** — process subtask results as they arrive
+5. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
+6. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
 
 ## What NOT to do
 
