@@ -34,10 +34,13 @@ Example config::
       workspace_dir: "/tmp/workspace"
       patterns: ["*.pdf", "*.json"]
 """
+
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from loom.core.config import load_config
 
@@ -62,8 +65,9 @@ def load_mcp_config(path: str | Path) -> dict[str, Any]:
     return config
 
 
-def validate_mcp_config(
-    config: dict[str, Any], path: str | Path = "<unknown>"
+def validate_mcp_config(  # noqa: PLR0912
+    config: dict[str, Any],
+    path: str | Path = "<unknown>",
 ) -> list[str]:
     """Validate an MCP gateway config dict.
 
@@ -128,9 +132,11 @@ def _validate_worker_entries(entries: Any) -> list[str]:
         elif not isinstance(entry["config"], str):
             errors.append(f"{prefix}: 'config' must be a string")
         # name, description, tier are all optional overrides.
-        for key in ("name", "description", "tier"):
-            if key in entry and not isinstance(entry[key], str):
-                errors.append(f"{prefix}: '{key}' must be a string")
+        errors.extend(
+            f"{prefix}: '{key}' must be a string"
+            for key in ("name", "description", "tier")
+            if key in entry and not isinstance(entry[key], str)
+        )
 
     return errors
 

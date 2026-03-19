@@ -4,19 +4,20 @@ Complements test_extract_json.py (which focuses on YAML paths) with
 additional coverage for JSON parsing, fence stripping, brace extraction,
 nested objects, and error cases.
 """
+
 import pytest
 
 from loom.worker.runner import _extract_json
 
-
 # --- Step 1: Direct valid JSON (no fences, no extras) ---
+
 
 class TestDirectJSON:
     def test_simple_object(self):
         assert _extract_json('{"a": 1}') == {"a": 1}
 
     def test_with_whitespace_padding(self):
-        raw = "   \n  {\"status\": \"ok\"}  \n  "
+        raw = '   \n  {"status": "ok"}  \n  '
         assert _extract_json(raw) == {"status": "ok"}
 
     def test_complex_types(self):
@@ -33,6 +34,7 @@ class TestDirectJSON:
 
 # --- Step 2: JSON in ```json fences ---
 
+
 class TestJSONFenced:
     def test_json_fence(self):
         raw = '```json\n{"key": "value"}\n```'
@@ -44,15 +46,16 @@ class TestJSONFenced:
         assert result == {"a": 1, "b": 2}
 
     def test_json_fence_with_preamble(self):
-        raw = "Here is the result:\n\n```json\n{\"ok\": true}\n```"
+        raw = 'Here is the result:\n\n```json\n{"ok": true}\n```'
         assert _extract_json(raw) == {"ok": True}
 
     def test_json_fence_with_trailing_text(self):
-        raw = "```json\n{\"ok\": true}\n```\n\nHope this helps!"
+        raw = '```json\n{"ok": true}\n```\n\nHope this helps!'
         assert _extract_json(raw) == {"ok": True}
 
 
 # --- Step 3: JSON in bare ``` fences (no language tag) ---
+
 
 class TestBareFence:
     def test_bare_fence(self):
@@ -60,11 +63,12 @@ class TestBareFence:
         assert _extract_json(raw) == {"bare": True}
 
     def test_bare_fence_with_preamble(self):
-        raw = "I generated this:\n```\n{\"result\": 42}\n```"
+        raw = 'I generated this:\n```\n{"result": 42}\n```'
         assert _extract_json(raw) == {"result": 42}
 
 
 # --- Step 4: JSON with extra text before/after braces ---
+
 
 class TestBraceExtraction:
     def test_text_before_json(self):
@@ -76,7 +80,7 @@ class TestBraceExtraction:
         assert _extract_json(raw) == {"answer": 42}
 
     def test_text_surrounding_json(self):
-        raw = "Here you go:\n{\"x\": 1}\nDone!"
+        raw = 'Here you go:\n{"x": 1}\nDone!'
         assert _extract_json(raw) == {"x": 1}
 
     def test_multiline_json_in_prose(self):
@@ -92,6 +96,7 @@ class TestBraceExtraction:
 
 # --- Step 5: YAML in ```yaml fences (parsed via YAML fallback) ---
 
+
 class TestYAMLFenced:
     def test_yaml_fence_nested(self):
         raw = "```yaml\nresult:\n  items:\n    - name: a\n    - name: b\n```"
@@ -106,6 +111,7 @@ class TestYAMLFenced:
 
 # --- Step 6: Plain YAML (no fences) ---
 
+
 class TestPlainYAML:
     def test_plain_yaml_multikey(self):
         raw = "status: success\ncount: 10\ntags:\n  - alpha\n  - beta"
@@ -116,6 +122,7 @@ class TestPlainYAML:
 
 
 # --- Step 7: Completely unparseable content ---
+
 
 class TestUnparseable:
     def test_plain_text_raises(self):
@@ -145,6 +152,7 @@ class TestUnparseable:
 
 # --- Step 8: Nested JSON objects ---
 
+
 class TestNestedJSON:
     def test_deeply_nested(self):
         raw = '{"a": {"b": {"c": {"d": 1}}}}'
@@ -163,6 +171,7 @@ class TestNestedJSON:
 
 
 # --- Step 9: Common LLM mistakes ---
+
 
 class TestLLMQuirks:
     def test_trailing_comma_in_object(self):
@@ -196,7 +205,7 @@ class TestLLMQuirks:
 
     def test_fence_with_extra_spaces(self):
         """Some LLMs add spaces between ``` and language tag."""
-        raw = "```json  \n{\"ok\": true}\n```"
+        raw = '```json  \n{"ok": true}\n```'
         # The regex expects ```json (no space before newline in tag),
         # but the brace extraction fallback should still work.
         result = _extract_json(raw)
@@ -218,6 +227,7 @@ class TestLLMQuirks:
 
 
 # --- Regex edge cases ---
+
 
 class TestFenceRegex:
     def test_fence_with_no_newline_before_close(self):

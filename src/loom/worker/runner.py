@@ -1,22 +1,26 @@
-"""
-LLM worker actor. Processes a single task via an LLM backend and resets.
+"""LLM worker actor.
+
+Processes a single task via an LLM backend and resets.
 No state carries between tasks — this is enforced, not optional.
 
 Supports tool-use: when knowledge_silos include tool-type entries, the worker
 offers those tools to the LLM and executes a multi-turn loop until the LLM
 produces a final text answer.
 """
+
 from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from loom.worker.backends import LLMBackend
 from loom.worker.base import TaskWorker
 from loom.worker.tools import MAX_TOOL_ROUNDS, ToolProvider, load_tool_provider
+
+if TYPE_CHECKING:
+    from loom.worker.backends import LLMBackend
 
 logger = structlog.get_logger()
 
@@ -71,7 +75,7 @@ def _extract_json(raw: str) -> dict:
     try:
         import yaml
     except ImportError:
-        raise ValueError(f"LLM returned non-JSON: {raw[:200]}")
+        raise ValueError(f"LLM returned non-JSON: {raw[:200]}") from None
 
     # 4. Parse fenced content as YAML
     if fence_content:
@@ -164,11 +168,13 @@ async def execute_with_tools(
                     tool_result = json.dumps({"error": str(e)})
                     logger.error("worker.tool_execution_failed", tool=tool_name, error=str(e))
 
-            messages.append({
-                "role": "tool",
-                "tool_call_id": call["id"],
-                "content": tool_result,
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call["id"],
+                    "content": tool_result,
+                }
+            )
 
         # Call LLM again with updated message history
         result = await backend.complete(
@@ -209,11 +215,12 @@ class LLMWorker(TaskWorker):
         config_path: str,
         backends: dict[str, LLMBackend],
         nats_url: str = "nats://nats:4222",
-    ):
+    ) -> None:
         super().__init__(actor_id, config_path, nats_url)
         self.backends = backends
 
     async def process(self, payload: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
+        """Build prompt, call LLM with tool-use loop, and parse structured output."""
         # 1. Build prompt
         system_prompt = self.config["system_prompt"]
 
@@ -221,6 +228,7 @@ class LLMWorker(TaskWorker):
         silos = self.config.get("knowledge_silos", [])
         if silos:
             from loom.worker.knowledge import load_knowledge_silos
+
             silo_text = load_knowledge_silos(silos)
             if silo_text:
                 system_prompt = silo_text + "\n\n" + system_prompt
@@ -229,6 +237,7 @@ class LLMWorker(TaskWorker):
         knowledge_sources = self.config.get("knowledge_sources", [])
         if knowledge_sources:
             from loom.worker.knowledge import load_knowledge_sources
+
             knowledge_text = load_knowledge_sources(knowledge_sources)
             if knowledge_text:
                 system_prompt = knowledge_text + "\n\n" + system_prompt
@@ -238,6 +247,7 @@ class LLMWorker(TaskWorker):
         file_ref_fields = self.config.get("resolve_file_refs", [])
         if workspace_dir and file_ref_fields:
             from loom.core.workspace import WorkspaceManager
+
             ws = WorkspaceManager(workspace_dir)
             for field in file_ref_fields:
                 if field in payload:
@@ -247,7 +257,8 @@ class LLMWorker(TaskWorker):
                     except (ValueError, FileNotFoundError, json.JSONDecodeError) as e:
                         logger.warning(
                             "worker.file_ref_resolution_failed",
-                            field=field, error=str(e),
+                            field=field,
+                            error=str(e),
                         )
 
         user_message = json.dumps(payload, indent=2)
@@ -289,6 +300,7 @@ class LLMWorker(TaskWorker):
         silo_updates = output.pop("silo_updates", None)
         if silo_updates:
             from loom.worker.knowledge import apply_silo_updates
+
             apply_silo_updates(silo_updates, silos)
 
         return {

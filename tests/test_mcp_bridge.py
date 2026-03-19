@@ -1,4 +1,5 @@
 """Tests for loom.mcp.bridge — NATS call dispatch."""
+
 import asyncio
 
 import pytest
@@ -59,7 +60,8 @@ class TestCallWorker:
     async def test_successful_call(self, bus, bridge):
         """Worker responds with a successful TaskResult."""
         ready, worker_task = _mock_worker_responder(
-            bus, "loom.tasks.incoming",
+            bus,
+            "loom.tasks.incoming",
             status=TaskStatus.COMPLETED,
             output={"summary": "Test result"},
         )
@@ -78,7 +80,8 @@ class TestCallWorker:
     async def test_failed_worker_raises(self, bus, bridge):
         """Worker responds with FAILED status → BridgeError."""
         ready, worker_task = _mock_worker_responder(
-            bus, "loom.tasks.incoming",
+            bus,
+            "loom.tasks.incoming",
             status=TaskStatus.FAILED,
             error="Model unavailable",
         )
@@ -216,7 +219,9 @@ class TestCallPipeline:
                         status=TaskStatus.COMPLETED,
                         output={"stage": i},
                     )
-                    await bus.publish(f"loom.results.{goal_id}", stage_result.model_dump(mode="json"))
+                    await bus.publish(
+                        f"loom.results.{goal_id}", stage_result.model_dump(mode="json")
+                    )
                     await asyncio.sleep(0.01)
 
                 final_result = TaskResult(

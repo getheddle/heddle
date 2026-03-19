@@ -62,13 +62,18 @@ All new functionality must include unit tests. Tests must pass without
 infrastructure (NATS, Redis, Ollama). Use `InMemoryBus` and
 `InMemoryCheckpointStore` for testing.
 
+**Code style:**
+All contributions must conform to the project's coding standards defined in
+[`CODING_GUIDE.md`](CODING_GUIDE.md). Key requirements: Google-style docstrings,
+type annotations on all public functions, ruff for formatting and linting.
+
 ---
 
 ## What We Need Most
 
 - New worker configurations for specific domains
 - New contrib packages (databases, search engines, monitoring integrations)
-- End-to-end integration tests
+- Config validation improvements and new config types
 - Dead-letter consumer implementation for monitoring/retry
 - MCP gateway examples and transport extensions
 - Documentation improvements and examples
@@ -92,8 +97,9 @@ infrastructure (NATS, Redis, Ollama). Use `InMemoryBus` and
 2. Make changes in a feature branch
 3. Sign the CLA when prompted
 4. Ensure all tests pass: `uv run pytest tests/ -v -m "not integration"`
-5. Lint your code: `uv run ruff check src/`
-6. Submit a pull request with a clear description of what changed and why
+5. Lint and format your code: `uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/`
+6. Read the [Coding Guide](CODING_GUIDE.md) if this is your first contribution
+7. Submit a pull request with a clear description of what changed and why
 
 Expect review feedback focused on architectural compliance and test coverage.
 

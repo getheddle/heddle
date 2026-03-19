@@ -1,5 +1,5 @@
 """Tests for ToolProvider abstraction and dynamic loading."""
-import asyncio
+
 import json
 
 import pytest
@@ -11,10 +11,10 @@ from loom.worker.tools import (
     load_tool_provider,
 )
 
-
 # ---------------------------------------------------------------------------
 # Concrete test implementations
 # ---------------------------------------------------------------------------
+
 
 class DummyTool(ToolProvider):
     """Async tool for testing."""
@@ -61,6 +61,7 @@ class DummySyncTool(SyncToolProvider):
 # ToolProvider ABC tests
 # ---------------------------------------------------------------------------
 
+
 class TestToolProvider:
     """Tests for the ToolProvider interface."""
 
@@ -96,6 +97,7 @@ class TestToolProvider:
 # SyncToolProvider tests
 # ---------------------------------------------------------------------------
 
+
 class TestSyncToolProvider:
     """Tests for the synchronous tool convenience base."""
 
@@ -122,6 +124,7 @@ class TestSyncToolProvider:
 # ---------------------------------------------------------------------------
 # Dynamic loading tests
 # ---------------------------------------------------------------------------
+
 
 class TestLoadToolProvider:
     """Tests for load_tool_provider() dynamic import."""
@@ -168,6 +171,7 @@ class NotATool:
 # ---------------------------------------------------------------------------
 # Constants tests
 # ---------------------------------------------------------------------------
+
 
 class TestConstants:
     def test_max_tool_rounds_is_reasonable(self):

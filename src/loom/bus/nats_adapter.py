@@ -22,16 +22,19 @@ NOTE: All messages are JSON-serialized dicts. Binary payloads are not supported.
       Large data should be passed via file references (workspace directory), not
       inline in messages.
 """
+
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import nats
-from nats.aio.client import Client as NATSClient
 import structlog
 
 from loom.bus.base import MessageBus, Subscription
+
+if TYPE_CHECKING:
+    from nats.aio.client import Client as NATSClient
 
 logger = structlog.get_logger()
 
@@ -39,10 +42,11 @@ logger = structlog.get_logger()
 class NATSSubscription(Subscription):
     """Wraps a nats-py subscription as an async iterator of parsed dicts."""
 
-    def __init__(self, nats_sub) -> None:
+    def __init__(self, nats_sub: Any) -> None:
         self._sub = nats_sub
 
     async def unsubscribe(self) -> None:
+        """Unsubscribe from the underlying NATS subscription."""
         await self._sub.unsubscribe()
 
     def __aiter__(self) -> NATSSubscription:
@@ -58,7 +62,7 @@ class NATSSubscription(Subscription):
             msg = await self._sub.next_msg(timeout=None)
         except Exception as e:
             logger.error("nats.subscription_error", error=str(e), error_type=type(e).__name__)
-            raise StopAsyncIteration
+            raise StopAsyncIteration from e
         return json.loads(msg.data.decode())
 
 
@@ -71,11 +75,12 @@ class NATSBus(MessageBus):
     - request(): Request-reply for synchronous-style calls (not yet used by any actor)
     """
 
-    def __init__(self, url: str = "nats://nats:4222"):
+    def __init__(self, url: str = "nats://nats:4222") -> None:
         self.url = url
         self._nc: NATSClient | None = None
 
     async def connect(self) -> None:
+        """Connect to the NATS server."""
         self._nc = await nats.connect(
             self.url,
             reconnect_time_wait=2,
@@ -84,6 +89,7 @@ class NATSBus(MessageBus):
         logger.info("bus.connected", url=self.url)
 
     async def close(self) -> None:
+        """Drain and close the NATS connection."""
         if self._nc:
             await self._nc.drain()
 

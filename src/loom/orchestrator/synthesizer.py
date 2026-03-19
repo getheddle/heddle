@@ -29,15 +29,18 @@ Design decisions:
       synthesizer truncates individual outputs before sending them to the LLM
       to avoid blowing the context window.
 """
+
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from loom.core.messages import TaskResult, TaskStatus
-from loom.worker.backends import LLMBackend
+
+if TYPE_CHECKING:
+    from loom.worker.backends import LLMBackend
 
 logger = structlog.get_logger()
 
@@ -106,7 +109,7 @@ class ResultSynthesizer:
         longer than this are truncated to avoid exceeding the model's context
         window.  Defaults to :data:`_MAX_OUTPUT_CHARS`.
 
-    Example
+    Example:
     -------
     ::
 
@@ -143,7 +146,7 @@ class ResultSynthesizer:
         results : list[TaskResult]
             Worker results to merge.  May be empty.
 
-        Returns
+        Returns:
         -------
         dict[str, Any]
             A dict with the following top-level keys:
@@ -188,9 +191,7 @@ class ResultSynthesizer:
                 total_tokens[key] = total_tokens.get(key, 0) + value
 
         # Collect distinct model identifiers (filter out None).
-        models_used = sorted(
-            {r.model_used for r in results if r.model_used is not None}
-        )
+        models_used = sorted({r.model_used for r in results if r.model_used is not None})
 
         metadata = {
             "total": len(results),
@@ -241,7 +242,7 @@ class ResultSynthesizer:
             The original high-level goal that spawned these tasks.  Required
             for LLM synthesis mode; ignored in merge mode.
 
-        Returns
+        Returns:
         -------
         dict[str, Any]
             In **merge mode** the return value is identical to :meth:`merge`.
@@ -320,18 +321,17 @@ class ResultSynthesizer:
             if len(output_str) > self._max_output_chars:
                 output_str = output_str[: self._max_output_chars] + "... [truncated]"
             sections.append(
-                f"--- Worker #{i}: {r.worker_type} (task {r.task_id}) ---\n"
-                f"{output_str}"
+                f"--- Worker #{i}: {r.worker_type} (task {r.task_id}) ---\n{output_str}"
             )
             sections.append("")
 
         # Failed tasks.
         if failed:
             sections.append("FAILED TASKS:")
-            for r in failed:
-                sections.append(
-                    f"  - {r.worker_type} (task {r.task_id}): {r.error or 'unknown error'}"
-                )
+            sections.extend(
+                f"  - {r.worker_type} (task {r.task_id}): {r.error or 'unknown error'}"
+                for r in failed
+            )
             sections.append("")
 
         return "\n".join(sections)
@@ -442,7 +442,7 @@ class ResultSynthesizer:
             text = text[first_newline + 1 :]
             # Remove closing fence.
             if text.endswith("```"):
-                text = text[: -3]
+                text = text[:-3]
             text = text.strip()
 
         # Try direct parse first.

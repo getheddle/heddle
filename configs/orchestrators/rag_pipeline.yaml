@@ -1,37 +1,160 @@
-# RAG Pipeline — Multi-channel Telegram stream analysis.
-# Run with:  loom pipeline --config configs/orchestrators/rag_pipeline.yaml \
-#                          --nats-url nats://localhost:4222
-# Submit:    loom submit "Analyze Telegram streams" \
-#                --context source_paths='["/data/result-1.json","/data/result-2.json"]'
+# =============================================================================
+# RAG Pipeline Configuration (Deterministic Pipeline Orchestrator)
+# =============================================================================
+#
+# Multi-channel Telegram stream analysis pipeline. Stages run in dependency
+# order with automatic parallel execution where possible (Strategy C).
+#
+# Component:  src/loom/orchestrator/pipeline.py (PipelineOrchestrator)
+# Loaded by:  loom.core.config.load_config()
+# Validated:  loom.core.contracts.py (I/O schema enforcement per stage)
+#
+# Run with:
+#   loom pipeline --config configs/orchestrators/rag_pipeline.yaml \
+#                 --nats-url nats://localhost:4222
+#
+# Submit a goal:
+#   loom submit "Analyze Telegram streams" \
+#       --context source_path="/data/result-1.json"
+#
+#   loom submit "Analyze Telegram streams" \
+#       --context source_paths='["/data/result-1.json","/data/result-2.json"]'
+#
+# NATS subjects:
+#   loom.goals.incoming                 — Pipeline subscribes here (queue groups)
+#   loom.tasks.{worker_type}.{tier}     — Stage tasks dispatched here
+#   loom.results.{goal_id}              — Stage results flow back here
+#
+# Scaling:
+#   Run multiple pipeline instances — NATS queue groups distribute goals.
+#   Set max_concurrent_goals > 1 to process multiple goals per instance.
+#   Workers auto-scale independently via queue group replicas.
 #
 # Data flow:
-#   1. ingest:     Read Telegram JSON exports → NormalizedPost objects
-#   2. mux:        Merge multi-channel posts chronologically with time windows
-#   3. chunk:      Split post text into sentence-level chunks
-#   4. vectorize:  Embed chunks and store in DuckDB vector store
+#   1. ingest:     Read Telegram JSON exports -> NormalizedPost objects
+#   2. chunk:      Split post text into sentence-level TextChunks
+#   3. vectorize:  Embed chunks and store in DuckDB vector store
 #
-# LLM analysis actors (trend, corroboration, anomaly, extraction) run
-# independently on muxed windows — see the test project for batch usage.
+# Dependency inference (Strategy C):
+#   PipelineOrchestrator auto-infers dependencies from input_mapping paths
+#   using Kahn's topological sort. Stages that don't depend on each other
+#   run concurrently via asyncio.gather. In this pipeline, the chain is
+#   strictly sequential: ingest -> chunk -> vectorize.
+#
+# LLM analysis stages (trend, corroboration, anomaly, extraction) run
+# independently on muxed windows — see examples/rag_demo.py for batch usage.
+#
+# Related configs:
+#   configs/workers/rag_ingestor.yaml    — stage "ingest" worker config
+#   configs/workers/rag_chunker.yaml     — stage "chunk" worker config
+#   configs/workers/rag_vectorstore.yaml — stage "vectorize" worker config
+#   configs/workers/rag_mux.yaml         — mux worker (not in this pipeline)
+#   configs/mcp/docman.yaml              — MCP gateway exposing this pipeline
+# =============================================================================
 
+# name (str, required)
+# Pipeline identifier. Used in logging and MCP tool naming.
 name: "rag_pipeline"
+
+# timeout_seconds (int, optional, default: 300)
+# Default timeout for all stages. Individual stages can override this.
+# This is the per-stage timeout, not total pipeline timeout.
 timeout_seconds: 300
 
+# max_concurrent_goals (int, optional, default: 1)
+# How many pipeline goals can execute concurrently within this instance.
+# Pipeline execution is stateless per-goal (local context dict), so
+# concurrent goals are naturally isolated with no shared mutable state.
+# max_concurrent_goals: 5
+
+# pipeline_stages (list, required)
+# Ordered list of stages. Each stage dispatches a task to a worker and
+# collects the result. The pipeline builds an execution plan from the
+# dependency graph inferred from input_mapping paths.
+#
+# Stage fields:
+#   name (str, required)
+#     Unique identifier for this stage within the pipeline. Used as the
+#     key in the pipeline context dict. Other stages reference outputs
+#     via "{stage_name}.output.{field}".
+#
+#   worker_type (str, required)
+#     Which worker config handles this stage. Must match a worker's name field.
+#     The worker must be running and subscribed to the correct NATS subject.
+#
+#   tier (str, optional)
+#     Model tier for this stage. Overrides the worker's default_model_tier.
+#     Valid: "local" | "standard" | "frontier"
+#
+#   input_mapping (dict, required)
+#     Maps stage input fields to values from the pipeline context.
+#     Each key is a field name in the worker's input_schema.
+#     Each value is a dot-notation path into the pipeline context.
+#
+#     Path syntax:
+#       "goal.context.{field}"        — Value from the submitted goal's context dict.
+#                                       Example: "goal.context.source_path"
+#       "{stage_name}.output.{field}" — Output field from a previous stage.
+#                                       Example: "ingest.output.posts"
+#       "'{literal}'"                 — Literal string value (wrapped in single quotes).
+#                                       Example: "'store'" becomes the string "store"
+#
+#     Dependency inference:
+#       Paths referencing other stage names (e.g., "ingest.output.posts") automatically
+#       create a dependency edge: this stage waits for "ingest" to complete.
+#       Paths referencing "goal.*" don't create dependencies (goal is always available).
+#       Literal values ("'store'") don't create dependencies.
+#
+#   depends_on (list[str], optional)
+#     Explicit dependency override. Use when a stage depends on another stage
+#     but doesn't reference its output in input_mapping (rare).
+#     Example: depends_on: ["setup_stage"]
+#
+#   condition (str, optional)
+#     Conditional execution. Stage runs only if the condition evaluates to true.
+#     Syntax: "{path} == {value}" or "{path} != {value}"
+#     The path uses the same dot-notation as input_mapping.
+#     Examples:
+#       condition: "classify.output.category == 'invoice'"
+#       condition: "goal.context.skip_vectorize != 'true'"
+#     Note: values are compared as strings.
+#
+#   timeout_seconds (int, optional)
+#     Per-stage timeout override. If omitted, uses the pipeline-level default.
 pipeline_stages:
+  # --- Stage 1: Ingest ---
+  # Reads a Telegram JSON export and produces NormalizedPost objects.
+  # Input: source_path from the goal context.
+  # Output: posts (list), channel_id, channel_name, post_count.
   - name: "ingest"
     worker_type: "rag_ingestor"
     tier: "local"
     input_mapping:
+      # Maps the worker's "source_path" input to the goal's context.source_path
       source_path: "goal.context.source_path"
 
+  # --- Stage 2: Chunk ---
+  # Splits post text into sentence-level TextChunks for embedding.
+  # Depends on: ingest (auto-inferred from "ingest.output.posts" path).
+  # Input: posts from ingest stage output.
+  # Output: chunks (list), chunk_count.
   - name: "chunk"
     worker_type: "rag_chunker"
     tier: "local"
     input_mapping:
+      # References ingest stage output — creates automatic dependency
       posts: "ingest.output.posts"
 
+  # --- Stage 3: Vectorize ---
+  # Embeds chunks and stores in DuckDB vector store.
+  # Depends on: chunk (auto-inferred from "chunk.output.chunks" path).
+  # Input: action="store" (literal), chunks from chunk stage output.
+  # Output: stored_count.
   - name: "vectorize"
     worker_type: "rag_vectorstore"
     tier: "local"
     input_mapping:
+      # Literal value — single-quoted string becomes the value "store"
       action: "'store'"
+      # References chunk stage output — creates automatic dependency
       chunks: "chunk.output.chunks"

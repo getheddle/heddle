@@ -1,4 +1,5 @@
 """Tests for scheduler configuration validation."""
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -7,10 +8,10 @@ import pytest
 
 from loom.scheduler.config import _validate_schedule_entry, validate_scheduler_config
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _base_config(**overrides):
     """Return a minimal valid scheduler config, merging any overrides."""
@@ -49,6 +50,7 @@ def _interval_entry(**overrides):
 # ---------------------------------------------------------------------------
 # Top-level validation
 # ---------------------------------------------------------------------------
+
 
 class TestValidateSchedulerConfig:
     """Tests for validate_scheduler_config()."""
@@ -90,11 +92,12 @@ class TestValidateSchedulerConfig:
 # Timing mutual exclusivity — parametrized
 # ---------------------------------------------------------------------------
 
+
 class TestTimingMutualExclusivity:
     """Exactly one of 'cron' or 'interval_seconds' must be present."""
 
     @pytest.mark.parametrize(
-        "extra_keys, should_error, snippet",
+        ("extra_keys", "should_error", "snippet"),
         [
             pytest.param(
                 {"cron": "* * * * *"},
@@ -140,6 +143,7 @@ class TestTimingMutualExclusivity:
 # ---------------------------------------------------------------------------
 # Entry-level validation
 # ---------------------------------------------------------------------------
+
 
 class TestValidateScheduleEntry:
     """Tests for _validate_schedule_entry()."""
@@ -216,24 +220,28 @@ class TestValidateScheduleEntry:
 
     def test_cron_without_croniter(self):
         entry = _cron_entry()
-        with patch.dict("sys.modules", {"croniter": None}):
+        with (
+            patch.dict("sys.modules", {"croniter": None}),
             # Force ImportError on `from croniter import croniter`
-            with patch(
+            patch(
                 "loom.scheduler.config.croniter",
                 side_effect=ImportError,
                 create=True,
-            ):
-                # Reimport isn't needed; the function does a local import.
-                # We patch builtins __import__ to raise for croniter.
-                original_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+            ),
+        ):
+            # Reimport isn't needed; the function does a local import.
+            # We patch builtins __import__ to raise for croniter.
+            original_import = (
+                __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+            )
 
-                def _fake_import(name, *args, **kwargs):
-                    if name == "croniter":
-                        raise ImportError("no croniter")
-                    return original_import(name, *args, **kwargs)
+            def _fake_import(name, *args, **kwargs):
+                if name == "croniter":
+                    raise ImportError("no croniter")
+                return original_import(name, *args, **kwargs)
 
-                with patch("builtins.__import__", side_effect=_fake_import):
-                    errors = _validate_schedule_entry(entry, 0, "test.yaml")
+            with patch("builtins.__import__", side_effect=_fake_import):
+                errors = _validate_schedule_entry(entry, 0, "test.yaml")
 
         assert any("croniter package" in e for e in errors)
 

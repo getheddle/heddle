@@ -1,4 +1,5 @@
-"""Test ProcessorWorker, ProcessingBackend, and SyncProcessingBackend (unit tests, no infrastructure)."""
+"""Test ProcessorWorker, ProcessingBackend, and SyncProcessingBackend."""
+
 from unittest.mock import AsyncMock
 
 import pytest
@@ -7,8 +8,8 @@ import yaml
 from loom.core.messages import ModelTier, TaskMessage, TaskResult, TaskStatus
 from loom.worker.processor import ProcessingBackend, ProcessorWorker, SyncProcessingBackend
 
-
 # --- Mock backend ---
+
 
 class MockBackend(ProcessingBackend):
     """Backend that returns a fixed output."""
@@ -59,6 +60,7 @@ def _make_task(payload=None):
 
 
 # --- Tests ---
+
 
 @pytest.mark.asyncio
 async def test_processor_worker_delegates_to_backend(tmp_path):
@@ -155,6 +157,7 @@ async def test_processor_worker_passes_config_to_backend(tmp_path):
 
 
 # --- SyncProcessingBackend tests ---
+
 
 class MockSyncBackend(SyncProcessingBackend):
     """Synchronous backend that returns a fixed output."""

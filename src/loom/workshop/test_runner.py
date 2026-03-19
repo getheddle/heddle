@@ -16,19 +16,22 @@ Usage::
     result = await runner.run(config_dict, {"text": "Hello world"}, tier="local")
     print(result.output, result.validation_errors, result.latency_ms)
 """
+
 from __future__ import annotations
 
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from loom.core.config import validate_worker_config
 from loom.core.contracts import validate_input, validate_output
-from loom.worker.backends import LLMBackend
 from loom.worker.runner import _extract_json, _load_tool_providers, execute_with_tools
+
+if TYPE_CHECKING:
+    from loom.worker.backends import LLMBackend
 
 logger = structlog.get_logger()
 
@@ -72,7 +75,7 @@ class WorkerTestRunner:
     def __init__(self, backends: dict[str, LLMBackend]) -> None:
         self.backends = backends
 
-    async def run(
+    async def run(  # noqa: PLR0912, PLR0915
         self,
         config: dict[str, Any],
         payload: dict[str, Any],
@@ -113,6 +116,7 @@ class WorkerTestRunner:
             if silos:
                 try:
                     from loom.worker.knowledge import load_knowledge_silos
+
                     silo_text = load_knowledge_silos(silos)
                     if silo_text:
                         system_prompt = silo_text + "\n\n" + system_prompt
@@ -124,6 +128,7 @@ class WorkerTestRunner:
             if knowledge_sources:
                 try:
                     from loom.worker.knowledge import load_knowledge_sources
+
                     knowledge_text = load_knowledge_sources(knowledge_sources)
                     if knowledge_text:
                         system_prompt = knowledge_text + "\n\n" + system_prompt
@@ -135,6 +140,7 @@ class WorkerTestRunner:
             file_ref_fields = config.get("resolve_file_refs", [])
             if workspace_dir and file_ref_fields:
                 from loom.core.workspace import WorkspaceManager
+
                 ws = WorkspaceManager(workspace_dir)
                 for f in file_ref_fields:
                     if f in payload:
@@ -158,8 +164,7 @@ class WorkerTestRunner:
             if not backend:
                 available = list(self.backends.keys())
                 result.error = (
-                    f"No backend for tier '{resolved_tier}'. "
-                    f"Available tiers: {available}"
+                    f"No backend for tier '{resolved_tier}'. Available tiers: {available}"
                 )
                 return result
 

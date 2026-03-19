@@ -8,13 +8,13 @@ when components are wired together through the in-memory message bus.
 All tests are self-contained and run as part of the standard test suite:
     uv run pytest tests/test_e2e_operations.py -v
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import os
 import tempfile
-from typing import Any
 
 import pytest
 import yaml
@@ -31,7 +31,6 @@ from loom.orchestrator.pipeline import PipelineOrchestrator
 from loom.orchestrator.runner import OrchestratorActor
 from loom.router.router import TaskRouter
 from loom.worker.backends import LLMBackend
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -147,10 +146,12 @@ class TestRouterToWorkerRoundtrip:
         """Full round-trip: task published → router routes → arrives at worker subject."""
         bus = InMemoryBus()
 
-        rules_path = _write_yaml({
-            "tier_overrides": {},
-            "rate_limits": {"local": {"max_concurrent": 10}},
-        })
+        rules_path = _write_yaml(
+            {
+                "tier_overrides": {},
+                "rate_limits": {"local": {"max_concurrent": 10}},
+            }
+        )
         try:
             router = TaskRouter(rules_path, bus)
             await router.run()
@@ -203,29 +204,35 @@ class TestOrchestratorFullGoalFlow:
         await bus.connect()
 
         # Backend returns a plan with 2 subtasks
-        plan = json.dumps([
-            {"worker_type": "summarizer", "payload": {"text": "chunk 1"}},
-            {"worker_type": "summarizer", "payload": {"text": "chunk 2"}},
-        ])
-        synthesis = json.dumps({
-            "combined_summary": "Both chunks summarized",
-            "confidence": "high",
-        })
+        plan = json.dumps(
+            [
+                {"worker_type": "summarizer", "payload": {"text": "chunk 1"}},
+                {"worker_type": "summarizer", "payload": {"text": "chunk 2"}},
+            ]
+        )
+        synthesis = json.dumps(
+            {
+                "combined_summary": "Both chunks summarized",
+                "confidence": "high",
+            }
+        )
         backend = MockBackend(plan, synthesis)
 
-        config_path = _write_yaml({
-            "name": "e2e-orchestrator",
-            "timeout_seconds": 5,
-            "max_concurrent_tasks": 5,
-            "available_workers": [
-                {
-                    "name": "summarizer",
-                    "description": "Summarizes text",
-                    "input_schema": {"type": "object", "required": ["text"]},
-                    "default_model_tier": "local",
-                },
-            ],
-        })
+        config_path = _write_yaml(
+            {
+                "name": "e2e-orchestrator",
+                "timeout_seconds": 5,
+                "max_concurrent_tasks": 5,
+                "available_workers": [
+                    {
+                        "name": "summarizer",
+                        "description": "Summarizes text",
+                        "input_schema": {"type": "object", "required": ["text"]},
+                        "default_model_tier": "local",
+                    },
+                ],
+            }
+        )
 
         try:
             actor = OrchestratorActor(
@@ -282,28 +289,30 @@ class TestPipelineMultiStage:
         bus = InMemoryBus()
         await bus.connect()
 
-        config_path = _write_yaml({
-            "name": "e2e-pipeline",
-            "timeout_seconds": 5,
-            "pipeline_stages": [
-                {
-                    "name": "extract",
-                    "worker_type": "extractor",
-                    "model_tier": "local",
-                    "input_mapping": {
-                        "file_ref": "goal.context.file_ref",
+        config_path = _write_yaml(
+            {
+                "name": "e2e-pipeline",
+                "timeout_seconds": 5,
+                "pipeline_stages": [
+                    {
+                        "name": "extract",
+                        "worker_type": "extractor",
+                        "model_tier": "local",
+                        "input_mapping": {
+                            "file_ref": "goal.context.file_ref",
+                        },
                     },
-                },
-                {
-                    "name": "classify",
-                    "worker_type": "classifier",
-                    "model_tier": "local",
-                    "input_mapping": {
-                        "text": "extract.output.text",
+                    {
+                        "name": "classify",
+                        "worker_type": "classifier",
+                        "model_tier": "local",
+                        "input_mapping": {
+                            "text": "extract.output.text",
+                        },
                     },
-                },
-            ],
-        })
+                ],
+            }
+        )
 
         try:
             pipeline = PipelineOrchestrator(
@@ -328,7 +337,7 @@ class TestPipelineMultiStage:
                 execution_order.append(task.worker_type)
                 if task.worker_type == "extractor":
                     return {"text": "Extracted document text", "pages": 5}
-                elif task.worker_type == "classifier":
+                if task.worker_type == "classifier":
                     return {"category": "report", "confidence": 0.95}
                 return {"processed": True}
 
@@ -374,28 +383,30 @@ class TestPipelineParallelStages:
         bus = InMemoryBus()
         await bus.connect()
 
-        config_path = _write_yaml({
-            "name": "parallel-pipeline",
-            "timeout_seconds": 5,
-            "pipeline_stages": [
-                {
-                    "name": "extract_text",
-                    "worker_type": "text_extractor",
-                    "model_tier": "local",
-                    "input_mapping": {
-                        "file_ref": "goal.context.file_ref",
+        config_path = _write_yaml(
+            {
+                "name": "parallel-pipeline",
+                "timeout_seconds": 5,
+                "pipeline_stages": [
+                    {
+                        "name": "extract_text",
+                        "worker_type": "text_extractor",
+                        "model_tier": "local",
+                        "input_mapping": {
+                            "file_ref": "goal.context.file_ref",
+                        },
                     },
-                },
-                {
-                    "name": "extract_images",
-                    "worker_type": "image_extractor",
-                    "model_tier": "local",
-                    "input_mapping": {
-                        "file_ref": "goal.context.file_ref",
+                    {
+                        "name": "extract_images",
+                        "worker_type": "image_extractor",
+                        "model_tier": "local",
+                        "input_mapping": {
+                            "file_ref": "goal.context.file_ref",
+                        },
                     },
-                },
-            ],
-        })
+                ],
+            }
+        )
 
         try:
             pipeline = PipelineOrchestrator(
@@ -414,13 +425,15 @@ class TestPipelineParallelStages:
             def make_response(task: TaskMessage) -> dict:
                 if task.worker_type == "text_extractor":
                     return {"text": "Document text content"}
-                elif task.worker_type == "image_extractor":
+                if task.worker_type == "image_extractor":
                     return {"images": ["img1.png", "img2.png"]}
                 return {}
 
             worker_sub = await bus.subscribe("loom.tasks.incoming")
             worker_task = asyncio.create_task(
-                _worker_simulator(bus, "loom.tasks.incoming", make_response, max_messages=2, sub=worker_sub)
+                _worker_simulator(
+                    bus, "loom.tasks.incoming", make_response, max_messages=2, sub=worker_sub
+                )
             )
 
             await pipeline.handle_message(goal_data)
@@ -447,27 +460,33 @@ class TestConcurrentGoalsE2E:
         await bus.connect()
 
         # Each goal decomposes to 1 subtask
-        plan = json.dumps([{
-            "worker_type": "summarizer",
-            "payload": {"text": "content"},
-        }])
+        plan = json.dumps(
+            [
+                {
+                    "worker_type": "summarizer",
+                    "payload": {"text": "content"},
+                }
+            ]
+        )
         synthesis = json.dumps({"confidence": "high"})
         backend = MockBackend(plan, synthesis)
 
-        config_path = _write_yaml({
-            "name": "concurrent-orch",
-            "timeout_seconds": 5,
-            "max_concurrent_tasks": 5,
-            "max_concurrent_goals": 3,
-            "available_workers": [
-                {
-                    "name": "summarizer",
-                    "description": "Summarizes text",
-                    "input_schema": {"type": "object", "required": ["text"]},
-                    "default_model_tier": "local",
-                },
-            ],
-        })
+        config_path = _write_yaml(
+            {
+                "name": "concurrent-orch",
+                "timeout_seconds": 5,
+                "max_concurrent_tasks": 5,
+                "max_concurrent_goals": 3,
+                "available_workers": [
+                    {
+                        "name": "summarizer",
+                        "description": "Summarizes text",
+                        "input_schema": {"type": "object", "required": ["text"]},
+                        "default_model_tier": "local",
+                    },
+                ],
+            }
+        )
 
         try:
             actor = OrchestratorActor(
@@ -478,10 +497,7 @@ class TestConcurrentGoalsE2E:
             )
 
             # Create 3 independent goals
-            goals = [
-                OrchestratorGoal(instruction=f"Goal {i}", context={"n": i})
-                for i in range(3)
-            ]
+            goals = [OrchestratorGoal(instruction=f"Goal {i}", context={"n": i}) for i in range(3)]
 
             # Subscribe for all results
             result_subs = {}
@@ -501,10 +517,7 @@ class TestConcurrentGoalsE2E:
             )
 
             # Process all goals concurrently
-            await asyncio.gather(*(
-                actor.handle_message(g.model_dump(mode="json"))
-                for g in goals
-            ))
+            await asyncio.gather(*(actor.handle_message(g.model_dump(mode="json")) for g in goals))
             await worker_task
 
             # Verify all 3 got results
@@ -533,31 +546,39 @@ class TestRouterOrchestratorWired:
         await bus.connect()
 
         # Set up router
-        rules_path = _write_yaml({
-            "tier_overrides": {},
-            "rate_limits": {},
-        })
-        plan = json.dumps([{
-            "worker_type": "summarizer",
-            "payload": {"text": "content"},
-            "model_tier": "local",
-        }])
+        rules_path = _write_yaml(
+            {
+                "tier_overrides": {},
+                "rate_limits": {},
+            }
+        )
+        plan = json.dumps(
+            [
+                {
+                    "worker_type": "summarizer",
+                    "payload": {"text": "content"},
+                    "model_tier": "local",
+                }
+            ]
+        )
         synthesis = json.dumps({"result": "done"})
         backend = MockBackend(plan, synthesis)
 
-        config_path = _write_yaml({
-            "name": "wired-orch",
-            "timeout_seconds": 5,
-            "max_concurrent_tasks": 5,
-            "available_workers": [
-                {
-                    "name": "summarizer",
-                    "description": "Summarizes text",
-                    "input_schema": {"type": "object", "required": ["text"]},
-                    "default_model_tier": "local",
-                },
-            ],
-        })
+        config_path = _write_yaml(
+            {
+                "name": "wired-orch",
+                "timeout_seconds": 5,
+                "max_concurrent_tasks": 5,
+                "available_workers": [
+                    {
+                        "name": "summarizer",
+                        "description": "Summarizes text",
+                        "input_schema": {"type": "object", "required": ["text"]},
+                        "default_model_tier": "local",
+                    },
+                ],
+            }
+        )
 
         try:
             router = TaskRouter(rules_path, bus)

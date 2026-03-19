@@ -1,5 +1,4 @@
 """Tests for loom.mcp.config — MCP gateway config loading and validation."""
-import pytest
 
 from loom.mcp.config import validate_mcp_config
 
@@ -78,9 +77,7 @@ class TestValidateWorkerEntries:
     def test_optional_overrides_wrong_type(self):
         config = {
             "name": "test",
-            "tools": {
-                "workers": [{"config": "x.yaml", "name": 42, "tier": 99}]
-            },
+            "tools": {"workers": [{"config": "x.yaml", "name": 42, "tier": 99}]},
         }
         errors = validate_mcp_config(config)
         assert any("'name' must be a string" in e for e in errors)

@@ -23,10 +23,11 @@ Usage from worker config YAML (for LLMWorker file-ref resolution)::
     workspace_dir: "/tmp/my-workspace"
     resolve_file_refs: ["file_ref"]   # payload fields to resolve
 
-See also:
+See Also:
     loom.worker.runner.LLMWorker — resolves file_refs before building prompt
     loom.worker.processor.SyncProcessingBackend — base class for sync backends
 """
+
 from __future__ import annotations
 
 import json

@@ -1,4 +1,5 @@
 """LLM-backed analysis actors — trend, corroboration, anomaly, extraction."""
+
 from loom.contrib.rag.analysis.llm_analyzers import (
     AnomalyDetector,
     BaseAnalysisActor,
@@ -9,10 +10,10 @@ from loom.contrib.rag.analysis.llm_analyzers import (
 )
 
 __all__ = [
-    "LLMBackend",
-    "BaseAnalysisActor",
-    "TrendAnalyzer",
-    "CorroborationFinder",
     "AnomalyDetector",
+    "BaseAnalysisActor",
+    "CorroborationFinder",
     "DataExtractor",
+    "LLMBackend",
+    "TrendAnalyzer",
 ]

@@ -1,9 +1,11 @@
 """Unit tests for loom.contrib.rag.mux.stream_mux."""
-import pytest
-from datetime import datetime, timedelta, timezone
 
-from loom.contrib.rag.schemas.post import NormalizedPost
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
 from loom.contrib.rag.schemas.mux import MuxWindowConfig
+from loom.contrib.rag.schemas.post import NormalizedPost
 
 
 def _make_post(channel_id: int, msg_id: int, hour: int) -> NormalizedPost:
@@ -12,7 +14,7 @@ def _make_post(channel_id: int, msg_id: int, hour: int) -> NormalizedPost:
         source_channel_id=channel_id,
         source_channel_name=f"ch_{channel_id}",
         message_id=msg_id,
-        timestamp=datetime(2026, 3, 1, hour, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 3, 1, hour, tzinfo=UTC),
         text_clean=f"Post {msg_id} from channel {channel_id}",
     )
 
@@ -20,6 +22,7 @@ def _make_post(channel_id: int, msg_id: int, hour: int) -> NormalizedPost:
 class TestStreamMux:
     def test_merge_two_channels(self):
         from loom.contrib.rag.mux.stream_mux import StreamMux
+
         mux = StreamMux()
         mux.add_stream([_make_post(1, 1, 0), _make_post(1, 2, 2)])
         mux.add_stream([_make_post(2, 1, 1), _make_post(2, 2, 3)])
@@ -33,6 +36,7 @@ class TestStreamMux:
 
     def test_merge_with_windows(self):
         from loom.contrib.rag.mux.stream_mux import StreamMux
+
         mux = StreamMux()
         # Create posts spanning 12 hours
         for h in range(12):
@@ -47,6 +51,7 @@ class TestStreamMux:
 
     def test_merge_empty_stream_skipped(self):
         from loom.contrib.rag.mux.stream_mux import StreamMux
+
         mux = StreamMux()
         mux.add_stream([])  # empty
         mux.add_stream([_make_post(1, 1, 0)])
@@ -56,12 +61,14 @@ class TestStreamMux:
 
     def test_merge_no_streams_raises(self):
         from loom.contrib.rag.mux.stream_mux import StreamMux
+
         mux = StreamMux()
         with pytest.raises(ValueError, match="No streams registered"):
             mux.merge()
 
     def test_mux_seq_sequential(self):
         from loom.contrib.rag.mux.stream_mux import StreamMux
+
         mux = StreamMux()
         mux.add_stream([_make_post(1, i, i) for i in range(5)])
         stream = mux.merge()
@@ -70,6 +77,7 @@ class TestStreamMux:
 
     def test_windows_grouping(self):
         from loom.contrib.rag.mux.stream_mux import StreamMux
+
         mux = StreamMux()
         for h in range(12):
             mux.add_stream([_make_post(1, h, h)])
@@ -84,8 +92,9 @@ class TestStreamMux:
     def test_merge_from_ingestors(self, tmp_path):
         """Test merge_from_ingestors convenience function."""
         import json
-        from loom.contrib.rag.mux.stream_mux import merge_from_ingestors
+
         from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+        from loom.contrib.rag.mux.stream_mux import merge_from_ingestors
 
         # Create two minimal exports
         for i, cid in enumerate([100, 200]):
@@ -94,18 +103,20 @@ class TestStreamMux:
                 "type": "public_channel",
                 "id": cid,
                 "messages": [
-                    {"id": j, "type": "message",
-                     "date": f"2026-03-01T{10+j}:00:00",
-                     "date_unixtime": str(1740826800 + j * 3600),
-                     "text": f"Message {j} from channel {cid} with enough text."}
+                    {
+                        "id": j,
+                        "type": "message",
+                        "date": f"2026-03-01T{10 + j}:00:00",
+                        "date_unixtime": str(1740826800 + j * 3600),
+                        "text": f"Message {j} from channel {cid} with enough text.",
+                    }
                     for j in range(3)
                 ],
             }
             (tmp_path / f"ch{i}.json").write_text(json.dumps(data))
 
         ingestors = [
-            TelegramIngestor(tmp_path / f"ch{i}.json", min_text_len=5).load()
-            for i in range(2)
+            TelegramIngestor(tmp_path / f"ch{i}.json", min_text_len=5).load() for i in range(2)
         ]
         stream = merge_from_ingestors(ingestors)
         assert stream.total_entries == 6

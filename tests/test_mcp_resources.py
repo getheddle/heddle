@@ -1,5 +1,4 @@
 """Tests for loom.mcp.resources — workspace resource exposure."""
-import os
 
 import pytest
 
@@ -75,14 +74,13 @@ class TestReadResource:
     def test_read_binary_file(self, workspace):
         wr = WorkspaceResources(workspace)
         content, mime = wr.read_resource("workspace:///image.png")
-        # Binary files are base64-encoded.
-        import base64
-        decoded = base64.b64decode(content)
-        assert decoded.startswith(b"\x89PNG")
+        # Binary files are returned as raw bytes.
+        assert isinstance(content, bytes)
+        assert content.startswith(b"\x89PNG")
 
     def test_path_traversal_blocked(self, workspace):
         wr = WorkspaceResources(workspace)
-        with pytest.raises(ValueError, match="[Pp]ath traversal"):
+        with pytest.raises(ValueError, match=r"[Pp]ath traversal"):
             wr.read_resource("workspace:///../../etc/passwd")
 
     def test_nonexistent_file(self, workspace):
@@ -124,6 +122,7 @@ class TestChangeDetection:
 
         # Modify an existing file (touch to bump mtime).
         import time
+
         time.sleep(0.05)  # Ensure mtime changes.
         (workspace / "notes.txt").write_text("Updated notes.")
 

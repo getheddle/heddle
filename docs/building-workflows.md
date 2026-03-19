@@ -127,6 +127,24 @@ loom submit "Extract entities from this text" \
   --nats-url nats://localhost:4222
 ```
 
+### Worker config validation
+
+Worker configs are validated at startup. The CLI will refuse to start a
+worker with an invalid config. Validation checks:
+
+- `name` is required (string)
+- LLM workers require `system_prompt`; processor workers require `processing_backend`
+  (a fully qualified Python class path)
+- `default_model_tier` must be `local`, `standard`, or `frontier`
+- `input_schema` and `output_schema` must be valid JSON Schema objects (with valid
+  `type`, `required` as list, `properties` as dict-of-dicts)
+- `timeout_seconds`, `max_input_tokens`, `max_output_tokens` must be positive numbers
+- `reset_after_task` must be `true` (workers are stateless)
+- `resolve_file_refs` requires `workspace_dir` to be set
+
+See `configs/workers/_template.yaml` for the canonical reference with all fields
+documented.
+
 ## Part 2: Create a processor worker (non-LLM)
 
 Processor workers wrap Python libraries that aren't LLMs. Use these for document conversion, media processing, data transformation, or any deterministic computation.
@@ -288,6 +306,56 @@ loom pipeline --config configs/orchestrators/analysis_pipeline.yaml
 # Submit a goal
 loom submit "Analyze document" --context file_ref=report.pdf
 ```
+
+### Conditional stages
+
+Stages can be skipped based on earlier stage outputs:
+
+```yaml
+  - name: "ocr"
+    worker_type: "ocr_worker"
+    tier: "local"
+    condition: "extract.output.needs_ocr == true"
+    input_mapping:
+      file_ref: "goal.context.file_ref"
+```
+
+Conditions support `==` and `!=` operators against `true`, `false`, `null`, and
+string literals. If the path doesn't exist, the condition evaluates to false
+(stage is skipped).
+
+### Concurrent goal processing
+
+Pipelines can process multiple goals simultaneously. Add `max_concurrent_goals`
+to the pipeline config:
+
+```yaml
+name: "analysis_pipeline"
+timeout_seconds: 300
+max_concurrent_goals: 4   # Process up to 4 goals concurrently
+
+pipeline_stages:
+  # ...
+```
+
+Each goal runs in full isolation — its own context dict and result tracking.
+This is safe because pipeline execution is stateless per-goal.
+
+### Config validation
+
+All pipeline configs are validated at startup before the actor begins
+processing. Validation catches:
+
+- Missing `name` or `pipeline_stages`
+- Duplicate stage names
+- Invalid tier values (must be `local`, `standard`, or `frontier`)
+- Malformed `input_mapping` (must be dict with non-empty string paths)
+- `depends_on` referencing unknown stage names
+- Invalid `condition` syntax (must be `path op value` with `==` or `!=`)
+- Non-positive timeout values
+
+If validation fails, the CLI prints the errors and exits immediately. Fix the
+config before restarting.
 
 ## Part 4: Add knowledge context
 

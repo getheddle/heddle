@@ -33,16 +33,19 @@ For Anthropic models, token counts are approximate (~10-15% estimation error).
 This is acceptable for checkpoint threshold decisions where exact counts are
 not critical.
 """
+
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 import tiktoken
 
 from loom.core.messages import CheckpointState
-from loom.orchestrator.store import CheckpointStore
+
+if TYPE_CHECKING:
+    from loom.orchestrator.store import CheckpointStore
 
 logger = structlog.get_logger()
 
@@ -61,11 +64,11 @@ class CheckpointManager:
     def __init__(
         self,
         store: CheckpointStore,
-        token_threshold: int = 50_000,     # Trigger checkpoint at this count
-        recent_window_size: int = 5,       # Keep last N interactions in detail
+        token_threshold: int = 50_000,  # Trigger checkpoint at this count
+        recent_window_size: int = 5,  # Keep last N interactions in detail
         encoding_name: str = "cl100k_base",
-        ttl_seconds: int = 86400,          # Key expiry (default: 24h)
-    ):
+        ttl_seconds: int = 86400,  # Key expiry (default: 24h)
+    ) -> None:
         self.store = store
         self.token_threshold = token_threshold
         self.recent_window_size = recent_window_size
@@ -78,10 +81,7 @@ class CheckpointManager:
 
     def should_checkpoint(self, conversation_history: list[dict]) -> bool:
         """Check if context has grown enough to trigger compression."""
-        total = sum(
-            self.estimate_tokens(json.dumps(msg))
-            for msg in conversation_history
-        )
+        total = sum(self.estimate_tokens(json.dumps(msg)) for msg in conversation_history)
         return total > self.token_threshold
 
     async def create_checkpoint(
@@ -94,9 +94,10 @@ class CheckpointManager:
         decisions_made: list[str],
         checkpoint_number: int,
     ) -> CheckpointState:
-        """
-        Build a checkpoint. The orchestrator or a dedicated summarizer
-        compresses current state into this structure.
+        """Build a checkpoint.
+
+        The orchestrator or a dedicated summarizer compresses current state
+        into this structure.
         """
         # Build executive summary from completed task outcomes.
         # Only the last 20 tasks are included to keep the summary concise.
@@ -120,7 +121,11 @@ class CheckpointManager:
             original_instruction=original_instruction,
             executive_summary=executive_summary,
             completed_tasks=[
-                {"task_id": t["task_id"], "worker_type": t.get("worker_type"), "summary": t.get("summary", "")}
+                {
+                    "task_id": t["task_id"],
+                    "worker_type": t.get("worker_type"),
+                    "summary": t.get("summary", ""),
+                }
                 for t in completed_tasks
             ],
             pending_tasks=pending_tasks,
@@ -157,8 +162,8 @@ class CheckpointManager:
         return CheckpointState.model_validate_json(data)
 
     def format_for_injection(self, checkpoint: CheckpointState) -> str:
-        """
-        Format checkpoint as context to inject into a fresh orchestrator session.
+        """Format checkpoint as context to inject into a fresh orchestrator session.
+
         This is what the orchestrator sees when it "wakes up" after a checkpoint.
         """
         sections = [
@@ -170,17 +175,14 @@ class CheckpointManager:
             "",
             f"--- Decisions Made ({len(checkpoint.decisions_made)}) ---",
         ]
-        for d in checkpoint.decisions_made:
-            sections.append(f"  * {d}")
+        sections.extend(f"  * {d}" for d in checkpoint.decisions_made)
 
         if checkpoint.open_issues:
             sections.append(f"\n--- Open Issues ({len(checkpoint.open_issues)}) ---")
-            for issue in checkpoint.open_issues:
-                sections.append(f"  ! {issue}")
+            sections.extend(f"  ! {issue}" for issue in checkpoint.open_issues)
 
         sections.append(f"\n--- Pending Tasks ({len(checkpoint.pending_tasks)}) ---")
-        for t in checkpoint.pending_tasks:
-            sections.append(f"  -> {t}")
+        sections.extend(f"  -> {t}" for t in checkpoint.pending_tasks)
 
         sections.append("\n=== END CHECKPOINT ===")
         return "\n".join(sections)

@@ -8,6 +8,7 @@ changes after tool calls and emit MCP resource change notifications.
 Also listens on the NATS ``loom.resources.changed`` subject for
 external change notifications from LOOM workers (future use).
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -60,16 +61,18 @@ class WorkspaceResources:
                 continue
 
             mime, _ = mimetypes.guess_type(rel)
-            resources.append({
-                "uri": self._to_uri(rel),
-                "name": rel,
-                "description": f"Workspace file: {rel}",
-                "mimeType": mime or "application/octet-stream",
-            })
+            resources.append(
+                {
+                    "uri": self._to_uri(rel),
+                    "name": rel,
+                    "description": f"Workspace file: {rel}",
+                    "mimeType": mime or "application/octet-stream",
+                }
+            )
 
         return resources
 
-    def read_resource(self, uri: str) -> tuple[str, str | None]:
+    def read_resource(self, uri: str) -> tuple[str | bytes, str | None]:
         """Read a workspace resource by URI.
 
         Args:
@@ -77,7 +80,7 @@ class WorkspaceResources:
 
         Returns:
             Tuple of (content, mimeType).  Text files return string content;
-            binary files return base64-encoded content.
+            binary files return raw bytes.
 
         Raises:
             ValueError: If the URI scheme is wrong or the file is outside
@@ -90,8 +93,8 @@ class WorkspaceResources:
         # Path traversal check.
         try:
             full_path.resolve().relative_to(self.workspace_dir.resolve())
-        except ValueError:
-            raise ValueError(f"Path traversal detected: {uri}")
+        except ValueError as exc:
+            raise ValueError(f"Path traversal detected: {uri}") from exc
 
         if not full_path.is_file():
             raise FileNotFoundError(f"Resource not found: {uri}")
@@ -101,9 +104,8 @@ class WorkspaceResources:
 
         if mime.startswith("text/") or mime in ("application/json", "application/xml"):
             return full_path.read_text(encoding="utf-8", errors="replace"), mime
-        else:
-            import base64
-            return base64.b64encode(full_path.read_bytes()).decode("ascii"), mime
+
+        return full_path.read_bytes(), mime
 
     def detect_changes(self) -> list[str]:
         """Detect workspace file changes since the last check.
@@ -162,4 +164,4 @@ class WorkspaceResources:
         prefix = f"{WORKSPACE_SCHEME}:///"
         if not uri.startswith(prefix):
             raise ValueError(f"Invalid workspace URI: {uri} (expected {prefix}...)")
-        return uri[len(prefix):]
+        return uri[len(prefix) :]

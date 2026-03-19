@@ -1,14 +1,14 @@
 """Tests for WorkerTestRunner (workshop/test_runner.py)."""
+
 from __future__ import annotations
 
 import json
-from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from loom.worker.backends import LLMBackend
 from loom.workshop.test_runner import WorkerTestResult, WorkerTestRunner
-
 
 # ---------------------------------------------------------------------------
 # Mock backends
@@ -22,8 +22,9 @@ class MockBackend(LLMBackend):
         self._output = output or {"summary": "test", "key_points": ["a"]}
         self._content = content  # override raw content if needed
 
-    async def complete(self, system_prompt, user_message, max_tokens=2000,
-                       temperature=0.0, **kwargs):
+    async def complete(
+        self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs
+    ):
         return {
             "content": self._content or json.dumps(self._output),
             "model": "mock-model",
@@ -37,16 +38,18 @@ class MockBackend(LLMBackend):
 class ErrorBackend(LLMBackend):
     """Raises on complete()."""
 
-    async def complete(self, system_prompt, user_message, max_tokens=2000,
-                       temperature=0.0, **kwargs):
+    async def complete(
+        self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs
+    ):
         raise RuntimeError("Backend unavailable")
 
 
 class NoContentBackend(LLMBackend):
     """Returns None content."""
 
-    async def complete(self, system_prompt, user_message, max_tokens=2000,
-                       temperature=0.0, **kwargs):
+    async def complete(
+        self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs
+    ):
         return {
             "content": None,
             "model": "mock",
@@ -270,3 +273,197 @@ class TestWorkerTestResult:
     def test_failure_when_input_validation_errors(self):
         r = WorkerTestResult(output={"k": "v"}, input_validation_errors=["bad input"])
         assert not r.success
+
+
+# ---------------------------------------------------------------------------
+# Knowledge silo / knowledge sources injection (lines 117-136)
+# ---------------------------------------------------------------------------
+
+
+class TestKnowledgeInjection:
+    @pytest.mark.asyncio
+    async def test_knowledge_silo_injection(self):
+        """Knowledge silos are loaded and prepended to system_prompt."""
+        config = {
+            **BASIC_CONFIG,
+            "knowledge_silos": [{"name": "test_silo", "path": "/tmp/silo", "type": "folder"}],
+        }
+        backend = MockBackend({"summary": "silo_test"})
+        runner = WorkerTestRunner({"local": backend})
+
+        with patch(
+            "loom.worker.knowledge.load_knowledge_silos",
+            return_value="SILO CONTEXT",
+        ):
+            result = await runner.run(config, {"text": "test"})
+
+        assert result.success
+        assert result.output == {"summary": "silo_test"}
+
+    @pytest.mark.asyncio
+    async def test_knowledge_silo_empty_text_not_prepended(self):
+        """When load_knowledge_silos returns empty string, prompt is unchanged."""
+        config = {
+            **BASIC_CONFIG,
+            "knowledge_silos": [{"name": "test_silo", "path": "/tmp/silo", "type": "folder"}],
+        }
+        backend = MockBackend({"summary": "ok"})
+        runner = WorkerTestRunner({"local": backend})
+
+        with patch(
+            "loom.worker.knowledge.load_knowledge_silos",
+            return_value="",
+        ):
+            result = await runner.run(config, {"text": "test"})
+
+        assert result.success
+
+    @pytest.mark.asyncio
+    async def test_knowledge_silo_load_failure_continues(self):
+        """Silo load failure is warned but execution continues."""
+        config = {
+            **BASIC_CONFIG,
+            "knowledge_silos": [{"name": "test_silo", "path": "/tmp/bad_silo", "type": "folder"}],
+        }
+        backend = MockBackend({"summary": "fallback"})
+        runner = WorkerTestRunner({"local": backend})
+
+        with patch(
+            "loom.worker.knowledge.load_knowledge_silos",
+            side_effect=Exception("silo read error"),
+        ):
+            result = await runner.run(config, {"text": "test"})
+
+        assert result.success
+        assert result.output == {"summary": "fallback"}
+
+    @pytest.mark.asyncio
+    async def test_legacy_knowledge_sources_injection(self):
+        """Legacy knowledge_sources are loaded and prepended to system_prompt."""
+        config = {
+            **BASIC_CONFIG,
+            "knowledge_sources": [{"path": "/tmp/knowledge.txt"}],
+        }
+        backend = MockBackend({"summary": "knowledge_test"})
+        runner = WorkerTestRunner({"local": backend})
+
+        with patch(
+            "loom.worker.knowledge.load_knowledge_sources",
+            return_value="KNOWLEDGE CONTEXT",
+        ):
+            result = await runner.run(config, {"text": "test"})
+
+        assert result.success
+
+    @pytest.mark.asyncio
+    async def test_legacy_knowledge_sources_empty_not_prepended(self):
+        """When load_knowledge_sources returns empty string, prompt is unchanged."""
+        config = {
+            **BASIC_CONFIG,
+            "knowledge_sources": [{"path": "/tmp/knowledge.txt"}],
+        }
+        backend = MockBackend({"summary": "ok"})
+        runner = WorkerTestRunner({"local": backend})
+
+        with patch(
+            "loom.worker.knowledge.load_knowledge_sources",
+            return_value="",
+        ):
+            result = await runner.run(config, {"text": "test"})
+
+        assert result.success
+
+    @pytest.mark.asyncio
+    async def test_legacy_knowledge_sources_failure_continues(self):
+        """Knowledge sources load failure is warned but execution continues."""
+        config = {
+            **BASIC_CONFIG,
+            "knowledge_sources": [{"path": "/tmp/bad.txt"}],
+        }
+        backend = MockBackend({"summary": "fallback"})
+        runner = WorkerTestRunner({"local": backend})
+
+        with patch(
+            "loom.worker.knowledge.load_knowledge_sources",
+            side_effect=Exception("file not found"),
+        ):
+            result = await runner.run(config, {"text": "test"})
+
+        assert result.success
+        assert result.output == {"summary": "fallback"}
+
+
+# ---------------------------------------------------------------------------
+# File-ref resolution (lines 142-151)
+# ---------------------------------------------------------------------------
+
+
+class TestFileRefResolution:
+    @pytest.mark.asyncio
+    async def test_file_ref_resolved_and_added_to_payload(self):
+        """File ref fields are resolved via WorkspaceManager and added to payload."""
+        config = {
+            **BASIC_CONFIG,
+            "workspace_dir": "/tmp/workspace",
+            "resolve_file_refs": ["doc_ref"],
+        }
+        backend = MockBackend({"summary": "resolved"})
+        runner = WorkerTestRunner({"local": backend})
+
+        mock_ws = MagicMock()
+        mock_ws.read_json.return_value = {"key": "value"}
+
+        with patch(
+            "loom.core.workspace.WorkspaceManager",
+            return_value=mock_ws,
+        ):
+            result = await runner.run(config, {"text": "test", "doc_ref": "file.json"})
+
+        assert result.success
+        mock_ws.read_json.assert_called_once_with("file.json")
+
+    @pytest.mark.asyncio
+    async def test_file_ref_missing_field_skipped(self):
+        """File ref fields not present in payload are silently skipped."""
+        config = {
+            **BASIC_CONFIG,
+            "workspace_dir": "/tmp/workspace",
+            "resolve_file_refs": ["doc_ref"],
+        }
+        backend = MockBackend({"summary": "ok"})
+        runner = WorkerTestRunner({"local": backend})
+
+        mock_ws = MagicMock()
+
+        with patch(
+            "loom.core.workspace.WorkspaceManager",
+            return_value=mock_ws,
+        ):
+            # payload does NOT contain "doc_ref"
+            result = await runner.run(config, {"text": "test"})
+
+        assert result.success
+        mock_ws.read_json.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_file_ref_read_failure_continues(self):
+        """File ref resolution failure is warned but execution continues."""
+        config = {
+            **BASIC_CONFIG,
+            "workspace_dir": "/tmp/workspace",
+            "resolve_file_refs": ["doc_ref"],
+        }
+        backend = MockBackend({"summary": "fallback"})
+        runner = WorkerTestRunner({"local": backend})
+
+        mock_ws = MagicMock()
+        mock_ws.read_json.side_effect = Exception("file not found")
+
+        with patch(
+            "loom.core.workspace.WorkspaceManager",
+            return_value=mock_ws,
+        ):
+            result = await runner.run(config, {"text": "test", "doc_ref": "missing.json"})
+
+        assert result.success
+        assert result.output == {"summary": "fallback"}

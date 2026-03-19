@@ -43,6 +43,12 @@ workshop = [
     "python-multipart>=0.0.9", # Form handling
     "duckdb>=1.0.0",           # Eval/version storage
 ]
+docs = [
+    "sphinx>=7.0",             # Documentation generator
+    "sphinx-rtd-theme>=2.0",   # Read the Docs theme
+    "myst-parser>=3.0",        # Markdown support in Sphinx
+    "sphinx-autodoc2>=0.5",    # Autodoc from source (AST-based, no import needed)
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -52,6 +58,10 @@ dev = [
     "redis>=5.0.0",            # Needed for contrib/redis tests
     "croniter>=2.0.0",         # Needed for scheduler tests
     "mcp>=1.20.0",             # Needed for MCP gateway tests
+    "sphinx>=7.0",             # Needed for docs build
+    "sphinx-rtd-theme>=2.0",
+    "myst-parser>=3.0",
+    "sphinx-autodoc2>=0.5",
 ]
 
 [project.scripts]
@@ -83,6 +93,96 @@ exclude_lines = [
     "if TYPE_CHECKING",
     "raise NotImplementedError",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "F",      # Pyflakes — undefined names, unused imports, etc.
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "I",      # isort — import sorting
+    "N",      # pep8-naming — class/function/variable naming conventions
+    "UP",     # pyupgrade — enforce modern Python syntax (3.11+)
+    "B",      # flake8-bugbear — likely bugs and design problems
+    "A",      # flake8-builtins — shadowing Python builtins
+    "C4",     # flake8-comprehensions — unnecessary list/dict/set comprehension
+    "SIM",    # flake8-simplify — simplifiable constructs
+    "TC",     # flake8-type-checking — move imports behind TYPE_CHECKING
+    "RUF",    # Ruff-specific rules
+    "D",      # pydocstyle — docstring conventions
+    "ANN",    # flake8-annotations — missing type annotations
+    "PT",     # flake8-pytest-style — pytest best practices
+    "RET",    # flake8-return — unnecessary return/else/elif
+    "ARG",    # flake8-unused-arguments — unused function arguments
+    "PL",     # pylint — subset of pylint rules
+    "PERF",   # perflint — performance anti-patterns
+    "LOG",    # flake8-logging — logging best practices
+    "T20",    # flake8-print — disallow print() in production code
+]
+ignore = [
+    # --- Docstring style conflicts ---
+    "D100",   # Missing docstring in public module (we have module docstrings, enforce via review)
+    "D104",   # Missing docstring in public package (__init__.py)
+    "D203",   # One blank line before class docstring (conflicts with D211)
+    "D212",   # Multi-line summary on first line (we use """\n on its own line — D211)
+    "D107",   # Missing docstring in __init__ (class docstring suffices)
+    "D105",   # Missing docstring in magic method (__aiter__, __anext__ — obvious from ABC)
+
+    # --- Type annotations ---
+    "ANN401", # Dynamically typed Any allowed (common in message-passing across actor boundaries)
+
+    # --- Arguments ---
+    "ARG002", # Unused method argument (common in ABC/interface implementations)
+
+    # --- Pylint ---
+    "PLR0913",# Too many arguments — orchestrator/worker constructors legitimately need them
+    "PLR2004",# Magic value comparison — acceptable in tests and config validation
+
+    # --- Bugbear ---
+    "B008",   # Function call in default arg (Click uses this pattern extensively)
+
+    # --- Imports ---
+    "PLC0415",# import not at top of file — Loom uses conditional imports for optional deps
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "D",      # Docstrings not required in tests
+    "ANN",    # Type annotations not required in tests
+    "ARG",    # Unused arguments OK in tests (fixtures, parametrize)
+    "T20",    # print() OK in tests
+    "PLR",    # Pylint complexity rules relaxed in tests
+    "SIM105", # contextlib.suppress — try/except/pass is clearer in tests
+    "SIM115", # Open without context manager — OK in test helpers
+    "PT011",  # pytest.raises too broad — acceptable for unit tests
+    "B007",   # Unused loop variable — common in tests (for _ in range)
+    "RUF059", # Unused unpacked variable — common in test assertions
+    "RUF012", # Mutable class variable without ClassVar — OK in test classes
+    "PERF102",# Unnecessary dict key check — clarity > perf in tests
+    "RET504", # Unnecessary assignment before return — clarity in tests
+]
+"src/loom/cli/**/*.py" = [
+    "T20",    # print() OK in CLI commands (user-facing output)
+    "ANN",    # Click decorators make annotation enforcement noisy
+]
+"src/loom/workshop/app.py" = [
+    "ANN",    # FastAPI route handlers — types inferred from dependencies
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["loom"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/loom"]

@@ -8,6 +8,7 @@ allows alternative transports for testing (InMemoryBus) or portability.
 Subscriptions are iterator-based: subscribe() returns a Subscription that
 yields parsed message dicts via ``async for data in subscription:``.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -34,8 +35,7 @@ class Subscription(ABC):
         ...
 
     @abstractmethod
-    def __aiter__(self) -> Subscription:
-        ...
+    def __aiter__(self) -> Subscription: ...
 
     @abstractmethod
     async def __anext__(self) -> dict[str, Any]:

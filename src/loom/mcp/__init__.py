@@ -12,13 +12,14 @@ Usage::
     server, gateway = create_server("configs/mcp/my_system.yaml")
     run_stdio(server, gateway)
 
-See also:
+See Also:
     loom.mcp.config    — config loading and validation
     loom.mcp.discovery — tool definition generation
     loom.mcp.bridge    — NATS call dispatch
     loom.mcp.resources — workspace resource exposure
     loom.mcp.server    — server assembly and transport runners
 """
+
 from loom.mcp.server import MCPGateway, create_server, run_stdio, run_streamable_http
 
 __all__ = [

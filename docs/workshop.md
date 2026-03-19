@@ -26,39 +26,39 @@ standalone development tool even when no infrastructure is running.
 ┌─────────────────────────────────────────────────────────────┐
 │                  FastAPI Application (app.py)               │
 │                                                             │
-│   Jinja2 Templates + HTMX          Static Files (Pico CSS) │
-│   ┌────────────────────┐            ┌────────────────────┐  │
-│   │ workers/list        │            │ workshop.css       │  │
-│   │ workers/detail      │            └────────────────────┘  │
-│   │ workers/test        │                                    │
-│   │ workers/eval        │                                    │
-│   │ workers/eval_detail │                                    │
-│   │ pipelines/list      │                                    │
-│   │ pipelines/editor    │                                    │
-│   │ partials/test_result│                                    │
+│   Jinja2 Templates + HTMX           Static Files (Pico CSS) │
+│   ┌─────────────────────┐            ┌────────────────────┐ │
+│   │ workers/list        │            │ workshop.css       │ │
+│   │ workers/detail      │            └────────────────────┘ │
+│   │ workers/test        │                                   │
+│   │ workers/eval        │                                   │
+│   │ workers/eval_detail │                                   │
+│   │ pipelines/list      │                                   │
+│   │ pipelines/editor    │                                   │
+│   │ partials/test_result│                                   │
 │   └────────────────────┘                                    │
 ├─────────────────────────────────────────────────────────────┤
 │                    Backend Components                       │
 │                                                             │
-│  ┌────────────────┐  ┌──────────────┐  ┌────────────────┐  │
+│  ┌─────────────────┐  ┌──────────────┐  ┌────────────────┐  │
 │  │ WorkerTestRunner│  │ EvalRunner   │  │ ConfigManager  │  │
 │  │ (test_runner.py)│  │(eval_runner) │  │(config_manager)│  │
-│  └───────┬────────┘  └──────┬───────┘  └────────┬───────┘  │
+│  └───────┬─────────┘  └──────┬───────┘  └────────┬───────┘  │
 │          │                  │                    │          │
 │          │                  │          ┌─────────┴───────┐  │
 │          │                  │          │ PipelineEditor  │  │
 │          │                  │          │(pipeline_editor)│  │
 │          │                  │          └─────────────────┘  │
 │          │                  │                               │
-│  ┌───────▼──────────────────▼────────┐                     │
-│  │           WorkshopDB (db.py)      │                     │
-│  │   worker_versions │ eval_runs     │                     │
-│  │   eval_results    │ worker_metrics│                     │
-│  └───────────────────────────────────┘                     │
+│  ┌───────▼──────────────────▼─────────┐                     │
+│  │           WorkshopDB (db.py)       │                     │
+│  │   worker_versions │ eval_runs      │                     │
+│  │   eval_results    │ worker_metrics │                     │
+│  └────────────────────────────────────┘                     │
 ├─────────────────────────────────────────────────────────────┤
 │                    Loom Core (reused)                       │
 │                                                             │
-│  LLMBackend (backends.py)        validate_input/output()   │
+│  LLMBackend (backends.py)        validate_input/output()    │
 │  execute_with_tools()            validate_worker_config()   │
 │  _extract_json()                 validate_pipeline_config() │
 │  _load_tool_providers()          load_config()              │

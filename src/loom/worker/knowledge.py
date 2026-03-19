@@ -16,6 +16,7 @@ Folder silos load all text files from a directory into the system prompt.
 Writable silos accept ``silo_updates`` from the LLM output to persist
 learned patterns (add/modify/delete files within the silo folder).
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -82,6 +83,7 @@ def _format_few_shot(content: str, suffix: str) -> str:
 # ---------------------------------------------------------------------------
 # Knowledge silos — folder loading and write-back
 # ---------------------------------------------------------------------------
+
 
 def load_knowledge_silos(silos: list[dict[str, Any]]) -> str:
     """Load folder-type silos and return formatted content for system prompt.
@@ -156,19 +158,16 @@ def _load_siloignore(folder: Path) -> list[str]:
         return []
 
     patterns: list[str] = []
-    for line in ignore_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#"):
-            patterns.append(line)
+    for raw_line in ignore_file.read_text().splitlines():
+        stripped = raw_line.strip()
+        if stripped and not stripped.startswith("#"):
+            patterns.append(stripped)
     return patterns
 
 
 def _is_ignored(rel_path: str, patterns: list[str]) -> bool:
     """Check if a relative path matches any ignore pattern (fnmatch glob)."""
-    for pattern in patterns:
-        if fnmatch.fnmatch(rel_path, pattern):
-            return True
-    return False
+    return any(fnmatch.fnmatch(rel_path, pattern) for pattern in patterns)
 
 
 def apply_silo_updates(

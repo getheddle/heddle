@@ -1,18 +1,80 @@
-# RAG Pipeline — Sentence Chunker (processor worker)
-# Splits NormalizedPost texts into TextChunk fragments for embedding.
+# =============================================================================
+# RAG Sentence Chunker Worker Configuration (Processor)
+# =============================================================================
 #
-# Usage:
+# Splits NormalizedPost texts into TextChunk fragments suitable for embedding
+# and vector storage. Uses sentence-boundary detection with Persian/Arabic
+# language awareness (handles ZWNJ, RTL markers, mixed-script boundaries).
+#
+# Component:  Processor worker (worker_kind: "processor")
+# Source:     src/loom/worker/processor.py (ProcessorWorker)
+# Backend:    src/loom/contrib/rag/backends.py (ChunkerBackend)
+# Engine:     src/loom/contrib/rag/chunker/sentence_chunker.py (ChunkConfig)
+# Loaded by:  loom.core.config.load_config()
+# Validated:  loom.core.contracts.py (I/O schema enforcement)
+#
+# Run with:
 #   loom processor --config configs/workers/rag_chunker.yaml
+#   loom processor --config configs/workers/rag_chunker.yaml --nats-url nats://localhost:4222
+#
+# NATS subject:  loom.tasks.rag_chunker.local
+#
+# Data flow (RAG pipeline):
+#   rag_ingestor --> rag_mux --> [rag_chunker] --> rag_vectorstore
+#   NormalizedPost[] --> TextChunk[] (sentence-level fragments)
+#
+# Chunking strategy:
+#   The chunker splits text at sentence boundaries and merges adjacent sentences
+#   until reaching target_chars. If a single sentence exceeds max_chars, it is
+#   force-split at word boundaries.
+#
+#   target_chars (default: 400)
+#     Ideal chunk size in characters. The chunker tries to produce chunks close
+#     to this size by merging sentences. For embedding models like nomic-embed-text
+#     (context ~8192 tokens), 400 chars ~ 100 tokens is a good balance between
+#     semantic density and retrieval precision.
+#
+#   max_chars (default: 600)
+#     Hard upper limit. Chunks never exceed this. Set to 1.5x target_chars as a
+#     rule of thumb. Prevents runaway merging with very long sentences.
+#
+#   Tuning guide:
+#     - Short posts (social media, Telegram): target=300, max=500
+#     - Standard documents (articles, reports): target=400, max=600
+#     - Long-form content (legal, academic): target=600, max=900
+#     - Smaller chunks = better retrieval precision, more storage
+#     - Larger chunks = more context per retrieval, fewer chunks to search
+#
+# Related configs:
+#   configs/orchestrators/rag_pipeline.yaml — pipeline that chains this worker
+#   configs/workers/rag_mux.yaml            — previous stage (multiplexing)
+#   configs/workers/rag_vectorstore.yaml    — next stage (vector storage)
+#   configs/workers/_template.yaml          — annotated template for new workers
+# =============================================================================
 
+# name (str, required)
 name: "rag_chunker"
+
+# description (str, optional)
 description: "Persian-aware sentence chunker for RAG text splitting."
+
+# worker_kind (str, required for processor workers)
 worker_kind: "processor"
 
+# processing_backend (str, required for processor workers)
+# ChunkerBackend wraps the sentence_chunker module for pipeline integration.
 processing_backend: "loom.contrib.rag.backends.ChunkerBackend"
+
+# backend_config (dict, optional)
+# Default chunking parameters. These can be overridden per-task in the payload.
+# See "Chunking strategy" above for tuning guidance.
 backend_config:
   target_chars: 400
   max_chars: 600
 
+# input_schema (dict, required)
+# posts: list of NormalizedPost dicts to chunk.
+# target_chars/max_chars: optional per-task overrides for chunking parameters.
 input_schema:
   type: object
   required: [posts]
@@ -29,6 +91,10 @@ input_schema:
       type: integer
       default: 600
 
+# output_schema (dict, required)
+# chunks: list of TextChunk dicts (see loom.contrib.rag.schemas.chunk).
+# Each chunk has: text, source_post_id, chunk_index, char_count.
+# chunk_count: total chunks produced (for pipeline progress tracking).
 output_schema:
   type: object
   required: [chunks, chunk_count]
@@ -40,6 +106,13 @@ output_schema:
     chunk_count:
       type: integer
 
+# default_model_tier (str, required)
+# "local" is conventional for processor workers (no LLM call).
 default_model_tier: "local"
+
+# reset_after_task (bool, required — MUST be true)
 reset_after_task: true
+
+# timeout_seconds (int, optional, default: 60)
+# Chunking is CPU-bound and fast. 120s allows processing very large post sets.
 timeout_seconds: 120

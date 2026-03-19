@@ -18,6 +18,7 @@ Example config::
           db_path: "/tmp/docman-workspace/docman.duckdb"
           view_name: "document_summaries"
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -93,6 +94,7 @@ class SyncToolProvider(ToolProvider):
         ...
 
     async def execute(self, arguments: dict[str, Any]) -> str:
+        """Offload execute_sync() to a thread pool and return the result."""
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.execute_sync, arguments)
 
@@ -130,13 +132,9 @@ def load_tool_provider(class_path: str, config: dict[str, Any]) -> ToolProvider:
 
     tool_class = getattr(module, class_name, None)
     if tool_class is None:
-        raise AttributeError(
-            f"Tool class '{class_name}' not found in '{module_path}'"
-        )
+        raise AttributeError(f"Tool class '{class_name}' not found in '{module_path}'")
 
     if not (isinstance(tool_class, type) and issubclass(tool_class, ToolProvider)):
-        raise TypeError(
-            f"'{class_path}' is not a ToolProvider subclass"
-        )
+        raise TypeError(f"'{class_path}' is not a ToolProvider subclass")
 
     return tool_class(**config)

@@ -1,10 +1,10 @@
 """Tests for PipelineEditor (workshop/pipeline_editor.py)."""
+
 from __future__ import annotations
 
 import pytest
 
 from loom.workshop.pipeline_editor import PipelineEditor
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -15,7 +15,8 @@ def _pipeline_config(stages=None):
     """Build a minimal pipeline config."""
     return {
         "name": "test-pipe",
-        "pipeline_stages": stages or [
+        "pipeline_stages": stages
+        or [
             {
                 "name": "extract",
                 "worker_type": "extractor",
@@ -50,10 +51,12 @@ class TestDependencyGraph:
         assert graph["levels"][1] == ["classify"]
 
     def test_parallel_stages(self):
-        config = _pipeline_config([
-            {"name": "a", "worker_type": "w1", "input_mapping": {"f": "goal.context.f"}},
-            {"name": "b", "worker_type": "w2", "input_mapping": {"f": "goal.context.f"}},
-        ])
+        config = _pipeline_config(
+            [
+                {"name": "a", "worker_type": "w1", "input_mapping": {"f": "goal.context.f"}},
+                {"name": "b", "worker_type": "w2", "input_mapping": {"f": "goal.context.f"}},
+            ]
+        )
         graph = PipelineEditor.get_dependency_graph(config)
 
         assert graph["stage_count"] == 2
@@ -72,12 +75,18 @@ class TestDependencyGraph:
 
     def test_diamond_dependency(self):
         """A → B, A → C, B+C → D"""
-        config = _pipeline_config([
-            {"name": "a", "worker_type": "w", "input_mapping": {"f": "goal.context.f"}},
-            {"name": "b", "worker_type": "w", "input_mapping": {"x": "a.output.x"}},
-            {"name": "c", "worker_type": "w", "input_mapping": {"x": "a.output.x"}},
-            {"name": "d", "worker_type": "w", "input_mapping": {"x": "b.output.x", "y": "c.output.y"}},
-        ])
+        config = _pipeline_config(
+            [
+                {"name": "a", "worker_type": "w", "input_mapping": {"f": "goal.context.f"}},
+                {"name": "b", "worker_type": "w", "input_mapping": {"x": "a.output.x"}},
+                {"name": "c", "worker_type": "w", "input_mapping": {"x": "a.output.x"}},
+                {
+                    "name": "d",
+                    "worker_type": "w",
+                    "input_mapping": {"x": "b.output.x", "y": "c.output.y"},
+                },
+            ]
+        )
         graph = PipelineEditor.get_dependency_graph(config)
 
         assert graph["levels"][0] == ["a"]
@@ -93,8 +102,11 @@ class TestDependencyGraph:
 class TestInsertStage:
     def test_append_at_end(self):
         config = _pipeline_config()
-        new_stage = {"name": "summarize", "worker_type": "summarizer",
-                     "input_mapping": {"text": "classify.output.category"}}
+        new_stage = {
+            "name": "summarize",
+            "worker_type": "summarizer",
+            "input_mapping": {"text": "classify.output.category"},
+        }
 
         result = PipelineEditor.insert_stage(config, new_stage)
         names = [s["name"] for s in result["pipeline_stages"]]
@@ -102,8 +114,11 @@ class TestInsertStage:
 
     def test_insert_after_specific_stage(self):
         config = _pipeline_config()
-        new_stage = {"name": "validate", "worker_type": "validator",
-                     "input_mapping": {"text": "extract.output.text"}}
+        new_stage = {
+            "name": "validate",
+            "worker_type": "validator",
+            "input_mapping": {"text": "extract.output.text"},
+        }
 
         result = PipelineEditor.insert_stage(config, new_stage, after_stage="extract")
         names = [s["name"] for s in result["pipeline_stages"]]
@@ -149,11 +164,17 @@ class TestRemoveStage:
         assert len(config["pipeline_stages"]) == 2
 
     def test_remove_with_explicit_depends_on(self):
-        config = _pipeline_config([
-            {"name": "a", "worker_type": "w", "input_mapping": {"f": "goal.context.f"}},
-            {"name": "b", "worker_type": "w", "depends_on": ["a"],
-             "input_mapping": {"f": "goal.context.f"}},
-        ])
+        config = _pipeline_config(
+            [
+                {"name": "a", "worker_type": "w", "input_mapping": {"f": "goal.context.f"}},
+                {
+                    "name": "b",
+                    "worker_type": "w",
+                    "depends_on": ["a"],
+                    "input_mapping": {"f": "goal.context.f"},
+                },
+            ]
+        )
         with pytest.raises(ValueError, match="depends_on"):
             PipelineEditor.remove_stage(config, "a")
 
@@ -196,8 +217,11 @@ class TestSwapWorker:
 class TestAddParallelBranch:
     def test_add_independent_stage(self):
         config = _pipeline_config()
-        branch = {"name": "images", "worker_type": "image_extractor",
-                  "input_mapping": {"file_ref": "goal.context.file_ref"}}
+        branch = {
+            "name": "images",
+            "worker_type": "image_extractor",
+            "input_mapping": {"file_ref": "goal.context.file_ref"},
+        }
 
         result = PipelineEditor.add_parallel_branch(config, branch)
         assert len(result["pipeline_stages"]) == 3
@@ -208,8 +232,11 @@ class TestAddParallelBranch:
 
     def test_add_dependent_branch_raises(self):
         config = _pipeline_config()
-        branch = {"name": "dependent", "worker_type": "w",
-                  "input_mapping": {"text": "extract.output.text"}}  # Depends on extract
+        branch = {
+            "name": "dependent",
+            "worker_type": "w",
+            "input_mapping": {"text": "extract.output.text"},
+        }  # Depends on extract
 
         with pytest.raises(ValueError, match="cannot depend"):
             PipelineEditor.add_parallel_branch(config, branch)

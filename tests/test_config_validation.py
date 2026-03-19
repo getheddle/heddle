@@ -6,13 +6,11 @@ import pytest
 import yaml
 
 from loom.core.config import (
-    ConfigValidationError,
     _validate_knowledge_silos,
     load_config,
     validate_pipeline_config,
     validate_worker_config,
 )
-
 
 # ---------------------------------------------------------------------------
 # load_config
@@ -134,7 +132,7 @@ class TestValidatePipelineConfig:
             "name": "pipe",
             "pipeline_stages": [
                 {"worker_type": "summarizer"},  # missing name
-                {"name": "s2"},                 # missing worker_type
+                {"name": "s2"},  # missing worker_type
             ],
         }
         errors = validate_pipeline_config(cfg)

@@ -1,4 +1,5 @@
 """Tests for DuckDBViewTool — LLM-callable DuckDB view query tool."""
+
 import json
 
 import duckdb
@@ -74,6 +75,7 @@ class TestDuckDBViewToolDefinition:
 
     def test_is_tool_provider_subclass(self, db_with_view):
         from loom.worker.tools import ToolProvider
+
         tool = DuckDBViewTool(db_path=db_with_view, view_name="item_summaries")
         assert isinstance(tool, ToolProvider)
 
@@ -85,8 +87,10 @@ class TestDuckDBViewToolSearch:
         tool = DuckDBViewTool(db_path=db_with_view, view_name="item_summaries")
         result = json.loads(tool.execute_sync({"operation": "search", "query": "widget"}))
         assert result["total"] >= 1
-        assert any("widget" in r.get("name", "").lower() or "widget" in r.get("description", "").lower()
-                    for r in result["results"])
+        assert any(
+            "widget" in r.get("name", "").lower() or "widget" in r.get("description", "").lower()
+            for r in result["results"]
+        )
 
     def test_search_empty_query_returns_empty(self, db_with_view):
         tool = DuckDBViewTool(db_path=db_with_view, view_name="item_summaries")
@@ -120,19 +124,27 @@ class TestDuckDBViewToolList:
 
     def test_list_with_filter(self, db_with_view):
         tool = DuckDBViewTool(db_path=db_with_view, view_name="item_summaries")
-        result = json.loads(tool.execute_sync({
-            "operation": "list",
-            "filters": {"category": "tools"},
-        }))
+        result = json.loads(
+            tool.execute_sync(
+                {
+                    "operation": "list",
+                    "filters": {"category": "tools"},
+                }
+            )
+        )
         assert result["total"] >= 1
         assert all(r["category"] == "tools" for r in result["results"])
 
     def test_list_with_boolean_filter(self, db_with_view):
         tool = DuckDBViewTool(db_path=db_with_view, view_name="item_summaries")
-        result = json.loads(tool.execute_sync({
-            "operation": "list",
-            "filters": {"active": True},
-        }))
+        result = json.loads(
+            tool.execute_sync(
+                {
+                    "operation": "list",
+                    "filters": {"active": True},
+                }
+            )
+        )
         assert result["total"] >= 1
         assert all(r["active"] is True for r in result["results"])
 
@@ -144,10 +156,14 @@ class TestDuckDBViewToolList:
     def test_list_ignores_invalid_filter_columns(self, db_with_view):
         """Filters on columns not in the view are silently ignored."""
         tool = DuckDBViewTool(db_path=db_with_view, view_name="item_summaries")
-        result = json.loads(tool.execute_sync({
-            "operation": "list",
-            "filters": {"nonexistent_col": "value"},
-        }))
+        result = json.loads(
+            tool.execute_sync(
+                {
+                    "operation": "list",
+                    "filters": {"nonexistent_col": "value"},
+                }
+            )
+        )
         assert result["total"] == 4
 
 
@@ -179,10 +195,14 @@ class TestDuckDBViewToolSQLInjection:
     def test_search_injection_attempt(self, db_with_view):
         """SQL injection in search query is safely escaped."""
         tool = DuckDBViewTool(db_path=db_with_view, view_name="item_summaries")
-        result = json.loads(tool.execute_sync({
-            "operation": "search",
-            "query": "'; DROP TABLE items; --",
-        }))
+        result = json.loads(
+            tool.execute_sync(
+                {
+                    "operation": "search",
+                    "query": "'; DROP TABLE items; --",
+                }
+            )
+        )
         assert isinstance(result, dict)
 
         # Verify table still exists
@@ -194,8 +214,12 @@ class TestDuckDBViewToolSQLInjection:
     def test_filter_injection_attempt(self, db_with_view):
         """SQL injection in filter values is safely escaped."""
         tool = DuckDBViewTool(db_path=db_with_view, view_name="item_summaries")
-        result = json.loads(tool.execute_sync({
-            "operation": "list",
-            "filters": {"category": "'; DROP TABLE items; --"},
-        }))
+        result = json.loads(
+            tool.execute_sync(
+                {
+                    "operation": "list",
+                    "filters": {"category": "'; DROP TABLE items; --"},
+                }
+            )
+        )
         assert isinstance(result, dict)

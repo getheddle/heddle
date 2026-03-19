@@ -12,5 +12,9 @@ coverage.json
 coverage.xml
 htmlcov/
 
+# Sphinx documentation build output
+docs/_build/
+docs/apidocs/
+
 # Environment
 .env

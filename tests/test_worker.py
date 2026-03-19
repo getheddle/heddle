@@ -1,4 +1,5 @@
 """Test LLMWorker (unit tests, no infrastructure)."""
+
 import json
 from unittest.mock import AsyncMock
 
@@ -8,8 +9,8 @@ import yaml
 from loom.core.messages import ModelTier, TaskMessage, TaskResult, TaskStatus
 from loom.worker.runner import LLMWorker
 
-
 # --- Mock LLM backend ---
+
 
 class MockLLMBackend:
     """Fake LLM backend that returns a fixed JSON response."""
@@ -18,7 +19,9 @@ class MockLLMBackend:
         self._output = response_output or {"summary": "test summary", "key_points": ["a"]}
         self._model = model
 
-    async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs):
+    async def complete(
+        self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs
+    ):
         return {
             "content": json.dumps(self._output),
             "model": self._model,
@@ -32,7 +35,9 @@ class MockLLMBackend:
 class BadJsonBackend:
     """Backend that returns non-JSON content."""
 
-    async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs):
+    async def complete(
+        self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs
+    ):
         return {
             "content": "This is not JSON at all",
             "model": "bad-model",
@@ -76,6 +81,7 @@ def _make_task(payload=None):
 
 
 # --- Tests ---
+
 
 @pytest.mark.asyncio
 async def test_llm_worker_processes_task(tmp_path):
@@ -168,6 +174,7 @@ async def test_llm_worker_output_validation(tmp_path):
 
 # --- File-ref resolution tests ---
 
+
 @pytest.mark.asyncio
 async def test_llm_worker_resolves_file_refs(tmp_path):
     """LLMWorker resolves file_ref fields and injects content into payload."""
@@ -206,7 +213,9 @@ async def test_llm_worker_resolves_file_refs(tmp_path):
     received_prompts = {}
 
     class SpyLLMBackend:
-        async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs):
+        async def complete(
+            self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs
+        ):
             received_prompts["user_message"] = user_message
             return {
                 "content": json.dumps({"summary": "test", "key_points": ["a"]}),
@@ -238,6 +247,7 @@ async def test_llm_worker_resolves_file_refs(tmp_path):
 
 # --- Knowledge injection tests ---
 
+
 @pytest.mark.asyncio
 async def test_llm_worker_loads_knowledge_sources(tmp_path):
     """LLMWorker prepends knowledge sources to system prompt."""
@@ -258,7 +268,9 @@ async def test_llm_worker_loads_knowledge_sources(tmp_path):
     received_prompts = {}
 
     class SpyLLMBackend:
-        async def complete(self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs):
+        async def complete(
+            self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs
+        ):
             received_prompts["system_prompt"] = system_prompt
             return {
                 "content": json.dumps({"summary": "test", "key_points": ["a"]}),

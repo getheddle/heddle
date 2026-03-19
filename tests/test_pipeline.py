@@ -1,4 +1,5 @@
 """Test PipelineOrchestrator (unit tests, no infrastructure)."""
+
 import asyncio
 
 import pytest
@@ -9,10 +10,10 @@ from loom.core.messages import (
     TaskResult,
     TaskStatus,
 )
-from loom.orchestrator.pipeline import PipelineOrchestrator, PipelineStageError
-
+from loom.orchestrator.pipeline import PipelineOrchestrator
 
 # --- _resolve_path tests ---
+
 
 class TestResolvePath:
     def test_simple_path(self):
@@ -41,7 +42,9 @@ class TestResolvePath:
     def test_array_value(self):
         ctx = {"extract": {"output": {"sections": ["intro", "body", "conclusion"]}}}
         assert PipelineOrchestrator._resolve_path("extract.output.sections", ctx) == [
-            "intro", "body", "conclusion"
+            "intro",
+            "body",
+            "conclusion",
         ]
 
     def test_boolean_value(self):
@@ -51,36 +54,36 @@ class TestResolvePath:
 
 # --- _evaluate_condition tests ---
 
+
 class TestEvaluateCondition:
     def test_equals_true(self):
         ctx = {"extract": {"output": {"has_tables": True}}}
-        assert PipelineOrchestrator._evaluate_condition(
-            "extract.output.has_tables == true", ctx
-        ) is True
+        assert (
+            PipelineOrchestrator._evaluate_condition("extract.output.has_tables == true", ctx)
+            is True
+        )
 
     def test_equals_false(self):
         ctx = {"extract": {"output": {"has_tables": False}}}
-        assert PipelineOrchestrator._evaluate_condition(
-            "extract.output.has_tables == true", ctx
-        ) is False
+        assert (
+            PipelineOrchestrator._evaluate_condition("extract.output.has_tables == true", ctx)
+            is False
+        )
 
     def test_not_equals_none(self):
         ctx = {"extract": {"output": {"data": "something"}}}
-        assert PipelineOrchestrator._evaluate_condition(
-            "extract.output.data != null", ctx
-        ) is True
+        assert PipelineOrchestrator._evaluate_condition("extract.output.data != null", ctx) is True
 
     def test_equals_none(self):
         ctx = {"extract": {"output": {"data": None}}}
-        assert PipelineOrchestrator._evaluate_condition(
-            "extract.output.data == null", ctx
-        ) is True
+        assert PipelineOrchestrator._evaluate_condition("extract.output.data == null", ctx) is True
 
     def test_missing_path_returns_false(self):
         ctx = {"extract": {"output": {}}}
-        assert PipelineOrchestrator._evaluate_condition(
-            "extract.output.nonexistent == true", ctx
-        ) is False
+        assert (
+            PipelineOrchestrator._evaluate_condition("extract.output.nonexistent == true", ctx)
+            is False
+        )
 
     def test_invalid_condition_defaults_true(self):
         ctx = {}
@@ -88,17 +91,22 @@ class TestEvaluateCondition:
 
     def test_string_comparison(self):
         ctx = {"classify": {"output": {"document_type": "invoice"}}}
-        assert PipelineOrchestrator._evaluate_condition(
-            "classify.output.document_type == invoice", ctx
-        ) is True
+        assert (
+            PipelineOrchestrator._evaluate_condition(
+                "classify.output.document_type == invoice", ctx
+            )
+            is True
+        )
 
 
 # --- _build_stage_payload tests ---
+
 
 class TestBuildStagePayload:
     def _make_orchestrator(self, tmp_path):
         """Create a PipelineOrchestrator with minimal config."""
         import yaml
+
         config = {
             "name": "test_pipeline",
             "pipeline_stages": [],
@@ -378,8 +386,8 @@ async def _wait_for_pipeline_result(result_sub, goal_id, timeout=3):
         if data.get("task_id") == goal_id:
             return data
         if asyncio.get_event_loop().time() > deadline:
-            raise asyncio.TimeoutError("Timed out waiting for pipeline result")
-    raise asyncio.TimeoutError("Subscription ended without pipeline result")
+            raise TimeoutError("Timed out waiting for pipeline result")
+    raise TimeoutError("Subscription ended without pipeline result")
 
 
 class TestParallelExecution:
@@ -387,12 +395,24 @@ class TestParallelExecution:
     async def test_independent_stages_dispatch_concurrently(self, tmp_path):
         """Two independent stages should both be dispatched before either result arrives."""
         stages = [
-            {"name": "A", "worker_type": "workerA", "tier": "local",
-             "input_mapping": {"x": "goal.context.x"}},
-            {"name": "B", "worker_type": "workerB", "tier": "local",
-             "input_mapping": {"y": "goal.context.y"}},
-            {"name": "C", "worker_type": "workerC", "tier": "local",
-             "input_mapping": {"a": "A.output.result", "b": "B.output.result"}},
+            {
+                "name": "A",
+                "worker_type": "workerA",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+            },
+            {
+                "name": "B",
+                "worker_type": "workerB",
+                "tier": "local",
+                "input_mapping": {"y": "goal.context.y"},
+            },
+            {
+                "name": "C",
+                "worker_type": "workerC",
+                "tier": "local",
+                "input_mapping": {"a": "A.output.result", "b": "B.output.result"},
+            },
         ]
         orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
         await bus.connect()
@@ -407,9 +427,7 @@ class TestParallelExecution:
         result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
 
         # Run the pipeline in a background task.
-        pipeline_task = asyncio.create_task(
-            orch.handle_message(goal.model_dump(mode="json"))
-        )
+        pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
         # Collect the dispatched tasks — A and B should both arrive
         # before we send any results.
@@ -458,7 +476,8 @@ class TestParallelExecution:
 
         # Verify final result (skip intermediate stage results).
         final = await asyncio.wait_for(
-            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3,
+            _wait_for_pipeline_result(result_sub, goal.goal_id),
+            timeout=3,
         )
         assert final["status"] == TaskStatus.COMPLETED.value
         assert "A" in final["output"]
@@ -469,10 +488,18 @@ class TestParallelExecution:
     async def test_stage_failure_aborts_pipeline(self, tmp_path):
         """If a parallel stage fails, the pipeline aborts with FAILED."""
         stages = [
-            {"name": "A", "worker_type": "workerA", "tier": "local",
-             "input_mapping": {"x": "goal.context.x"}},
-            {"name": "B", "worker_type": "workerB", "tier": "local",
-             "input_mapping": {"y": "goal.context.y"}},
+            {
+                "name": "A",
+                "worker_type": "workerA",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+            },
+            {
+                "name": "B",
+                "worker_type": "workerB",
+                "tier": "local",
+                "input_mapping": {"y": "goal.context.y"},
+            },
         ]
         orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
         await bus.connect()
@@ -485,9 +512,7 @@ class TestParallelExecution:
         task_sub = await bus.subscribe("loom.tasks.incoming")
         result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
 
-        pipeline_task = asyncio.create_task(
-            orch.handle_message(goal.model_dump(mode="json"))
-        )
+        pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
         # Both A and B dispatched concurrently.
         dispatched = {}
@@ -504,7 +529,8 @@ class TestParallelExecution:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}", a_result.model_dump(mode="json"),
+            f"loom.results.{goal.goal_id}",
+            a_result.model_dump(mode="json"),
         )
 
         b_result = TaskResult(
@@ -515,13 +541,15 @@ class TestParallelExecution:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}", b_result.model_dump(mode="json"),
+            f"loom.results.{goal.goal_id}",
+            b_result.model_dump(mode="json"),
         )
 
         await asyncio.wait_for(pipeline_task, timeout=3)
 
         final = await asyncio.wait_for(
-            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3,
+            _wait_for_pipeline_result(result_sub, goal.goal_id),
+            timeout=3,
         )
         assert final["status"] == TaskStatus.FAILED.value
         assert "B" in final["error"]
@@ -530,10 +558,18 @@ class TestParallelExecution:
     async def test_sequential_pipeline_unchanged(self, tmp_path):
         """A fully sequential pipeline still works correctly."""
         stages = [
-            {"name": "first", "worker_type": "w1", "tier": "local",
-             "input_mapping": {"x": "goal.context.x"}},
-            {"name": "second", "worker_type": "w2", "tier": "local",
-             "input_mapping": {"y": "first.output.result"}},
+            {
+                "name": "first",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+            },
+            {
+                "name": "second",
+                "worker_type": "w2",
+                "tier": "local",
+                "input_mapping": {"y": "first.output.result"},
+            },
         ]
         orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
         await bus.connect()
@@ -546,9 +582,7 @@ class TestParallelExecution:
         task_sub = await bus.subscribe("loom.tasks.incoming")
         result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
 
-        pipeline_task = asyncio.create_task(
-            orch.handle_message(goal.model_dump(mode="json"))
-        )
+        pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
         # First stage dispatched.
         first_data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
@@ -563,7 +597,8 @@ class TestParallelExecution:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}", first_result.model_dump(mode="json"),
+            f"loom.results.{goal.goal_id}",
+            first_result.model_dump(mode="json"),
         )
 
         # Second stage dispatched.
@@ -579,13 +614,15 @@ class TestParallelExecution:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}", second_result.model_dump(mode="json"),
+            f"loom.results.{goal.goal_id}",
+            second_result.model_dump(mode="json"),
         )
 
         await asyncio.wait_for(pipeline_task, timeout=3)
 
         final = await asyncio.wait_for(
-            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3,
+            _wait_for_pipeline_result(result_sub, goal.goal_id),
+            timeout=3,
         )
         assert final["status"] == TaskStatus.COMPLETED.value
         assert final["output"]["first"]["result"] == "first_done"
@@ -604,7 +641,9 @@ class TestPipelineConcurrentGoals:
     def test_max_concurrent_goals_from_config(self, tmp_path):
         """Config value is passed through to BaseActor.max_concurrent."""
         orch, _ = _make_pipeline_orchestrator(
-            tmp_path, stages=[], max_concurrent_goals=3,
+            tmp_path,
+            stages=[],
+            max_concurrent_goals=3,
         )
         assert orch.max_concurrent == 3
 

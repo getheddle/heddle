@@ -1,4 +1,5 @@
 """Tests for WorkshopDB (workshop/db.py)."""
+
 from __future__ import annotations
 
 import pytest
@@ -76,12 +77,15 @@ class TestEvalRuns:
 
     def test_update_eval_run(self, db):
         run_id = db.save_eval_run("summarizer", "local", total_cases=3)
-        db.update_eval_run(run_id, {
-            "status": "completed",
-            "passed_cases": 2,
-            "failed_cases": 1,
-            "avg_latency_ms": 150.5,
-        })
+        db.update_eval_run(
+            run_id,
+            {
+                "status": "completed",
+                "passed_cases": 2,
+                "failed_cases": 1,
+                "avg_latency_ms": 150.5,
+            },
+        )
         runs = db.get_eval_runs("summarizer")
         assert runs[0]["status"] == "completed"
         assert runs[0]["passed_cases"] == 2

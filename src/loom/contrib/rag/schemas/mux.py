@@ -3,6 +3,7 @@
 The stream multiplexer merges posts from multiple channels into a single
 chronologically-ordered stream, optionally partitioned into time windows.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -10,7 +11,7 @@ from datetime import datetime, timedelta
 
 from pydantic import BaseModel, Field, computed_field
 
-from loom.contrib.rag.schemas.post import NormalizedPost
+from loom.contrib.rag.schemas.post import NormalizedPost  # noqa: TC001 — runtime Pydantic field
 
 
 class MuxWindowConfig(BaseModel, extra="allow"):
@@ -18,6 +19,7 @@ class MuxWindowConfig(BaseModel, extra="allow"):
 
     Supports tumbling (non-overlapping) and sliding (overlapping) strategies.
     """
+
     window_duration: timedelta = Field(
         default_factory=lambda: timedelta(hours=6),
         description="Window size as a timedelta.",
@@ -36,6 +38,7 @@ class MuxWindowConfig(BaseModel, extra="allow"):
 
     @property
     def is_sliding(self) -> bool:
+        """Return True if sliding window strategy is active."""
         return self.step is not None
 
 
@@ -45,6 +48,7 @@ class MuxEntry(BaseModel, extra="allow"):
     Wraps a NormalizedPost with stream-level metadata (sequence number,
     window assignment).  Computed properties delegate to the underlying post.
     """
+
     mux_seq: int = Field(..., description="Sequence number in the merged stream.")
     window_id: str | None = None
     window_seq: int | None = None
@@ -53,11 +57,13 @@ class MuxEntry(BaseModel, extra="allow"):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def channel_id(self) -> int:
+        """Return the source channel ID."""
         return self.post.source_channel_id
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def channel_name(self) -> str:
+        """Return the source channel name."""
         return self.post.source_channel_name
 
     @property
@@ -68,16 +74,19 @@ class MuxEntry(BaseModel, extra="allow"):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def text(self) -> str:
+        """Return the cleaned text from the underlying post."""
         return self.post.text_clean
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def global_id(self) -> str:
+        """Return the global ID from the underlying post."""
         return self.post.global_id
 
 
 class MuxedStream(BaseModel, extra="allow"):
     """A fully merged, chronologically-ordered multi-channel stream."""
+
     source_ids: list[int] = Field(..., description="Channel IDs in the stream.")
     source_names: list[str] = Field(..., description="Channel names in the stream.")
     start_time: datetime
@@ -88,14 +97,17 @@ class MuxedStream(BaseModel, extra="allow"):
 
     @property
     def channel_count(self) -> int:
+        """Return the number of source channels."""
         return len(self.source_ids)
 
     @property
     def time_span_hours(self) -> float:
+        """Return the time span in hours."""
         return (self.end_time - self.start_time).total_seconds() / 3600
 
     @property
     def window_ids(self) -> list[str]:
+        """Return ordered list of unique window IDs in this stream."""
         seen: list[str] = []
         for e in self.entries:
             if e.window_id and e.window_id not in seen:

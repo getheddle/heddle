@@ -13,6 +13,7 @@ Three discovery functions correspond to the three tool sources:
 - ``discover_pipeline_tools`` — one tool per pipeline config
 - ``discover_query_tools``    — one tool per query action
 """
+
 from __future__ import annotations
 
 import importlib
@@ -165,7 +166,7 @@ def _pipeline_entry_schema(
     context_fields: dict[str, str] = {}  # field_name -> source_path
     for stage in stages:
         mapping = stage.get("input_mapping", {})
-        for target_field, source_path in mapping.items():
+        for source_path in mapping.values():
             if isinstance(source_path, str) and source_path.startswith("goal.context."):
                 context_key = source_path.split(".", 2)[-1]
                 context_fields[context_key] = source_path
@@ -271,7 +272,8 @@ def discover_query_tools(
             if action not in available:
                 logger.warning(
                     "mcp.discovery.query_unknown_action",
-                    backend=backend_path, action=action,
+                    backend=backend_path,
+                    action=action,
                     available=sorted(available),
                 )
                 continue

@@ -1,4 +1,5 @@
 """Tests for ConfigManager (workshop/config_manager.py)."""
+
 from __future__ import annotations
 
 import pytest
@@ -6,7 +7,6 @@ import yaml
 
 from loom.workshop.config_manager import ConfigManager
 from loom.workshop.db import WorkshopDB
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -32,8 +32,13 @@ def _write_pipeline(configs_dir, name, stages=None):
     """Write a pipeline config YAML to the orchestrators directory."""
     config = {
         "name": name,
-        "pipeline_stages": stages or [
-            {"name": "stage_1", "worker_type": "extractor", "input_mapping": {"file": "goal.context.file"}},
+        "pipeline_stages": stages
+        or [
+            {
+                "name": "stage_1",
+                "worker_type": "extractor",
+                "input_mapping": {"file": "goal.context.file"},
+            },
         ],
     }
     orch_dir = configs_dir / "orchestrators"

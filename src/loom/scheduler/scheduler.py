@@ -19,18 +19,19 @@ NATS subjects:
     Publishes to:  loom.goals.incoming    (for dispatch_type "goal")
                    loom.tasks.incoming    (for dispatch_type "task")
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 import structlog
 import yaml
 
-from loom.bus.base import MessageBus
 from loom.core.actor import BaseActor
 from loom.core.messages import (
     ModelTier,
@@ -38,6 +39,9 @@ from loom.core.messages import (
     TaskMessage,
     TaskPriority,
 )
+
+if TYPE_CHECKING:
+    from loom.bus.base import MessageBus
 
 logger = structlog.get_logger()
 
@@ -70,7 +74,7 @@ class SchedulerActor(BaseActor):
         nats_url: str = "nats://nats:4222",
         *,
         bus: MessageBus | None = None,
-    ):
+    ) -> None:
         super().__init__(actor_id, nats_url, bus=bus)
         self.config = self._load_config(config_path)
         self._schedules: list[ScheduleEntry] = self._parse_schedules(
@@ -90,19 +94,17 @@ class SchedulerActor(BaseActor):
     @staticmethod
     def _parse_schedules(raw: list[dict[str, Any]]) -> list[ScheduleEntry]:
         """Convert raw YAML schedule dicts into ScheduleEntry objects."""
-        entries: list[ScheduleEntry] = []
-        for item in raw:
-            entries.append(
-                ScheduleEntry(
-                    name=item["name"],
-                    cron=item.get("cron"),
-                    interval_seconds=item.get("interval_seconds"),
-                    dispatch_type=item["dispatch_type"],
-                    goal_config=item.get("goal"),
-                    task_config=item.get("task"),
-                )
+        return [
+            ScheduleEntry(
+                name=item["name"],
+                cron=item.get("cron"),
+                interval_seconds=item.get("interval_seconds"),
+                dispatch_type=item["dispatch_type"],
+                goal_config=item.get("goal"),
+                task_config=item.get("task"),
             )
-        return entries
+            for item in raw
+        ]
 
     # ------------------------------------------------------------------
     # run() override — adds background timer alongside subscription loop
@@ -115,6 +117,7 @@ class SchedulerActor(BaseActor):
     # ------------------------------------------------------------------
 
     async def run(self, subject: str, queue_group: str | None = None) -> None:
+        """Start the scheduler with background timer loop and subscription."""
         self._shutdown_event = asyncio.Event()
         self._semaphore = asyncio.Semaphore(self.max_concurrent)
 
@@ -134,6 +137,7 @@ class SchedulerActor(BaseActor):
 
         # Launch background timer loop
         self._timer_task = asyncio.create_task(self._timer_loop())
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
         try:
             # Standard subscription loop (mirrors BaseActor.run)
@@ -143,17 +147,17 @@ class SchedulerActor(BaseActor):
                 if self.max_concurrent == 1:
                     await self._process_one(data)
                 else:
-                    asyncio.create_task(self._process_one(data))
+                    task = asyncio.create_task(self._process_one(data))
+                    self._background_tasks.add(task)
+                    task.add_done_callback(self._background_tasks.discard)
         except asyncio.CancelledError:
             pass
         finally:
             self._running = False
             if self._timer_task and not self._timer_task.done():
                 self._timer_task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await self._timer_task
-                except asyncio.CancelledError:
-                    pass
             await self.disconnect()
 
     # ------------------------------------------------------------------
@@ -173,7 +177,7 @@ class SchedulerActor(BaseActor):
     def _initialize_fire_times(self) -> None:
         """Set initial next_fire for each schedule entry."""
         now_mono = time.monotonic()
-        now_utc = datetime.now(timezone.utc)
+        now_utc = datetime.now(UTC)
 
         for entry in self._schedules:
             if entry.interval_seconds is not None:
@@ -195,7 +199,7 @@ class SchedulerActor(BaseActor):
     def _advance_next_fire(self, entry: ScheduleEntry) -> None:
         """Compute the next fire time after a schedule fires."""
         now_mono = time.monotonic()
-        now_utc = datetime.now(timezone.utc)
+        now_utc = datetime.now(UTC)
 
         if entry.interval_seconds is not None:
             entry.next_fire = now_mono + entry.interval_seconds

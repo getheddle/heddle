@@ -63,7 +63,7 @@ def cli():
 @click.option("--nats-url", default="nats://nats:4222", help="NATS server URL")
 @click.option("--tier", default="standard", help="Model tier this worker serves")
 def worker(config: str, nats_url: str, tier: str):
-    """Start an LLM worker actor.
+    r"""Start an LLM worker actor.
 
     Loads a worker configuration YAML and starts a long-running LLM worker
     that subscribes to its NATS subject and processes tasks.
@@ -86,11 +86,19 @@ def worker(config: str, nats_url: str, tier: str):
 
     import yaml
 
+    from loom.core.config import validate_worker_config
     from loom.worker.backends import AnthropicBackend, OllamaBackend
     from loom.worker.runner import LLMWorker
 
     with open(config) as f:
         cfg = yaml.safe_load(f)
+
+    # Validate config structure before starting the actor.
+    errors = validate_worker_config(cfg, config)
+    if errors:
+        for err in errors:
+            logger.error("worker.config_error", error=err)
+        raise click.ClickException(f"Worker config has {len(errors)} error(s). See log above.")
 
     # Warn if the CLI --tier diverges from the config's declared default.
     # This catches mistakes like starting a "local"-only worker with --tier standard.
@@ -116,9 +124,7 @@ def worker(config: str, nats_url: str, tier: str):
     backends = {}
     if os.getenv("OLLAMA_URL"):
         ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-        backends["local"] = OllamaBackend(
-            model=ollama_model, base_url=os.getenv("OLLAMA_URL")
-        )
+        backends["local"] = OllamaBackend(model=ollama_model, base_url=os.getenv("OLLAMA_URL"))
     if os.getenv("ANTHROPIC_API_KEY"):
         backends["standard"] = AnthropicBackend(api_key=os.getenv("ANTHROPIC_API_KEY"))
         backends["frontier"] = AnthropicBackend(
@@ -175,10 +181,18 @@ def processor(config: str, nats_url: str, tier: str):
     """
     import yaml
 
+    from loom.core.config import validate_worker_config
     from loom.worker.processor import ProcessorWorker
 
     with open(config) as f:
         cfg = yaml.safe_load(f)
+
+    # Validate config structure.
+    errors = validate_worker_config(cfg, config)
+    if errors:
+        for err in errors:
+            logger.error("processor.config_error", error=err)
+        raise click.ClickException(f"Processor config has {len(errors)} error(s). See log above.")
 
     # The processing_backend field must be a fully qualified class path.
     backend_name = cfg.get("processing_backend")
@@ -234,13 +248,11 @@ def _load_processing_backend(name: str, config: dict):
     try:
         module = importlib.import_module(module_path)
     except ImportError as e:
-        raise click.ClickException(f"Cannot import backend module '{module_path}': {e}")
+        raise click.ClickException(f"Cannot import backend module '{module_path}': {e}") from e
 
     backend_class = getattr(module, class_name, None)
     if backend_class is None:
-        raise click.ClickException(
-            f"Backend class '{class_name}' not found in '{module_path}'"
-        )
+        raise click.ClickException(f"Backend class '{class_name}' not found in '{module_path}'")
 
     # Pass backend_config from worker config if present (empty dict as default).
     backend_config = config.get("backend_config", {})
@@ -253,9 +265,7 @@ def _load_processing_backend(name: str, config: dict):
 
 
 @cli.command()
-@click.option(
-    "--config", required=True, help="Path to pipeline orchestrator config YAML"
-)
+@click.option("--config", required=True, help="Path to pipeline orchestrator config YAML")
 @click.option("--nats-url", default="nats://nats:4222", help="NATS server URL")
 def pipeline(config: str, nats_url: str):
     """Start a pipeline orchestrator (sequential stage execution).
@@ -273,10 +283,18 @@ def pipeline(config: str, nats_url: str):
     """
     import yaml
 
+    from loom.core.config import validate_pipeline_config
     from loom.orchestrator.pipeline import PipelineOrchestrator
 
     with open(config) as f:
         cfg = yaml.safe_load(f)
+
+    # Validate pipeline config structure before starting the actor.
+    errors = validate_pipeline_config(cfg, config)
+    if errors:
+        for err in errors:
+            logger.error("pipeline.config_error", error=err)
+        raise click.ClickException(f"Pipeline config has {len(errors)} error(s). See log above.")
 
     orch = PipelineOrchestrator(
         actor_id=f"pipeline-{cfg['name']}",
@@ -292,13 +310,15 @@ def pipeline(config: str, nats_url: str):
 
 
 @cli.command()
-@click.option(
-    "--config", required=True, help="Path to orchestrator config YAML"
-)
+@click.option("--config", required=True, help="Path to orchestrator config YAML")
 @click.option("--nats-url", default="nats://nats:4222", help="NATS server URL")
-@click.option("--redis-url", default="redis://redis:6379", help="Redis URL for checkpointing (empty to disable)")
+@click.option(
+    "--redis-url",
+    default="redis://redis:6379",
+    help="Redis URL for checkpointing (empty to disable)",
+)
 def orchestrator(config: str, nats_url: str, redis_url: str):
-    """Start the dynamic LLM-based orchestrator (OrchestratorActor).
+    r"""Start the dynamic LLM-based orchestrator (OrchestratorActor).
 
     Unlike the pipeline orchestrator which follows a fixed stage sequence,
     the dynamic orchestrator uses an LLM to reason about which workers to
@@ -322,21 +342,35 @@ def orchestrator(config: str, nats_url: str, redis_url: str):
     """
     import yaml
 
+    from loom.core.config import validate_orchestrator_config
     from loom.orchestrator.runner import OrchestratorActor
 
     with open(config) as f:
         cfg = yaml.safe_load(f)
+
+    # Validate orchestrator config structure.
+    errors = validate_orchestrator_config(cfg, config)
+    if errors:
+        for err in errors:
+            logger.error("orchestrator.config_error", error=err)
+        raise click.ClickException(
+            f"Orchestrator config has {len(errors)} error(s). See log above."
+        )
 
     # Build checkpoint store if redis_url is provided.
     checkpoint_store = None
     if redis_url:
         try:
             from loom.contrib.redis.store import RedisCheckpointStore
+
             checkpoint_store = RedisCheckpointStore(redis_url)
         except ImportError:
             logger.warning(
                 "orchestrator.no_redis",
-                hint="Install loom[redis] for checkpoint persistence. Continuing without checkpointing.",
+                hint=(
+                    "Install loom[redis] for checkpoint persistence."
+                    " Continuing without checkpointing."
+                ),
             )
 
     actor = OrchestratorActor(
@@ -369,7 +403,7 @@ def orchestrator(config: str, nats_url: str, redis_url: str):
 @click.option("--config", required=True, help="Path to scheduler config YAML")
 @click.option("--nats-url", default="nats://nats:4222", help="NATS server URL")
 def scheduler(config: str, nats_url: str):
-    """Start the time-driven scheduler (cron + interval dispatch).
+    r"""Start the time-driven scheduler (cron + interval dispatch).
 
     The scheduler reads a YAML config defining cron expressions and/or
     fixed-interval timers.  When a timer fires, it publishes an
@@ -400,9 +434,7 @@ def scheduler(config: str, nats_url: str):
     if errors:
         for err in errors:
             logger.error("scheduler.config_error", error=err)
-        raise click.ClickException(
-            f"Scheduler config has {len(errors)} error(s). See log above."
-        )
+        raise click.ClickException(f"Scheduler config has {len(errors)} error(s). See log above.")
 
     actor = SchedulerActor(
         actor_id=f"scheduler-{cfg['name']}",
@@ -443,7 +475,16 @@ def router(config: str, nats_url: str):
     The router runs indefinitely until the process is terminated.
     """
     from loom.bus.nats_adapter import NATSBus
+    from loom.core.config import load_config, validate_router_rules
     from loom.router.router import TaskRouter
+
+    # Validate router rules before starting.
+    rules = load_config(config)
+    errors = validate_router_rules(rules, config)
+    if errors:
+        for err in errors:
+            logger.error("router.config_error", error=err)
+        raise click.ClickException(f"Router config has {len(errors)} error(s). See log above.")
 
     bus = NATSBus(nats_url)
     r = TaskRouter(config, bus)
@@ -470,7 +511,7 @@ def router(config: str, nats_url: str):
     help="Key=value pairs for goal context (repeatable)",
 )
 def submit(goal: str, nats_url: str, context: tuple[str, ...]):
-    """Submit a goal to the pipeline orchestrator.
+    r"""Submit a goal to the pipeline orchestrator.
 
     Publishes an OrchestratorGoal message to loom.goals.incoming. A running
     pipeline or dynamic orchestrator (loom pipeline / loom orchestrator)
@@ -522,7 +563,7 @@ def submit(goal: str, nats_url: str, context: tuple[str, ...]):
 @click.option("--host", default="127.0.0.1", help="HTTP host (streamable-http only)")
 @click.option("--port", default=8000, type=int, help="HTTP port (streamable-http only)")
 def mcp(config: str, transport: str, host: str, port: int):
-    """Start an MCP server exposing LOOM tools and resources.
+    r"""Start an MCP server exposing LOOM tools and resources.
 
     Reads an MCP gateway config YAML and starts an MCP server that exposes
     LOOM workers, pipelines, and query backends as MCP tools. Workspace
@@ -572,7 +613,7 @@ def mcp(config: str, transport: str, host: str, port: int):
 @click.option("--db-path", default="~/.loom/workshop.duckdb", help="DuckDB database path")
 @click.option("--nats-url", default=None, help="NATS URL for live metrics (optional)")
 def workshop(port: int, host: str, configs_dir: str, db_path: str, nats_url: str | None):
-    """Start the LLM Worker Workshop web UI.
+    r"""Start the LLM Worker Workshop web UI.
 
     A browser-based tool for defining, testing, evaluating, and deploying
     LLM workers.  Provides a test bench for running worker configs against
@@ -598,9 +639,9 @@ def workshop(port: int, host: str, configs_dir: str, db_path: str, nats_url: str
         OLLAMA_URL        -> local tier
         ANTHROPIC_API_KEY -> standard + frontier tiers
     """
-    from loom.workshop.app import create_app
-
     import uvicorn
+
+    from loom.workshop.app import create_app
 
     app = create_app(
         configs_dir=configs_dir,

@@ -1,5 +1,6 @@
 """Tests for embedding provider abstraction and Ollama implementation."""
-from unittest.mock import AsyncMock, patch
+
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -96,7 +97,8 @@ class TestOllamaEmbeddingProvider:
 
         mock_request = httpx.Request("POST", "http://test:11434/api/embed")
         mock_response = httpx.Response(
-            200, json={"embeddings": [[0.1, 0.2, 0.3, 0.4]]},
+            200,
+            json={"embeddings": [[0.1, 0.2, 0.3, 0.4]]},
             request=mock_request,
         )
         provider._client.post = AsyncMock(return_value=mock_response)
@@ -116,7 +118,8 @@ class TestOllamaEmbeddingProvider:
 
         mock_request = httpx.Request("POST", "http://test:11434/api/embed")
         mock_response = httpx.Response(
-            200, json={"embeddings": [[0.1, 0.2], [0.3, 0.4]]},
+            200,
+            json={"embeddings": [[0.1, 0.2], [0.3, 0.4]]},
             request=mock_request,
         )
         provider._client.post = AsyncMock(return_value=mock_response)

@@ -1,30 +1,117 @@
-# Example scheduler configuration.
+# =============================================================================
+# Example Scheduler Configuration
+# =============================================================================
 #
-# Each schedule entry fires on a cron expression or fixed interval and
-# dispatches either an OrchestratorGoal or a TaskMessage into the
-# existing NATS message flow.
+# The SchedulerActor fires scheduled entries on cron expressions or fixed
+# intervals and dispatches either OrchestratorGoal or TaskMessage objects
+# into the NATS message flow.
 #
-# Usage:
-#   loom scheduler --config configs/schedulers/example.yaml \
-#                  --nats-url nats://localhost:4222
+# Component:  src/loom/scheduler/scheduler.py (SchedulerActor)
+# Config:     src/loom/scheduler/config.py (validation)
+# Loaded by:  loom.core.config.load_config()
+#
+# Run with:
+#   loom scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
+#
+# Prerequisites:
+#   - NATS running at the specified URL
+#   - For goal dispatch: an orchestrator must be running to receive goals
+#   - For task dispatch: the target worker must be running
+#
+# NATS subjects:
+#   loom.goals.incoming           — Goals dispatched here (orchestrator picks up)
+#   loom.tasks.incoming           — Tasks dispatched here (router picks up)
+#   loom.scheduler.{name}         — Health-check subject for the scheduler
+#
+# Related configs:
+#   configs/orchestrators/default.yaml     — orchestrator that receives dispatched goals
+#   configs/orchestrators/rag_pipeline.yaml — pipeline that receives dispatched goals
+#   configs/workers/*.yaml                 — workers that receive dispatched tasks
+#   configs/router_rules.yaml              — router that routes dispatched tasks
+# =============================================================================
 
+# name (str, required)
+# Identifier for this scheduler instance. Used in logging and the
+# health-check NATS subject (loom.scheduler.{name}).
 name: "default_scheduler"
 
+# schedules (list, required)
+# Each entry defines a scheduled action. Two trigger types are supported:
+#   - cron: Standard cron expression (5-field: minute hour day month weekday)
+#   - interval_seconds: Fixed interval in seconds
+# Each entry dispatches either a "goal" or a "task".
 schedules:
-  # --- Cron-based goal dispatch ---
+  # --- Example 1: Cron-based goal dispatch ---
+  # Dispatches an OrchestratorGoal to loom.goals.incoming.
+  # An orchestrator (or pipeline) must be running to process it.
   - name: "hourly_summarize"
+
+    # cron (str, required if no interval_seconds)
+    # Standard 5-field cron expression: minute hour day-of-month month day-of-week
+    # Uses croniter for parsing (requires `uv sync --extra scheduler`).
+    #
+    # Common patterns:
+    #   "* * * * *"       — Every minute
+    #   "*/5 * * * *"     — Every 5 minutes
+    #   "0 * * * *"       — Top of every hour
+    #   "0 */2 * * *"     — Every 2 hours
+    #   "0 9 * * *"       — Daily at 9:00 AM
+    #   "0 9 * * 1-5"     — Weekdays at 9:00 AM
+    #   "0 0 * * 0"       — Every Sunday at midnight
+    #   "0 0 1 * *"       — First day of every month at midnight
+    #   "30 8 * * 1"      — Every Monday at 8:30 AM
+    #   "0 9,17 * * *"    — Daily at 9:00 AM and 5:00 PM
+    #   "0 0 1,15 * *"    — 1st and 15th of every month at midnight
     cron: "0 * * * *"               # Top of every hour
+
+    # dispatch_type (str, required)
+    # What kind of message to dispatch:
+    #   "goal" — Dispatches an OrchestratorGoal to loom.goals.incoming.
+    #            The orchestrator decomposes it and dispatches subtasks.
+    #            Use for complex, multi-step workflows.
+    #   "task" — Dispatches a TaskMessage to loom.tasks.incoming.
+    #            The router sends it directly to a worker.
+    #            Use for simple, single-worker operations.
     dispatch_type: "goal"
+
+    # goal (dict, required when dispatch_type is "goal")
+    # The OrchestratorGoal to dispatch. Fields:
+    #   instruction (str, required): The goal text for the orchestrator.
+    #   context (dict, optional): Additional context passed to the goal.
+    #     For pipelines: fields map to "goal.context.*" in input_mapping.
+    #   priority (str, optional): "low" | "normal" | "high" | "critical"
+    #     Controls message priority in the NATS queue (not guaranteed ordering).
     goal:
       instruction: "Summarize all new documents from the last hour"
       context:
         source: "incoming_docs"
       priority: "normal"            # low | normal | high | critical
 
-  # --- Interval-based task dispatch ---
+  # --- Example 2: Interval-based task dispatch ---
+  # Dispatches a TaskMessage directly to a specific worker.
+  # The router routes it based on worker_type and model_tier.
   - name: "every_5m_healthcheck"
+
+    # interval_seconds (int, required if no cron)
+    # Fixed interval in seconds between dispatches.
+    # The scheduler fires the first dispatch immediately on startup,
+    # then every interval_seconds after that.
+    # Common values: 60 (1 min), 300 (5 min), 3600 (1 hour), 86400 (1 day)
     interval_seconds: 300            # Every 5 minutes
+
+    # dispatch_type (str, required)
     dispatch_type: "task"
+
+    # task (dict, required when dispatch_type is "task")
+    # The TaskMessage to dispatch. Fields:
+    #   worker_type (str, required): Which worker handles this task.
+    #     Must match a running worker's name field.
+    #   payload (dict, required): The task input data.
+    #     Must match the worker's input_schema.
+    #   model_tier (str, optional): Override the worker's default_model_tier.
+    #     Valid: "local" | "standard" | "frontier"
+    #     Note: router_rules.yaml tier_overrides may override this.
+    #   priority (str, optional): "low" | "normal" | "high" | "critical"
     task:
       worker_type: "health_checker"
       payload:

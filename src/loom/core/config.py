@@ -1,36 +1,46 @@
 """
 Configuration loading and validation utilities.
 
-All Loom configs are YAML files. Worker configs define system prompts,
-I/O schemas, timeouts, and backend settings. See configs/workers/_template.yaml
-for the canonical config structure.
+All Loom configs are YAML files. This module validates them at load time so
+misconfigurations fail fast at startup — not at first-message time.
 
-This module provides basic structural validation for worker and pipeline
-configs: it checks that required keys are present and that types are correct.
-This catches common mistakes (typos, missing fields) at startup rather than
-at first-message time.
+Validation functions return a list of error strings (empty = valid).  They
+do NOT raise; callers decide how to handle errors (log, abort, collect).
+
+Four config families are validated here:
+
+- **Worker configs** — system prompt, I/O schemas, tier, timeout
+- **Pipeline configs** — stage names, worker_types, input_mapping, conditions
+- **Orchestrator configs** — name, system_prompt, checkpoint settings
+- **Router rules** — tier_overrides, rate_limits
+
+Scheduler and MCP configs have dedicated validators in their own modules.
+
+See Also:
+    configs/workers/_template.yaml — canonical worker config reference
+    loom.scheduler.config — scheduler config validation
+    loom.mcp.config — MCP gateway config validation
 """
+
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 import structlog
 import yaml
 
 logger = structlog.get_logger()
 
-# Required top-level keys for each config type and their expected Python types.
-# None means any type is accepted (the key just needs to exist).
-_WORKER_REQUIRED: dict[str, type | None] = {
-    "name": str,
-    "system_prompt": str,
-}
+# ---------------------------------------------------------------------------
+# Valid enum values used across configs
+# ---------------------------------------------------------------------------
 
-_PIPELINE_REQUIRED: dict[str, type | None] = {
-    "name": str,
-    "pipeline_stages": list,
-}
+VALID_MODEL_TIERS = {"local", "standard", "frontier"}
+VALID_PRIORITIES = {"low", "normal", "high", "critical"}
+VALID_SCHEMA_TYPES = {"object", "string", "integer", "number", "boolean", "array"}
 
 
 class ConfigValidationError(Exception):
@@ -43,48 +53,386 @@ def load_config(path: str | Path) -> dict[str, Any]:
     Raises:
         FileNotFoundError: If the config file doesn't exist.
         yaml.YAMLError: If the file contains invalid YAML.
+        ConfigValidationError: If the file parses to a non-dict (e.g., a list or scalar).
     """
     with open(path) as f:
-        return yaml.safe_load(f)
+        data = yaml.safe_load(f)
+    if not isinstance(data, dict):
+        raise ConfigValidationError(
+            f"Config at {path}: expected YAML mapping, got {type(data).__name__}"
+        )
+    return data
 
 
-def validate_worker_config(config: dict[str, Any], path: str | Path = "<unknown>") -> list[str]:
-    """Validate a worker config dict against expected structure.
+# ---------------------------------------------------------------------------
+# Worker config validation
+# ---------------------------------------------------------------------------
 
-    Checks for required keys and correct types. Returns a list of error
-    strings (empty = valid). Does NOT raise — callers decide what to do
-    with validation errors.
+# Required top-level keys for each config type and their expected Python types.
+_WORKER_REQUIRED: dict[str, type | None] = {
+    "name": str,
+}
 
-    This catches the most common config mistakes:
-    - Missing 'name' or 'system_prompt'
-    - Wrong type for schema fields (e.g., input_schema as a string)
+_PIPELINE_REQUIRED: dict[str, type | None] = {
+    "name": str,
+    "pipeline_stages": list,
+}
+
+_ORCHESTRATOR_REQUIRED: dict[str, type | None] = {
+    "name": str,
+}
+
+
+def validate_worker_config(  # noqa: PLR0912
+    config: dict[str, Any], path: str | Path = "<unknown>"
+) -> list[str]:
+    """Validate a worker config dict.
+
+    Checks for:
+    - Required keys (name; system_prompt for LLM workers, processing_backend
+      for processor workers)
+    - Correct types for all known keys
+    - Valid model tier values
+    - Valid JSON Schema structure for input_schema/output_schema
+    - Knowledge silos structural integrity
+    - Numeric bounds (timeouts, token limits)
     """
-    return _validate_config(config, _WORKER_REQUIRED, "worker", path)
+    errors = _validate_base(config, _WORKER_REQUIRED, "worker", path)
+    if not isinstance(config, dict):
+        return errors
 
+    pfx = f"worker config at {path}"
 
-def validate_pipeline_config(config: dict[str, Any], path: str | Path = "<unknown>") -> list[str]:
-    """Validate a pipeline orchestrator config."""
-    errors = _validate_config(config, _PIPELINE_REQUIRED, "pipeline", path)
-    # Check that each stage has required fields
-    for i, stage in enumerate(config.get("pipeline_stages", [])):
-        if not isinstance(stage, dict):
-            errors.append(f"pipeline_stages[{i}]: expected dict, got {type(stage).__name__}")
-            continue
-        if "name" not in stage:
-            errors.append(f"pipeline_stages[{i}]: missing required key 'name'")
-        if "worker_type" not in stage:
-            errors.append(f"pipeline_stages[{i}]: missing required key 'worker_type'")
+    # Determine worker kind — LLM workers need system_prompt, processors need backend.
+    kind = config.get("worker_kind", "llm")
+    if kind == "llm":
+        if "system_prompt" not in config:
+            errors.append(f"{pfx}: LLM worker missing required key 'system_prompt'")
+        elif not isinstance(config["system_prompt"], str):
+            errors.append(f"{pfx}: 'system_prompt' must be a string")
+    elif kind == "processor":
+        if "processing_backend" not in config:
+            errors.append(f"{pfx}: processor worker missing 'processing_backend'")
+        elif not isinstance(config["processing_backend"], str):
+            errors.append(f"{pfx}: 'processing_backend' must be a string")
+        elif "." not in config["processing_backend"]:
+            errors.append(
+                f"{pfx}: 'processing_backend' must be a fully qualified class path "
+                f"(e.g., 'mypackage.backends.MyBackend')"
+            )
+    else:
+        errors.append(f"{pfx}: 'worker_kind' must be 'llm' or 'processor', got '{kind}'")
+
+    # Model tier
+    tier = config.get("default_model_tier")
+    if tier is not None and tier not in VALID_MODEL_TIERS:
+        errors.append(
+            f"{pfx}: 'default_model_tier' must be one of {sorted(VALID_MODEL_TIERS)}, got '{tier}'"
+        )
+
+    # Schema fields
+    for schema_key in ("input_schema", "output_schema"):
+        errors.extend(_validate_json_schema(config, schema_key, pfx))
+
+    # Numeric bounds
+    for key in ("timeout_seconds", "max_input_tokens", "max_output_tokens"):
+        if key in config:
+            val = config[key]
+            if not isinstance(val, (int, float)) or isinstance(val, bool):
+                errors.append(f"{pfx}: '{key}' must be a number, got {type(val).__name__}")
+            elif val <= 0:
+                errors.append(f"{pfx}: '{key}' must be positive, got {val}")
+
+    # reset_after_task must be true (workers are stateless)
+    rat = config.get("reset_after_task")
+    if rat is not None and rat is not True:
+        errors.append(f"{pfx}: 'reset_after_task' must be true (workers are stateless)")
+
+    # Knowledge silos
+    if "knowledge_silos" in config:
+        errors.extend(_validate_knowledge_silos(config["knowledge_silos"], path))
+
+    # Knowledge sources (legacy)
+    if "knowledge_sources" in config:
+        ks = config["knowledge_sources"]
+        if not isinstance(ks, list):
+            errors.append(f"{pfx}: 'knowledge_sources' must be a list")
+
+    # File-ref resolution
+    if "resolve_file_refs" in config:
+        if not isinstance(config["resolve_file_refs"], list):
+            errors.append(f"{pfx}: 'resolve_file_refs' must be a list of field names")
+        if "workspace_dir" not in config:
+            errors.append(f"{pfx}: 'resolve_file_refs' requires 'workspace_dir' to be set")
+
     return errors
 
 
-def _validate_config(
+# ---------------------------------------------------------------------------
+# Pipeline config validation
+# ---------------------------------------------------------------------------
+
+
+def validate_pipeline_config(  # noqa: PLR0912, PLR0915
+    config: dict[str, Any], path: str | Path = "<unknown>"
+) -> list[str]:
+    """Validate a pipeline orchestrator config.
+
+    Checks for:
+    - Required keys (name, pipeline_stages)
+    - Each stage has name and worker_type
+    - Stage names are unique
+    - input_mapping values are valid dot-notation paths
+    - depends_on references exist as stage names
+    - condition syntax is valid (3-part: path op value)
+    - Tier values are valid
+    - No circular dependencies (basic check)
+    """
+    errors = _validate_base(config, _PIPELINE_REQUIRED, "pipeline", path)
+    if not isinstance(config, dict):
+        return errors
+
+    pfx = f"pipeline config at {path}"
+    stages = config.get("pipeline_stages", [])
+    if not isinstance(stages, list):
+        return errors  # Already caught by _validate_base
+
+    # Timeout
+    if "timeout_seconds" in config:
+        _check_positive_number(config, "timeout_seconds", pfx, errors)
+
+    # max_concurrent_goals
+    mcg = config.get("max_concurrent_goals")
+    if mcg is not None and (not isinstance(mcg, int) or isinstance(mcg, bool) or mcg < 1):
+        errors.append(f"{pfx}: 'max_concurrent_goals' must be a positive integer")
+
+    # Collect stage names for cross-reference validation.
+    stage_names: set[str] = set()
+    seen_names: list[str] = []
+
+    for i, stage in enumerate(stages):
+        sp = f"{pfx}: pipeline_stages[{i}]"
+        if not isinstance(stage, dict):
+            errors.append(f"{sp}: expected dict, got {type(stage).__name__}")
+            continue
+
+        # Required fields
+        sname = stage.get("name")
+        if sname is None:
+            errors.append(f"{sp}: missing required key 'name'")
+        elif not isinstance(sname, str):
+            errors.append(f"{sp}: 'name' must be a string")
+        else:
+            if sname in stage_names:
+                errors.append(f"{sp}: duplicate stage name '{sname}'")
+            stage_names.add(sname)
+            seen_names.append(sname)
+
+        if "worker_type" not in stage:
+            errors.append(f"{sp}: missing required key 'worker_type'")
+        elif not isinstance(stage["worker_type"], str):
+            errors.append(f"{sp}: 'worker_type' must be a string")
+
+        # Tier validation
+        tier = stage.get("tier")
+        if tier is not None and tier not in VALID_MODEL_TIERS:
+            errors.append(f"{sp}: 'tier' must be one of {sorted(VALID_MODEL_TIERS)}, got '{tier}'")
+
+        # input_mapping validation
+        mapping = stage.get("input_mapping")
+        if mapping is not None:
+            if not isinstance(mapping, dict):
+                errors.append(f"{sp}: 'input_mapping' must be a dict")
+            else:
+                for target, source_path in mapping.items():
+                    if not isinstance(source_path, str):
+                        errors.append(f"{sp}: input_mapping['{target}'] must be a string path")
+                    elif not source_path:
+                        errors.append(f"{sp}: input_mapping['{target}'] must not be empty")
+
+        # depends_on validation
+        deps = stage.get("depends_on")
+        if deps is not None:
+            if not isinstance(deps, list):
+                errors.append(f"{sp}: 'depends_on' must be a list")
+            else:
+                for dep in deps:
+                    if not isinstance(dep, str):
+                        errors.append(f"{sp}: depends_on entries must be strings")
+                    elif dep not in stage_names and dep not in seen_names:
+                        errors.append(f"{sp}: depends_on references unknown stage '{dep}'")
+
+        # condition syntax check
+        cond = stage.get("condition")
+        if cond is not None:
+            if not isinstance(cond, str):
+                errors.append(f"{sp}: 'condition' must be a string")
+            else:
+                parts = cond.split()
+                if len(parts) != 3:
+                    errors.append(
+                        f"{sp}: 'condition' must be 'path op value' "
+                        f"(3 space-separated parts), got {len(parts)} parts"
+                    )
+                elif parts[1] not in ("==", "!="):
+                    errors.append(
+                        f"{sp}: condition operator must be '==' or '!=', got '{parts[1]}'"
+                    )
+
+        # Per-stage timeout
+        if "timeout_seconds" in stage:
+            _check_positive_number(stage, "timeout_seconds", sp, errors)
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator config validation
+# ---------------------------------------------------------------------------
+
+
+def validate_orchestrator_config(  # noqa: PLR0912
+    config: dict[str, Any], path: str | Path = "<unknown>"
+) -> list[str]:
+    """Validate a dynamic orchestrator (OrchestratorActor) config.
+
+    Checks for:
+    - Required keys (name)
+    - system_prompt presence (warned, not error — could be in config)
+    - checkpoint settings structure
+    - Numeric bounds (timeouts, concurrency)
+    - available_workers structure
+    """
+    errors = _validate_base(config, _ORCHESTRATOR_REQUIRED, "orchestrator", path)
+    if not isinstance(config, dict):
+        return errors
+
+    pfx = f"orchestrator config at {path}"
+
+    # System prompt (required for LLM-driven orchestrator)
+    if "system_prompt" not in config:
+        errors.append(f"{pfx}: missing 'system_prompt' (required for LLM orchestrator)")
+    elif not isinstance(config["system_prompt"], str):
+        errors.append(f"{pfx}: 'system_prompt' must be a string")
+
+    # Checkpoint settings
+    cp = config.get("checkpoint")
+    if cp is not None:
+        if not isinstance(cp, dict):
+            errors.append(f"{pfx}: 'checkpoint' must be a dict")
+        else:
+            tt = cp.get("token_threshold")
+            if tt is not None and (not isinstance(tt, int) or isinstance(tt, bool) or tt < 1):
+                errors.append(f"{pfx}: checkpoint.token_threshold must be a positive integer")
+            rw = cp.get("recent_window")
+            if rw is not None and (not isinstance(rw, int) or isinstance(rw, bool) or rw < 0):
+                errors.append(f"{pfx}: checkpoint.recent_window must be a non-negative integer")
+
+    # Concurrency and timeout
+    for key in ("max_concurrent_goals", "max_concurrent_tasks"):
+        val = config.get(key)
+        if val is not None and (not isinstance(val, int) or isinstance(val, bool) or val < 1):
+            errors.append(f"{pfx}: '{key}' must be a positive integer")
+
+    if "timeout_seconds" in config:
+        _check_positive_number(config, "timeout_seconds", pfx, errors)
+
+    # available_workers list
+    aw = config.get("available_workers")
+    if aw is not None:
+        if not isinstance(aw, list):
+            errors.append(f"{pfx}: 'available_workers' must be a list")
+        else:
+            for i, w in enumerate(aw):
+                wp = f"{pfx}: available_workers[{i}]"
+                if not isinstance(w, dict):
+                    errors.append(f"{wp}: expected dict")
+                    continue
+                if "name" not in w:
+                    errors.append(f"{wp}: missing required key 'name'")
+                if "description" not in w:
+                    errors.append(f"{wp}: missing required key 'description'")
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Router rules validation
+# ---------------------------------------------------------------------------
+
+
+def validate_router_rules(  # noqa: PLR0912
+    config: dict[str, Any], path: str | Path = "<unknown>"
+) -> list[str]:
+    """Validate router_rules.yaml.
+
+    Checks for:
+    - Top-level must be a dict
+    - tier_overrides values are valid ModelTier values
+    - rate_limits have valid structure (max_concurrent > 0)
+    - rate_limits keys are valid tier names
+    """
+    errors: list[str] = []
+    if not isinstance(config, dict):
+        return [f"router rules at {path}: expected dict, got {type(config).__name__}"]
+
+    pfx = f"router rules at {path}"
+
+    # tier_overrides
+    overrides = config.get("tier_overrides")
+    if overrides is not None:
+        if not isinstance(overrides, dict):
+            errors.append(f"{pfx}: 'tier_overrides' must be a dict")
+        else:
+            for wtype, tier in overrides.items():
+                if not isinstance(tier, str):
+                    errors.append(f"{pfx}: tier_overrides['{wtype}'] must be a string")
+                elif tier not in VALID_MODEL_TIERS:
+                    errors.append(
+                        f"{pfx}: tier_overrides['{wtype}'] = '{tier}' is not a "
+                        f"valid tier (must be one of {sorted(VALID_MODEL_TIERS)})"
+                    )
+
+    # rate_limits
+    limits = config.get("rate_limits")
+    if limits is not None:
+        if not isinstance(limits, dict):
+            errors.append(f"{pfx}: 'rate_limits' must be a dict")
+        else:
+            for tier_name, limit_cfg in limits.items():
+                lp = f"{pfx}: rate_limits['{tier_name}']"
+                if tier_name not in VALID_MODEL_TIERS:
+                    errors.append(
+                        f"{lp}: unknown tier (must be one of {sorted(VALID_MODEL_TIERS)})"
+                    )
+                if not isinstance(limit_cfg, dict):
+                    errors.append(f"{lp}: must be a dict")
+                    continue
+                mc = limit_cfg.get("max_concurrent")
+                if mc is not None and (not isinstance(mc, int) or isinstance(mc, bool) or mc < 1):
+                    errors.append(f"{lp}: 'max_concurrent' must be a positive integer")
+                tpm = limit_cfg.get("tokens_per_minute")
+                if tpm is not None and (
+                    not isinstance(tpm, (int, float)) or isinstance(tpm, bool) or tpm <= 0
+                ):
+                    errors.append(f"{lp}: 'tokens_per_minute' must be a positive number")
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _validate_base(
     config: dict[str, Any],
     required: dict[str, type | None],
     config_type: str,
     path: str | Path,
 ) -> list[str]:
     """Check that required keys exist and have correct types."""
-    errors = []
+    errors: list[str] = []
     if not isinstance(config, dict):
         return [f"{config_type} config at {path}: expected dict, got {type(config).__name__}"]
 
@@ -93,26 +441,63 @@ def _validate_config(
             errors.append(f"{config_type} config at {path}: missing required key '{key}'")
         elif expected_type is not None and not isinstance(config[key], expected_type):
             errors.append(
-                f"{config_type} config at {path}: key '{key}' expected {expected_type.__name__}, "
-                f"got {type(config[key]).__name__}"
+                f"{config_type} config at {path}: key '{key}' expected "
+                f"{expected_type.__name__}, got {type(config[key]).__name__}"
             )
-
-    # Warn about schema fields that should be dicts
-    for schema_key in ("input_schema", "output_schema"):
-        if schema_key in config and not isinstance(config[schema_key], dict):
-            errors.append(
-                f"{config_type} config at {path}: '{schema_key}' should be a dict "
-                f"(JSON Schema object), got {type(config[schema_key]).__name__}"
-            )
-
-    # Validate knowledge_silos if present
-    if "knowledge_silos" in config:
-        errors.extend(_validate_knowledge_silos(config["knowledge_silos"], path))
 
     return errors
 
 
-def _validate_knowledge_silos(
+def _validate_json_schema(config: dict[str, Any], schema_key: str, pfx: str) -> list[str]:
+    """Validate that a schema field is a well-formed JSON Schema object."""
+    errors: list[str] = []
+    if schema_key not in config:
+        return errors
+    schema = config[schema_key]
+
+    if not isinstance(schema, dict):
+        errors.append(
+            f"{pfx}: '{schema_key}' should be a dict (JSON Schema object), "
+            f"got {type(schema).__name__}"
+        )
+        return errors
+
+    # Schema type check
+    stype = schema.get("type")
+    if stype is not None and stype not in VALID_SCHEMA_TYPES:
+        errors.append(f"{pfx}: {schema_key}.type '{stype}' is not a valid JSON Schema type")
+
+    # Required must be a list of strings
+    req = schema.get("required")
+    if req is not None:
+        if not isinstance(req, list):
+            errors.append(f"{pfx}: {schema_key}.required must be a list")
+        elif not all(isinstance(r, str) for r in req):
+            errors.append(f"{pfx}: {schema_key}.required entries must be strings")
+
+    # Properties must be a dict of dicts
+    props = schema.get("properties")
+    if props is not None:
+        if not isinstance(props, dict):
+            errors.append(f"{pfx}: {schema_key}.properties must be a dict")
+        else:
+            for fname, fschema in props.items():
+                if not isinstance(fschema, dict):
+                    errors.append(f"{pfx}: {schema_key}.properties['{fname}'] must be a dict")
+
+    return errors
+
+
+def _check_positive_number(config: dict[str, Any], key: str, pfx: str, errors: list[str]) -> None:
+    """Check that config[key] is a positive number."""
+    val = config[key]
+    if not isinstance(val, (int, float)) or isinstance(val, bool):
+        errors.append(f"{pfx}: '{key}' must be a number, got {type(val).__name__}")
+    elif val <= 0:
+        errors.append(f"{pfx}: '{key}' must be positive, got {val}")
+
+
+def _validate_knowledge_silos(  # noqa: PLR0912
     silos: Any,
     path: str | Path,
 ) -> list[str]:
@@ -143,7 +528,7 @@ def _validate_knowledge_silos(
         if "type" not in silo:
             errors.append(f"{prefix}: missing required key 'type'")
             continue
-        elif not isinstance(silo["type"], str):
+        if not isinstance(silo["type"], str):
             errors.append(f"{prefix}: 'type' must be a string")
             continue
 
@@ -157,7 +542,9 @@ def _validate_knowledge_silos(
 
             permissions = silo.get("permissions", "read")
             if permissions not in ("read", "read_write"):
-                errors.append(f"{prefix}: 'permissions' must be 'read' or 'read_write', got '{permissions}'")
+                errors.append(
+                    f"{prefix}: 'permissions' must be 'read' or 'read_write', got '{permissions}'"
+                )
 
         elif silo_type == "tool":
             if "provider" not in silo:
@@ -169,6 +556,8 @@ def _validate_knowledge_silos(
                 errors.append(f"{prefix}: 'config' must be a dict")
 
         else:
-            errors.append(f"{prefix}: unknown silo type '{silo_type}' (expected 'folder' or 'tool')")
+            errors.append(
+                f"{prefix}: unknown silo type '{silo_type}' (expected 'folder' or 'tool')"
+            )
 
     return errors

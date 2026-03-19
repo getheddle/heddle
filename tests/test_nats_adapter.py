@@ -4,13 +4,13 @@ Test NATS adapter (unit tests, no infrastructure).
 Tests the NATSBus and NATSSubscription classes from loom.bus.nats_adapter.
 All NATS interactions are mocked — no running NATS server is needed.
 """
+
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from loom.bus.nats_adapter import NATSBus, NATSSubscription
-
 
 # ---------------------------------------------------------------------------
 # NATSBus — connection lifecycle
@@ -23,7 +23,9 @@ async def test_connect_calls_nats_connect_with_defaults():
     bus = NATSBus(url="nats://localhost:4222")
     mock_nc = AsyncMock()
 
-    with patch("loom.bus.nats_adapter.nats.connect", new_callable=AsyncMock, return_value=mock_nc) as mock_connect:
+    with patch(
+        "loom.bus.nats_adapter.nats.connect", new_callable=AsyncMock, return_value=mock_nc
+    ) as mock_connect:
         await bus.connect()
 
     mock_connect.assert_awaited_once_with(

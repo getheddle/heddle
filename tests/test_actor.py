@@ -1,19 +1,20 @@
 """Tests for BaseActor (core/actor.py)."""
+
 from __future__ import annotations
 
 import asyncio
 import signal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from loom.bus.memory import InMemoryBus
 from loom.core.actor import BaseActor
 
-
 # ---------------------------------------------------------------------------
 # Concrete test subclasses
 # ---------------------------------------------------------------------------
+
 
 class EchoActor(BaseActor):
     def __init__(self, *args, **kwargs):
@@ -45,6 +46,7 @@ class SlowActor(BaseActor):
 # 1. Constructor with explicit bus uses that bus
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_constructor_with_explicit_bus():
     bus = InMemoryBus()
@@ -56,11 +58,13 @@ async def test_constructor_with_explicit_bus():
 # 2. Constructor without bus creates a bus (NATSBus)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_constructor_without_bus_sets_bus():
     with patch("loom.core.actor.NATSBus", create=True) as _:
         # The import happens lazily inside __init__; just verify _bus is set.
         from loom.bus.nats_adapter import NATSBus  # noqa: F401
+
         actor = EchoActor("test-2", nats_url="nats://localhost:4222")
         assert actor._bus is not None
 
@@ -68,6 +72,7 @@ async def test_constructor_without_bus_sets_bus():
 # ---------------------------------------------------------------------------
 # 3. connect delegates to bus.connect
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_connect_delegates_to_bus():
@@ -81,6 +86,7 @@ async def test_connect_delegates_to_bus():
 # ---------------------------------------------------------------------------
 # 4. disconnect calls bus.close
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_disconnect_calls_bus_close():
@@ -96,6 +102,7 @@ async def test_disconnect_calls_bus_close():
 # 5. subscribe delegates to bus.subscribe
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_subscribe_delegates_to_bus():
     bus = InMemoryBus()
@@ -109,6 +116,7 @@ async def test_subscribe_delegates_to_bus():
 # ---------------------------------------------------------------------------
 # 6. publish delegates to bus.publish
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_publish_delegates_to_bus():
@@ -124,6 +132,7 @@ async def test_publish_delegates_to_bus():
 # 7. _process_one calls handle_message with data
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_process_one_calls_handle_message():
     bus = InMemoryBus()
@@ -137,6 +146,7 @@ async def test_process_one_calls_handle_message():
 # 8. _process_one catches exceptions — actor stays alive
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_process_one_catches_exceptions():
     bus = InMemoryBus()
@@ -149,6 +159,7 @@ async def test_process_one_catches_exceptions():
 # ---------------------------------------------------------------------------
 # 9. _request_shutdown sets _running=False and sets shutdown_event
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_request_shutdown_sets_flags():
@@ -168,6 +179,7 @@ async def test_request_shutdown_sets_flags():
 # 10. max_concurrent=1 processes sequentially (verify order)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_sequential_processing_preserves_order():
     bus = InMemoryBus()
@@ -184,6 +196,7 @@ async def test_sequential_processing_preserves_order():
 # 11. Semaphore has correct value for max_concurrent
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_semaphore_respects_max_concurrent():
     bus = InMemoryBus()
@@ -196,6 +209,7 @@ async def test_semaphore_respects_max_concurrent():
 # ---------------------------------------------------------------------------
 # 12. _process_one acquires and releases semaphore
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_process_one_acquires_and_releases_semaphore():
@@ -214,6 +228,7 @@ async def test_process_one_acquires_and_releases_semaphore():
 # ---------------------------------------------------------------------------
 # 13. run() processes messages then disconnects on shutdown
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_run_processes_messages_and_shuts_down():
@@ -256,6 +271,7 @@ async def test_run_processes_messages_and_shuts_down():
 # 14. run() with max_concurrent > 1 fires concurrent tasks
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_run_concurrent_processing():
     """With max_concurrent > 1, multiple messages are processed concurrently."""
@@ -290,6 +306,7 @@ async def test_run_concurrent_processing():
 # 15. run() handles CancelledError gracefully
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_run_handles_cancelled_error():
     """Cancelling the run task should not raise."""
@@ -315,6 +332,7 @@ async def test_run_handles_cancelled_error():
 # ---------------------------------------------------------------------------
 # 16. run() disconnects even on error
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_run_disconnects_on_exit():
@@ -345,6 +363,7 @@ async def test_run_disconnects_on_exit():
 # 17. _install_signal_handlers registers SIGTERM and SIGINT
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_install_signal_handlers():
     """_install_signal_handlers registers handlers for SIGTERM and SIGINT."""
@@ -356,8 +375,6 @@ async def test_install_signal_handlers():
         actor._install_signal_handlers()
 
     assert mock_loop.add_signal_handler.call_count == 2
-    registered_signals = {
-        call.args[0] for call in mock_loop.add_signal_handler.call_args_list
-    }
+    registered_signals = {call.args[0] for call in mock_loop.add_signal_handler.call_args_list}
     assert signal.SIGTERM in registered_signals
     assert signal.SIGINT in registered_signals

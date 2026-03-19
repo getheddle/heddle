@@ -1,11 +1,12 @@
 """Unit tests for loom.contrib.rag.schemas — all schema modules."""
-import pytest
-from datetime import datetime, timedelta, timezone
+
+from datetime import UTC, datetime, timedelta
 
 
 class TestLanguageEnum:
     def test_values(self):
         from loom.contrib.rag.schemas.post import Language
+
         assert Language.PERSIAN.value == "fa"
         assert Language.ARABIC.value == "ar"
         assert Language.ENGLISH.value == "en"
@@ -14,6 +15,7 @@ class TestLanguageEnum:
 
     def test_from_value(self):
         from loom.contrib.rag.schemas.post import Language
+
         assert Language("fa") == Language.PERSIAN
         assert Language("unknown") == Language.UNKNOWN
 
@@ -21,8 +23,17 @@ class TestLanguageEnum:
 class TestChannelBias:
     def test_all_bias_values(self):
         from loom.contrib.rag.schemas.post import ChannelBias
-        expected = {"state_media", "state_aligned", "independent", "opposition",
-                    "fact_check", "neutral", "educational", "unknown"}
+
+        expected = {
+            "state_media",
+            "state_aligned",
+            "independent",
+            "opposition",
+            "fact_check",
+            "neutral",
+            "educational",
+            "unknown",
+        }
         actual = {b.value for b in ChannelBias}
         assert actual == expected
 
@@ -30,12 +41,13 @@ class TestChannelBias:
 class TestNormalizedPost:
     def test_create_minimal(self):
         from loom.contrib.rag.schemas.post import NormalizedPost
+
         post = NormalizedPost(
             global_id="123:1",
             source_channel_id=123,
             source_channel_name="test",
             message_id=1,
-            timestamp=datetime(2026, 3, 1, tzinfo=timezone.utc),
+            timestamp=datetime(2026, 3, 1, tzinfo=UTC),
         )
         assert post.global_id == "123:1"
         assert post.text_clean == ""
@@ -44,12 +56,13 @@ class TestNormalizedPost:
 
     def test_extra_fields_allowed(self):
         from loom.contrib.rag.schemas.post import NormalizedPost
+
         post = NormalizedPost(
             global_id="123:1",
             source_channel_id=123,
             source_channel_name="test",
             message_id=1,
-            timestamp=datetime(2026, 3, 1, tzinfo=timezone.utc),
+            timestamp=datetime(2026, 3, 1, tzinfo=UTC),
             custom_field="hello",
         )
         assert post.custom_field == "hello"
@@ -58,6 +71,7 @@ class TestNormalizedPost:
 class TestMuxSchemas:
     def test_window_config_defaults(self):
         from loom.contrib.rag.schemas.mux import MuxWindowConfig
+
         cfg = MuxWindowConfig()
         assert cfg.window_duration == timedelta(hours=6)
         assert cfg.step is None
@@ -66,6 +80,7 @@ class TestMuxSchemas:
 
     def test_sliding_config(self):
         from loom.contrib.rag.schemas.mux import MuxWindowConfig
+
         cfg = MuxWindowConfig(
             window_duration=timedelta(hours=4),
             step=timedelta(hours=1),
@@ -75,7 +90,8 @@ class TestMuxSchemas:
     def test_mux_entry_delegates(self):
         from loom.contrib.rag.schemas.mux import MuxEntry
         from loom.contrib.rag.schemas.post import NormalizedPost
-        ts = datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc)
+
+        ts = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
         post = NormalizedPost(
             global_id="100:5",
             source_channel_id=100,
@@ -94,12 +110,23 @@ class TestMuxSchemas:
     def test_muxed_stream_properties(self):
         from loom.contrib.rag.schemas.mux import MuxedStream, MuxEntry
         from loom.contrib.rag.schemas.post import NormalizedPost
-        ts1 = datetime(2026, 3, 1, tzinfo=timezone.utc)
-        ts2 = datetime(2026, 3, 2, tzinfo=timezone.utc)
-        p1 = NormalizedPost(global_id="1:1", source_channel_id=1, source_channel_name="a",
-                            message_id=1, timestamp=ts1)
-        p2 = NormalizedPost(global_id="2:1", source_channel_id=2, source_channel_name="b",
-                            message_id=1, timestamp=ts2)
+
+        ts1 = datetime(2026, 3, 1, tzinfo=UTC)
+        ts2 = datetime(2026, 3, 2, tzinfo=UTC)
+        p1 = NormalizedPost(
+            global_id="1:1",
+            source_channel_id=1,
+            source_channel_name="a",
+            message_id=1,
+            timestamp=ts1,
+        )
+        p2 = NormalizedPost(
+            global_id="2:1",
+            source_channel_id=2,
+            source_channel_name="b",
+            message_id=1,
+            timestamp=ts2,
+        )
         stream = MuxedStream(
             source_ids=[1, 2],
             source_names=["a", "b"],
@@ -120,11 +147,13 @@ class TestMuxSchemas:
 class TestChunkSchemas:
     def test_chunk_strategy(self):
         from loom.contrib.rag.schemas.chunk import ChunkStrategy
+
         assert ChunkStrategy.SENTENCE.value == "sentence"
         assert ChunkStrategy.WHOLE_POST.value == "whole_post"
 
     def test_text_chunk(self):
-        from loom.contrib.rag.schemas.chunk import TextChunk, ChunkStrategy
+        from loom.contrib.rag.schemas.chunk import ChunkStrategy, TextChunk
+
         chunk = TextChunk(
             chunk_id="100:1:0",
             source_global_id="100:1",
@@ -143,6 +172,7 @@ class TestChunkSchemas:
 class TestEmbeddingSchemas:
     def test_embedded_chunk(self):
         from loom.contrib.rag.schemas.embedding import EmbeddedChunk
+
         ec = EmbeddedChunk(
             chunk_id="1:1:0",
             source_global_id="1:1",
@@ -157,6 +187,7 @@ class TestEmbeddingSchemas:
 
     def test_similarity_result(self):
         from loom.contrib.rag.schemas.embedding import SimilarityResult
+
         sr = SimilarityResult(
             chunk_id="1:1:0",
             text="hello",
@@ -170,15 +201,17 @@ class TestEmbeddingSchemas:
 class TestAnalysisSchemas:
     def test_analysis_type_enum(self):
         from loom.contrib.rag.schemas.analysis import AnalysisType
+
         assert AnalysisType.TREND.value == "trend"
         assert AnalysisType.DATA_EXTRACT.value == "data_extract"
 
     def test_trend_signal(self):
-        from loom.contrib.rag.schemas.analysis import TrendSignal, Severity
+        from loom.contrib.rag.schemas.analysis import Severity, TrendSignal
+
         ts = TrendSignal(
             window_id="w1",
-            window_start=datetime(2026, 3, 1, tzinfo=timezone.utc),
-            window_end=datetime(2026, 3, 1, 6, tzinfo=timezone.utc),
+            window_start=datetime(2026, 3, 1, tzinfo=UTC),
+            window_end=datetime(2026, 3, 1, 6, tzinfo=UTC),
             actor_id="trend-1",
             source_entry_ids=["1:1"],
             confidence=0.8,
@@ -195,12 +228,15 @@ class TestAnalysisSchemas:
 
     def test_extracted_data_by_type(self):
         from loom.contrib.rag.schemas.analysis import (
-            ExtractedData, ExtractedDatum, ExtractedDataType, AnalysisType,
+            ExtractedData,
+            ExtractedDataType,
+            ExtractedDatum,
         )
+
         data = ExtractedData(
             window_id="w1",
-            window_start=datetime(2026, 3, 1, tzinfo=timezone.utc),
-            window_end=datetime(2026, 3, 1, 6, tzinfo=timezone.utc),
+            window_start=datetime(2026, 3, 1, tzinfo=UTC),
+            window_end=datetime(2026, 3, 1, 6, tzinfo=UTC),
             actor_id="extractor-1",
             source_entry_ids=["1:1"],
             confidence=0.8,
@@ -208,14 +244,18 @@ class TestAnalysisSchemas:
             data=[
                 ExtractedDatum(
                     datum_type=ExtractedDataType.STATISTIC,
-                    value="50%", source_global_id="1:1",
-                    source_channel="ch1", timestamp_unix=0,
+                    value="50%",
+                    source_global_id="1:1",
+                    source_channel="ch1",
+                    timestamp_unix=0,
                     context_snippet="about 50%",
                 ),
                 ExtractedDatum(
                     datum_type=ExtractedDataType.PERSON,
-                    value="Ali", source_global_id="1:2",
-                    source_channel="ch1", timestamp_unix=0,
+                    value="Ali",
+                    source_global_id="1:2",
+                    source_channel="ch1",
+                    timestamp_unix=0,
                     context_snippet="Ali said",
                 ),
             ],
@@ -229,8 +269,10 @@ class TestAnalysisSchemas:
 class TestTelegramSchemas:
     def test_raw_message_plain_text_string(self):
         from loom.contrib.rag.schemas.telegram import RawTelegramMessage
+
         msg = RawTelegramMessage(
-            id=1, type="message",
+            id=1,
+            type="message",
             date=datetime(2026, 3, 1),
             date_unixtime="1740787200",
             text="simple text",
@@ -240,8 +282,10 @@ class TestTelegramSchemas:
 
     def test_raw_message_plain_text_list(self):
         from loom.contrib.rag.schemas.telegram import RawTelegramMessage
+
         msg = RawTelegramMessage(
-            id=2, type="message",
+            id=2,
+            type="message",
             date=datetime(2026, 3, 1),
             date_unixtime="1740787200",
             text=[
@@ -254,8 +298,10 @@ class TestTelegramSchemas:
 
     def test_reaction_total(self):
         from loom.contrib.rag.schemas.telegram import RawTelegramMessage, ReactionCount
+
         msg = RawTelegramMessage(
-            id=3, type="message",
+            id=3,
+            type="message",
             date=datetime(2026, 3, 1),
             date_unixtime="1740787200",
             text="test",
@@ -269,6 +315,7 @@ class TestTelegramSchemas:
 
     def test_channel_model(self):
         from loom.contrib.rag.schemas.telegram import TelegramChannel
+
         ch = TelegramChannel(name="Test", type="public_channel", id=12345)
         assert len(ch.messages) == 0
         assert len(ch.message_messages) == 0
@@ -276,17 +323,10 @@ class TestTelegramSchemas:
 
 class TestSchemaImports:
     """Ensure all public exports from schemas/__init__.py work."""
+
     def test_all_exports(self):
         from loom.contrib.rag.schemas import (
-            Language, ChannelBias, ChannelEditorProfile, NormalizedPost,
-            TelegramMediaType, TextEntity, ReactionCount,
-            RawTelegramMessage, TelegramChannel,
-            MuxWindowConfig, MuxEntry, MuxedStream,
-            ChunkStrategy, TextChunk,
-            AnalysisType, Severity, AnalysisBlock,
-            TrendSignal, CorroborationMatch,
-            AnomalyType, AnomalyFlag,
-            ExtractedDataType, ExtractedDatum, ExtractedData,
-            EmbeddedChunk, SimilarityResult,
+            Language,
         )
+
         assert Language.PERSIAN.value == "fa"

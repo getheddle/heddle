@@ -13,17 +13,19 @@ The message bus is pluggable via the ``bus`` constructor parameter. The default
 is NATSBus (created from ``nats_url`` when no bus is provided). For testing,
 pass an InMemoryBus instead.
 """
+
 from __future__ import annotations
 
 import asyncio
 import signal
 import time
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from loom.bus.base import MessageBus, Subscription
+if TYPE_CHECKING:
+    from loom.bus.base import MessageBus, Subscription
 
 logger = structlog.get_logger()
 
@@ -56,7 +58,7 @@ class BaseActor(ABC):
         max_concurrent: int = 1,
         *,
         bus: MessageBus | None = None,
-    ):
+    ) -> None:
         self.actor_id = actor_id
         self.max_concurrent = max_concurrent
         self._sub: Subscription | None = None
@@ -64,32 +66,38 @@ class BaseActor(ABC):
         self._shutdown_event: asyncio.Event | None = None
         # Semaphore is created at run() time inside the event loop
         self._semaphore: asyncio.Semaphore | None = None
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
         if bus is not None:
             self._bus = bus
         else:
             from loom.bus.nats_adapter import NATSBus
+
             self._bus = NATSBus(nats_url)
 
     async def connect(self) -> None:
+        """Connect to the message bus."""
         await self._bus.connect()
         logger.info("actor.connected", actor_id=self.actor_id)
 
     async def disconnect(self) -> None:
+        """Unsubscribe and close the message bus connection."""
         if self._sub:
             await self._sub.unsubscribe()
         await self._bus.close()
         logger.info("actor.disconnected", actor_id=self.actor_id)
 
     async def subscribe(self, subject: str, queue_group: str | None = None) -> None:
-        """
-        Subscribe to a bus subject. Queue group enables competing consumers
+        """Subscribe to a bus subject.
+
+        Queue group enables competing consumers
         (multiple worker replicas share load).
         """
         self._sub = await self._bus.subscribe(subject, queue_group)
         logger.info("actor.subscribed", actor_id=self.actor_id, subject=subject)
 
     async def publish(self, subject: str, message: dict[str, Any]) -> None:
+        """Publish a message to the given bus subject."""
         await self._bus.publish(subject, message)
 
     def _install_signal_handlers(self) -> None:
@@ -159,7 +167,9 @@ class BaseActor(ABC):
                     await self._process_one(data)
                 else:
                     # Concurrent processing — fire-and-forget within semaphore bound
-                    asyncio.create_task(self._process_one(data))
+                    task = asyncio.create_task(self._process_one(data))
+                    self._background_tasks.add(task)
+                    task.add_done_callback(self._background_tasks.discard)
         except asyncio.CancelledError:
             pass  # Clean shutdown via task cancellation
         finally:

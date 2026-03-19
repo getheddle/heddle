@@ -9,6 +9,7 @@ Tests cover:
 - _resolve_tier / _resolve_priority: fallback chains
 - from_worker_configs: factory method
 """
+
 from __future__ import annotations
 
 import json
@@ -24,7 +25,6 @@ from loom.orchestrator.decomposer import (
     _extract_json_array,
 )
 from loom.worker.backends import LLMBackend
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -103,9 +103,9 @@ class TestExtractJsonArray:
     def test_preamble_and_postamble(self):
         """Array buried in explanatory text is still extracted."""
         raw = (
-            'Here is the decomposition:\n'
+            "Here is the decomposition:\n"
             '[{"worker_type": "summarizer", "payload": {"text": "hi"}}]\n'
-            'Let me know if you need changes.'
+            "Let me know if you need changes."
         )
         result = _extract_json_array(raw)
         assert len(result) == 1
@@ -197,10 +197,12 @@ class TestPromptBuilders:
 class TestDecompose:
     @pytest.mark.asyncio
     async def test_decompose_valid_response(self):
-        plan = json.dumps([
-            {"worker_type": "summarizer", "payload": {"text": "hello"}, "model_tier": "local"},
-            {"worker_type": "classifier", "payload": {"text": "world"}, "priority": "high"},
-        ])
+        plan = json.dumps(
+            [
+                {"worker_type": "summarizer", "payload": {"text": "hello"}, "model_tier": "local"},
+                {"worker_type": "classifier", "payload": {"text": "world"}, "priority": "high"},
+            ]
+        )
         decomposer = GoalDecomposer(backend=MockBackend(plan), workers=WORKERS)
         tasks = await decomposer.decompose("Summarize and classify", parent_task_id="goal-1")
 
@@ -233,10 +235,12 @@ class TestDecompose:
     @pytest.mark.asyncio
     async def test_decompose_skips_invalid_subtasks(self):
         """Unknown worker types are skipped, valid ones kept."""
-        plan = json.dumps([
-            {"worker_type": "unknown_worker", "payload": {"text": "a"}},
-            {"worker_type": "summarizer", "payload": {"text": "b"}},
-        ])
+        plan = json.dumps(
+            [
+                {"worker_type": "unknown_worker", "payload": {"text": "a"}},
+                {"worker_type": "summarizer", "payload": {"text": "b"}},
+            ]
+        )
         decomposer = GoalDecomposer(backend=MockBackend(plan), workers=WORKERS)
         tasks = await decomposer.decompose("Mixed plan")
         assert len(tasks) == 1
@@ -270,22 +274,42 @@ class TestParseSubtask:
 
     def test_missing_worker_type(self):
         d = self._make_decomposer()
-        result = d._parse_subtask({"payload": {"text": "hi"}}, index=0, parent_task_id=None, default_priority=TaskPriority.NORMAL)
+        result = d._parse_subtask(
+            {"payload": {"text": "hi"}},
+            index=0,
+            parent_task_id=None,
+            default_priority=TaskPriority.NORMAL,
+        )
         assert result is None
 
     def test_unknown_worker_type(self):
         d = self._make_decomposer()
-        result = d._parse_subtask({"worker_type": "nonexistent", "payload": {}}, index=0, parent_task_id=None, default_priority=TaskPriority.NORMAL)
+        result = d._parse_subtask(
+            {"worker_type": "nonexistent", "payload": {}},
+            index=0,
+            parent_task_id=None,
+            default_priority=TaskPriority.NORMAL,
+        )
         assert result is None
 
     def test_missing_payload(self):
         d = self._make_decomposer()
-        result = d._parse_subtask({"worker_type": "summarizer"}, index=0, parent_task_id=None, default_priority=TaskPriority.NORMAL)
+        result = d._parse_subtask(
+            {"worker_type": "summarizer"},
+            index=0,
+            parent_task_id=None,
+            default_priority=TaskPriority.NORMAL,
+        )
         assert result is None
 
     def test_non_dict_payload(self):
         d = self._make_decomposer()
-        result = d._parse_subtask({"worker_type": "summarizer", "payload": "string"}, index=0, parent_task_id=None, default_priority=TaskPriority.NORMAL)
+        result = d._parse_subtask(
+            {"worker_type": "summarizer", "payload": "string"},
+            index=0,
+            parent_task_id=None,
+            default_priority=TaskPriority.NORMAL,
+        )
         assert result is None
 
     def test_valid_subtask_returns_task_message(self):

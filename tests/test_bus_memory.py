@@ -1,4 +1,5 @@
 """Tests for InMemoryBus edge cases (bus/memory.py)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,7 +7,6 @@ import asyncio
 import pytest
 
 from loom.bus.memory import InMemoryBus, InMemorySubscription
-
 
 # ---------------------------------------------------------------------------
 # InMemorySubscription tests

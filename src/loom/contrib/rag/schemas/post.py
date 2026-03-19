@@ -4,16 +4,18 @@ All ingestion adapters (Telegram, RSS, etc.) normalize raw platform data into
 NormalizedPost instances.  Downstream stages (chunker, mux, analysis) operate
 exclusively on this schema, making them platform-agnostic.
 """
+
 from __future__ import annotations
 
-from datetime import datetime
-from enum import Enum
+from datetime import datetime  # noqa: TC003 - needed at runtime by Pydantic
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class Language(str, Enum):
+class Language(StrEnum):
     """Language codes relevant to the RAG pipeline."""
+
     PERSIAN = "fa"
     ARABIC = "ar"
     ENGLISH = "en"
@@ -21,8 +23,9 @@ class Language(str, Enum):
     UNKNOWN = "unknown"
 
 
-class ChannelBias(str, Enum):
+class ChannelBias(StrEnum):
     """Editorial orientation of a source channel."""
+
     STATE_MEDIA = "state_media"
     STATE_ALIGNED = "state_aligned"
     INDEPENDENT = "independent"
@@ -39,6 +42,7 @@ class ChannelEditorProfile(BaseModel, extra="allow"):
     The trust_weight is a normalized score [0, 1] used by downstream
     analysis stages to weight assertions from this channel.
     """
+
     channel_id: int
     channel_name: str
     channel_handle: str | None = None
@@ -55,8 +59,10 @@ class NormalizedPost(BaseModel, extra="allow"):
     post across channels.  Fields named ``source_*`` refer to the originating
     channel to avoid ambiguity after muxing.
     """
+
     global_id: str = Field(
-        ..., description='Unique identifier "{channel_id}:{message_id}".',
+        ...,
+        description='Unique identifier "{channel_id}:{message_id}".',
     )
     source_channel_id: int
     source_channel_name: str

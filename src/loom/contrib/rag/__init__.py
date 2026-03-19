@@ -20,12 +20,12 @@ Stages:
 """
 
 __all__ = [
-    "schemas",
+    "analysis",
+    "backends",
+    "chunker",
     "ingestion",
     "mux",
-    "chunker",
-    "analysis",
-    "vectorstore",
+    "schemas",
     "tools",
-    "backends",
+    "vectorstore",
 ]

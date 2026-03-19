@@ -4,16 +4,19 @@ ConfigManager — CRUD for worker and pipeline YAML configs.
 Manages the filesystem-based worker and pipeline configs, with optional
 version tracking via WorkshopDB.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 import yaml
 
 from loom.core.config import load_config, validate_pipeline_config, validate_worker_config
-from loom.workshop.db import WorkshopDB
+
+if TYPE_CHECKING:
+    from loom.workshop.db import WorkshopDB
 
 logger = structlog.get_logger()
 
@@ -49,13 +52,15 @@ class ConfigManager:
                 continue
             try:
                 cfg = load_config(str(path))
-                results.append({
-                    "name": cfg.get("name", path.stem),
-                    "description": cfg.get("description", ""),
-                    "path": str(path),
-                    "default_model_tier": cfg.get("default_model_tier", ""),
-                    "worker_kind": cfg.get("worker_kind", "llm"),
-                })
+                results.append(
+                    {
+                        "name": cfg.get("name", path.stem),
+                        "description": cfg.get("description", ""),
+                        "path": str(path),
+                        "default_model_tier": cfg.get("default_model_tier", ""),
+                        "worker_kind": cfg.get("worker_kind", "llm"),
+                    }
+                )
             except Exception as e:
                 logger.warning("config.load_failed", path=str(path), error=str(e))
         return results
@@ -140,12 +145,14 @@ class ConfigManager:
             try:
                 cfg = load_config(str(path))
                 stage_count = len(cfg.get("pipeline_stages", []))
-                results.append({
-                    "name": cfg.get("name", path.stem),
-                    "path": str(path),
-                    "stage_count": stage_count,
-                    "has_pipeline_stages": stage_count > 0,
-                })
+                results.append(
+                    {
+                        "name": cfg.get("name", path.stem),
+                        "path": str(path),
+                        "stage_count": stage_count,
+                        "has_pipeline_stages": stage_count > 0,
+                    }
+                )
             except Exception as e:
                 logger.warning("config.load_failed", path=str(path), error=str(e))
         return results

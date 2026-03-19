@@ -12,18 +12,22 @@ Usage::
     server = create_server("configs/mcp/docman.yaml")
     run_stdio(server)
 
-See also:
+See Also:
     loom.mcp.config    — config loading and validation
     loom.mcp.discovery — tool definition generation
     loom.mcp.bridge    — NATS call dispatch
     loom.mcp.resources — workspace resource exposure
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 import structlog
 
@@ -61,15 +65,15 @@ class MCPGateway:
     resources: WorkspaceResources | None = None
 
 
-def create_server(config_path: str) -> tuple[Any, MCPGateway]:
+def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
     """Create an MCP Server and MCPGateway from a config file.
 
     Returns:
         Tuple of (mcp.server.lowlevel.Server, MCPGateway).
         The gateway must be connected before the server can handle calls.
     """
+    from mcp import types
     from mcp.server.lowlevel import Server
-    import mcp.types as types
 
     config = load_mcp_config(config_path)
 
@@ -129,6 +133,7 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:
 
     @server.list_tools()
     async def handle_list_tools() -> list[types.Tool]:
+        """Return all registered MCP tool definitions."""
         return [
             types.Tool(
                 name=t["name"],
@@ -140,16 +145,20 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:
 
     @server.call_tool()
     async def handle_call_tool(
-        name: str, arguments: dict[str, Any] | None,
+        name: str,
+        arguments: dict[str, Any] | None,
     ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+        """Dispatch an MCP tool call to the LOOM bridge."""
         arguments = arguments or {}
 
         entry = gateway.tool_registry.get(name)
         if entry is None:
-            return [types.TextContent(
-                type="text",
-                text=json.dumps({"error": f"Unknown tool: {name}"}),
-            )]
+            return [
+                types.TextContent(
+                    type="text",
+                    text=json.dumps({"error": f"Unknown tool: {name}"}),
+                )
+            ]
 
         # Snapshot workspace before call (for change detection).
         if gateway.resources:
@@ -158,21 +167,27 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:
         try:
             result = await _dispatch_tool(gateway, entry, arguments)
         except BridgeTimeoutError as exc:
-            return [types.TextContent(
-                type="text",
-                text=json.dumps({"error": f"Timeout: {exc}"}),
-            )]
+            return [
+                types.TextContent(
+                    type="text",
+                    text=json.dumps({"error": f"Timeout: {exc}"}),
+                )
+            ]
         except BridgeError as exc:
-            return [types.TextContent(
-                type="text",
-                text=json.dumps({"error": str(exc)}),
-            )]
+            return [
+                types.TextContent(
+                    type="text",
+                    text=json.dumps({"error": str(exc)}),
+                )
+            ]
         except Exception as exc:
             logger.error("mcp.server.call_error", tool=name, error=str(exc))
-            return [types.TextContent(
-                type="text",
-                text=json.dumps({"error": f"Internal error: {exc}"}),
-            )]
+            return [
+                types.TextContent(
+                    type="text",
+                    text=json.dumps({"error": f"Internal error: {exc}"}),
+                )
+            ]
 
         # Detect workspace changes and notify (best-effort).
         if gateway.resources:
@@ -183,15 +198,19 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:
                 # don't have access to in the low-level call_tool handler.
                 # The notifications are handled by the transport layer.
 
-        return [types.TextContent(
-            type="text",
-            text=json.dumps(result, default=str),
-        )]
+        return [
+            types.TextContent(
+                type="text",
+                text=json.dumps(result, default=str),
+            )
+        ]
 
     # --- Resource handlers ---
     if workspace_resources:
+
         @server.list_resources()
         async def handle_list_resources() -> list[types.Resource]:
+            """List all workspace files as MCP resources."""
             items = gateway.resources.list_resources()
             return [
                 types.Resource(
@@ -206,12 +225,13 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:
         @server.read_resource()
         async def handle_read_resource(
             uri: str,
-        ) -> list[types.TextResourceContents | types.BlobResourceContents]:
-            content, mime = gateway.resources.read_resource(uri)
-            if mime and (mime.startswith("text/") or mime in ("application/json", "application/xml")):
-                return [types.TextResourceContents(uri=uri, text=content, mimeType=mime)]
-            else:
-                return [types.BlobResourceContents(uri=uri, blob=content, mimeType=mime)]
+        ) -> list:
+            """Read a workspace resource by URI."""
+            from mcp.server.lowlevel.helper_types import ReadResourceContents
+
+            uri_str = str(uri)  # MCP SDK may pass AnyUrl instead of str
+            content, mime = gateway.resources.read_resource(uri_str)
+            return [ReadResourceContents(content=content, mime_type=mime)]
 
     return server, gateway
 
@@ -260,7 +280,7 @@ async def _dispatch_tool(
 def run_stdio(server: Any, gateway: MCPGateway) -> None:
     """Run the MCP server on stdio transport (blocking)."""
 
-    async def _run():
+    async def _run() -> None:
         import mcp.server.stdio
 
         await gateway.bridge.connect()
@@ -283,7 +303,10 @@ def run_stdio(server: Any, gateway: MCPGateway) -> None:
 
 
 def run_streamable_http(
-    server: Any, gateway: MCPGateway, host: str = "127.0.0.1", port: int = 8000,
+    server: Any,
+    gateway: MCPGateway,
+    host: str = "127.0.0.1",
+    port: int = 8000,
 ) -> None:
     """Run the MCP server on streamable HTTP transport (blocking).
 
@@ -292,12 +315,12 @@ def run_streamable_http(
     over HTTP, with a ``/health`` convenience endpoint.
     """
 
-    async def _run():
+    async def _run() -> None:
         import uvicorn
-        from starlette.applications import Starlette
-        from starlette.routing import Route
-        from starlette.responses import JSONResponse
         from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+        from starlette.applications import Starlette
+        from starlette.responses import JSONResponse
+        from starlette.routing import Route
 
         await gateway.bridge.connect()
         logger.info("mcp.gateway.connected", nats_url=gateway.config.get("nats_url"))
@@ -313,13 +336,13 @@ def run_streamable_http(
         )
 
         # Thin ASGI callable that delegates to the session manager.
-        async def mcp_asgi_handler(scope, receive, send):
+        async def mcp_asgi_handler(scope: Any, receive: Any, send: Any) -> None:
             await session_manager.handle_request(scope, receive, send)
 
-        async def health(request):
+        async def health(_request: Any) -> JSONResponse:
             return JSONResponse({"status": "ok", "name": gateway.config["name"]})
 
-        async def lifespan(app):
+        async def lifespan(_app: Any) -> AsyncIterator[None]:
             async with session_manager.run():
                 yield
 

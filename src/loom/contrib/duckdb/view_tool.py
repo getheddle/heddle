@@ -20,6 +20,7 @@ Example knowledge_silos config::
 The tool auto-introspects the view's columns via DESCRIBE to build its
 JSON Schema definition. Queries use parameterized SQL to prevent injection.
 """
+
 from __future__ import annotations
 
 import json
@@ -67,10 +68,7 @@ class DuckDBViewTool(SyncToolProvider):
             conn = duckdb.connect(self.db_path, read_only=True)
             try:
                 rows = conn.execute(f"DESCRIBE {self.view_name}").fetchall()
-                self._columns = [
-                    {"name": row[0], "type": row[1]}
-                    for row in rows
-                ]
+                self._columns = [{"name": row[0], "type": row[1]} for row in rows]
             finally:
                 conn.close()
         except Exception as e:
@@ -112,7 +110,9 @@ class DuckDBViewTool(SyncToolProvider):
                     },
                     "limit": {
                         "type": "integer",
-                        "description": f"Max results to return (default: 10, max: {self.max_results})",
+                        "description": (
+                            f"Max results to return (default: 10, max: {self.max_results})"
+                        ),
                     },
                     "filters": {
                         "type": "object",
@@ -155,10 +155,7 @@ class DuckDBViewTool(SyncToolProvider):
             return {"results": [], "total": 0}
 
         # Find text columns to search across
-        text_cols = [
-            c["name"] for c in self._columns
-            if c["type"].upper() in ("VARCHAR", "TEXT")
-        ]
+        text_cols = [c["name"] for c in self._columns if c["type"].upper() in ("VARCHAR", "TEXT")]
 
         if not text_cols:
             return {"results": [], "total": 0, "error": "No searchable text columns"}
@@ -170,13 +167,10 @@ class DuckDBViewTool(SyncToolProvider):
         col_names = ", ".join(c["name"] for c in self._columns)
         rows = conn.execute(
             f"SELECT {col_names} FROM {self.view_name} WHERE {conditions} LIMIT ?",
-            params + [limit],
+            [*params, limit],
         ).fetchall()
 
-        results = [
-            {c["name"]: val for c, val in zip(self._columns, row)}
-            for row in rows
-        ]
+        results = [dict(zip((c["name"] for c in self._columns), row, strict=False)) for row in rows]
 
         return {"results": results, "total": len(results)}
 
@@ -203,12 +197,9 @@ class DuckDBViewTool(SyncToolProvider):
 
         rows = conn.execute(
             f"SELECT {col_names} FROM {self.view_name} {where} LIMIT ?",
-            params + [limit],
+            [*params, limit],
         ).fetchall()
 
-        results = [
-            {c["name"]: val for c, val in zip(self._columns, row)}
-            for row in rows
-        ]
+        results = [dict(zip((c["name"] for c in self._columns), row, strict=False)) for row in rows]
 
         return {"results": results, "total": len(results)}

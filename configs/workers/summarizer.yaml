@@ -1,11 +1,49 @@
-# Summarizer worker — compresses text into structured summaries.
-# Run with:  loom worker --config configs/workers/summarizer.yaml --tier local
-# Subscribes to:  loom.tasks.summarizer.local
-# Router override: tier_overrides in router_rules.yaml forces this to "local"
+# =============================================================================
+# Summarizer Worker Configuration
+# =============================================================================
+#
+# Compresses text into structured summaries with key points extraction.
+#
+# Component:  LLM worker (worker_kind: "llm", the default)
+# Source:     src/loom/worker/runner.py (LLMWorker)
+# Loaded by:  loom.core.config.load_config()
+# Validated:  loom.core.contracts.py (I/O schema enforcement)
+#
+# Run with:
+#   loom worker --config configs/workers/summarizer.yaml --tier local
+#   loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
+#
+# NATS subject:  loom.tasks.summarizer.local  (tier forced by router_rules.yaml)
+# Queue group:   Workers auto-join queue groups, so multiple replicas load-balance.
+#
+# Router override: tier_overrides in configs/router_rules.yaml forces this to "local"
+#                  regardless of what the task producer requested.
+#
+# Related configs:
+#   configs/router_rules.yaml          — tier override & rate limits
+#   configs/orchestrators/default.yaml — lists this as an available_worker
+#   configs/mcp/docman.yaml            — exposes this worker as an MCP tool
+#   configs/workers/_template.yaml     — annotated template for new workers
+# =============================================================================
 
+# name (str, required)
+# Unique identifier for this worker type. Must match the worker_type used in
+# TaskMessage routing and orchestrator dispatch blocks.
+# Convention: lowercase, underscores. Must match filename (without .yaml).
 name: "summarizer"
+
+# description (str, optional)
+# Human-readable description shown in:
+#   - Workshop UI worker list
+#   - MCP tool discovery (becomes the MCP tool description)
+#   - Orchestrator's available_workers list (for LLM-driven decomposition)
 description: "Compresses text to a structured summary with key points."
 
+# system_prompt (str, required for LLM workers)
+# The ONLY instructions the LLM sees. The worker injects this as the system
+# message, then sends the validated task payload as the user message.
+# Keep narrow and task-specific. Never include general-purpose instructions.
+# The LLM must output valid JSON matching output_schema.
 system_prompt: |
   You are a text summarizer. You compress input text into a structured summary.
 
@@ -29,6 +67,11 @@ system_prompt: |
   - Key points are single sentences, not fragments
   - If input is under 50 words, return {"error": "Input too short to summarize"}
 
+# input_schema (dict, required)
+# JSON Schema used by contracts.py to validate the incoming task payload
+# BEFORE sending it to the LLM. Invalid payloads are rejected with a
+# TaskResult(status=INVALID_INPUT) without consuming an LLM call.
+# Format: standard JSON Schema (type: object, required, properties).
 input_schema:
   type: object
   required: [text]
@@ -42,6 +85,10 @@ input_schema:
     focus:
       type: string
 
+# output_schema (dict, required)
+# JSON Schema used by contracts.py to validate the LLM's JSON response.
+# If the LLM output doesn't match, the task fails with INVALID_OUTPUT.
+# Keep this schema tight — it's your safety net for downstream consumers.
 output_schema:
   type: object
   required: [summary, key_points]
@@ -53,8 +100,37 @@ output_schema:
       items:
         type: string
 
+# default_model_tier (str, required)
+# Which LLM backend tier to use when no tier is specified in the TaskMessage.
+# Valid values:
+#   "local"     — Ollama (fast, free, limited reasoning). Good for straightforward tasks.
+#   "standard"  — Claude Sonnet via Anthropic API. Balanced quality/cost.
+#   "frontier"  — Claude Opus via Anthropic API. Best reasoning, highest cost.
+# Note: router_rules.yaml tier_overrides can force a different tier at dispatch time.
 default_model_tier: "local"
+
+# max_input_tokens (int, optional)
+# Maximum token count for the input payload sent to the LLM.
+# If the payload exceeds this, the task fails before the LLM call.
+# Guidance: local models typically support 4K-8K context. Standard/frontier
+# support up to 200K but cost scales with input size.
+# For summarization, 8000 tokens ~ 6000 words of input text.
 max_input_tokens: 8000
+
+# max_output_tokens (int, optional)
+# Maximum tokens the LLM is allowed to generate in its response.
+# For summarization, 1000 tokens is sufficient for a summary + 5-10 key points.
+# Setting this too low causes truncated JSON; too high wastes budget.
 max_output_tokens: 1000
+
+# reset_after_task (bool, required — MUST be true)
+# Workers are stateless by design. After each task, the worker resets its
+# conversation history. This is enforced, not optional. Setting to false
+# would break the isolation guarantees that make horizontal scaling safe.
 reset_after_task: true
+
+# timeout_seconds (int, optional, default: 60)
+# Per-task timeout in seconds. If the LLM doesn't respond within this window,
+# the task fails with TaskStatus.TIMEOUT. Local models are fast (5-15s);
+# standard/frontier may need 30-60s for complex tasks.
 timeout_seconds: 30

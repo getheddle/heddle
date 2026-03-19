@@ -23,7 +23,7 @@ src/loom/
 │   ├── actor.py         # Base actor class (NATS subscribe/publish lifecycle)
 │   ├── contracts.py     # Lightweight JSON Schema validation for worker I/O
 │   ├── workspace.py     # File-ref resolution with path traversal protection
-│   └── config.py        # YAML config loader with schema validation
+│   └── config.py        # YAML config loader with validation (worker, pipeline, orchestrator, router)
 │
 ├── worker/
 │   ├── runner.py        # LLM worker: validate → resolve files → inject knowledge → call LLM → tool loop → validate → publish
@@ -99,7 +99,7 @@ configs/
 └── router_rules.yaml           # Tier overrides and rate limits
 
 docker/                   # Dockerfiles and entrypoint script
-docs/                     # Documentation
+docs/                     # Documentation (ARCHITECTURE.md, CODING_GUIDE.md, conf.py, index.md, Makefile, ...)
 k8s/                      # Kubernetes manifests (Minikube-ready)
 tests/                    # Unit + integration tests
 ```
@@ -197,7 +197,8 @@ Full decompose → dispatch → collect → synthesize loop:
 
 Dependency-aware stage execution with automatic parallelism. Stage dependencies
 are inferred from `input_mapping` paths — if stage B references `"A.output.field"`,
-then B depends on A. Stages with no inter-stage dependencies run concurrently.
+then B depends on A. Stages with no inter-stage dependencies run concurrently
+via `asyncio.gather`.
 
 Execution proceeds in levels (Kahn's topological sort):
 - Level 0: stages with only `goal.*` dependencies (run first, concurrently)
@@ -205,6 +206,9 @@ Execution proceeds in levels (Kahn's topological sort):
 
 Explicit `depends_on` lists in stage config override automatic inference.
 Supports conditions, per-stage timeouts, and input mapping expressions.
+
+Like `OrchestratorActor`, set `max_concurrent_goals: N` in pipeline config to
+process multiple goals concurrently within a single instance.
 
 ### Scheduler (`scheduler/scheduler.py`)
 
@@ -328,8 +332,8 @@ by default. In Kubernetes, scale via replica count or HPA.
 - **OrchestratorActor:** Set `max_concurrent_goals` in orchestrator config to
   process multiple goals concurrently within one process.
 - **PipelineOrchestrator:** Independent stages run concurrently within a single
-  goal (automatic from dependency inference). Multiple goals require horizontal
-  scaling (multiple pipeline instances).
+  goal (automatic from dependency inference). Set `max_concurrent_goals` in
+  pipeline config to process multiple goals concurrently within one instance.
 - **Workers:** Workers are single-task actors (`max_concurrent=1`). Scale
   horizontally via replicas, not vertically.
 
@@ -341,6 +345,31 @@ by default. In Kubernetes, scale via replica count or HPA.
   API overhead.
 - **Decomposition caching:** Cache goal decomposition plans for repeated patterns,
   skipping the decomposition LLM call.
+
+---
+
+## Config Validation
+
+All config types are validated at startup (fail-fast). If a config file contains
+invalid values, the system raises `ConfigValidationError` before any actor starts.
+
+- **Worker:** `name` required, must have `system_prompt` (LLM) or `processing_backend`
+  (processor), valid `default_model_tier` (local/standard/frontier), well-formed
+  `input_schema`/`output_schema` structure, numeric bounds on `timeout` and
+  `max_tokens`.
+- **Pipeline:** stage names must be unique, valid tier per stage, `input_mapping`
+  structure validated, `depends_on` references must point to existing stages,
+  condition expressions validated for syntax.
+- **Orchestrator:** checkpoint settings (TTL, threshold), `max_concurrent_goals`
+  limits, `available_workers` list.
+- **Router:** `tier_override` values must be valid tiers, `rate_limit` structure
+  validated (rate, burst).
+- **Scheduler:** cron expressions and dispatch types validated by
+  `loom.scheduler.config`.
+- **MCP:** tool sources, backend import paths, and resource config validated by
+  `loom.mcp.config`.
+
+All shipped configs in `configs/` are validated in CI via `test_config_shipped.py`.
 
 ---
 

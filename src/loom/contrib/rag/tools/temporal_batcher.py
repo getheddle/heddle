@@ -1,7 +1,4 @@
-"""
-loom.contrib.rag.tools.temporal_batcher
-----------------------------------------
-Generic time-window batching utility for muxed streams.
+"""Generic time-window batching utility for muxed streams.
 
 Supports:
   - Tumbling windows (non-overlapping, step == duration)
@@ -15,10 +12,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Generic, Iterator, Protocol, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, Sequence
 
 
 class HasTimestamp(Protocol):
+    """Protocol for objects with a timestamp attribute."""
+
     timestamp: datetime
 
 
@@ -32,7 +34,9 @@ def _format_window_id(start: datetime, end: datetime) -> str:
 
 @dataclass
 class WindowBatch(Generic[T]):
-    window_id: str            # ISO-8601 interval: "<start>_<end>" (underscore-separated)
+    """A batch of items within a time window."""
+
+    window_id: str  # ISO-8601 interval: "<start>_<end>" (underscore-separated)
     window_index: int
     window_start: datetime
     window_end: datetime
@@ -40,10 +44,12 @@ class WindowBatch(Generic[T]):
 
     @property
     def duration(self) -> timedelta:
+        """Return the window duration."""
         return self.window_end - self.window_start
 
     @property
     def count(self) -> int:
+        """Return the number of items in the window."""
         return len(self.items)
 
     def channel_ids(self) -> set:
@@ -150,18 +156,18 @@ def sliding_windows(
                 break
             batch.append(sorted_items[i])
 
-        if len(batch) >= min_items:
-            if require_unique_channels == 0 or len(
-                {getattr(x, "channel_id", None) for x in batch}
-                - {None}
-            ) >= require_unique_channels:
-                yield WindowBatch(
-                    window_id=_format_window_id(t_start, t_end),
-                    window_index=window_idx,
-                    window_start=t_start,
-                    window_end=t_end,
-                    items=batch,
-                )
+        if len(batch) >= min_items and (
+            require_unique_channels == 0
+            or len({getattr(x, "channel_id", None) for x in batch} - {None})
+            >= require_unique_channels
+        ):
+            yield WindowBatch(
+                window_id=_format_window_id(t_start, t_end),
+                window_index=window_idx,
+                window_start=t_start,
+                window_end=t_end,
+                items=batch,
+            )
         window_idx += 1
         t_start += step
 
@@ -171,10 +177,9 @@ def daily_windows(
     tz_offset_hours: float = 0.0,
     min_items: int = 1,
 ) -> Iterator[WindowBatch[T]]:
-    """
-    Convenience wrapper for calendar-day tumbling windows.
-    tz_offset_hours: shift from UTC (e.g. 3.5 for Iran Standard Time)
+    """Convenience wrapper for calendar-day tumbling windows.
 
+    tz_offset_hours: shift from UTC (e.g. 3.5 for Iran Standard Time).
     Items in the yielded WindowBatch are the original objects (not proxies).
     """
     offset = timedelta(hours=tz_offset_hours)
@@ -208,7 +213,7 @@ class _OffsetItem:
         self._original = original
         self.timestamp = timestamp
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self._original, name)
 
 

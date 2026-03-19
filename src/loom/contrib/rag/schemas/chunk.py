@@ -1,13 +1,15 @@
 """Text chunk schemas for RAG splitting."""
+
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class ChunkStrategy(str, Enum):
+class ChunkStrategy(StrEnum):
     """Chunking strategy used to split post text."""
+
     WHOLE_POST = "whole_post"
     PARAGRAPH = "paragraph"
     SENTENCE = "sentence"
@@ -20,8 +22,10 @@ class TextChunk(BaseModel, extra="allow"):
     Carries full provenance: which post, which channel, character offsets,
     and the chunking strategy used.
     """
+
     chunk_id: str = Field(
-        ..., description='Format: "{global_id}:{chunk_index}".',
+        ...,
+        description='Format: "{global_id}:{chunk_index}".',
     )
     source_global_id: str
     source_channel_id: int

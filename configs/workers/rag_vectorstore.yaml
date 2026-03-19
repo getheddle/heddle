@@ -1,42 +1,129 @@
-# RAG Pipeline — Vector Store (processor worker)
-# DuckDB-backed embedding storage and similarity search.
+# =============================================================================
+# RAG Vector Store Worker Configuration (Processor)
+# =============================================================================
 #
-# Usage:
+# DuckDB-backed embedding storage and similarity search. Supports three
+# actions: store (embed + persist chunks), search (semantic similarity),
+# and stats (index statistics).
+#
+# Component:  Processor worker (worker_kind: "processor")
+# Source:     src/loom/worker/processor.py (ProcessorWorker)
+# Backend:    src/loom/contrib/rag/backends.py (VectorStoreBackend)
+# Engine:     src/loom/contrib/rag/vectorstore/duckdb_store.py (DuckDBVectorStore)
+# Embeddings: src/loom/worker/embeddings.py (OllamaEmbeddingProvider)
+# Loaded by:  loom.core.config.load_config()
+# Validated:  loom.core.contracts.py (I/O schema enforcement)
+#
+# Run with:
 #   loom processor --config configs/workers/rag_vectorstore.yaml
+#   loom processor --config configs/workers/rag_vectorstore.yaml --nats-url nats://localhost:4222
+#
+# Prerequisites:
+#   - Ollama running at ollama_url with the embedding_model pulled:
+#     ollama pull nomic-embed-text
+#   - DuckDB file path must be writable.
+#
+# NATS subject:  loom.tasks.rag_vectorstore.local
+#
+# Data flow (RAG pipeline):
+#   rag_ingestor --> rag_mux --> rag_chunker --> [rag_vectorstore]
+#   TextChunk[] --> embedded vectors in DuckDB
+#
+# Actions:
+#   "store"  — Embed TextChunk objects and persist to DuckDB.
+#              Required payload fields: action="store", chunks=[...]
+#              Returns: {stored_count: N}
+#
+#   "search" — Find chunks most similar to a query string via cosine similarity.
+#              Required payload fields: action="search", query="..."
+#              Optional: limit (default 10), channel_ids (filter by channel)
+#              Returns: {results: [{text, score, metadata}, ...]}
+#
+#   "stats"  — Return index statistics (total chunks, channels, etc.).
+#              Required payload fields: action="stats"
+#              Returns: {total: N, count: N}
+#
+# Related configs:
+#   configs/orchestrators/rag_pipeline.yaml — pipeline that chains this worker
+#   configs/workers/rag_chunker.yaml        — previous stage (chunking)
+#   configs/workers/_template.yaml          — annotated template for new workers
+# =============================================================================
 
+# name (str, required)
 name: "rag_vectorstore"
+
+# description (str, optional)
 description: "Vector store for embedding storage and semantic search."
+
+# worker_kind (str, required for processor workers)
 worker_kind: "processor"
 
+# processing_backend (str, required for processor workers)
+# VectorStoreBackend wraps DuckDBVectorStore + OllamaEmbeddingProvider.
 processing_backend: "loom.contrib.rag.backends.VectorStoreBackend"
+
+# backend_config (dict, required for VectorStoreBackend)
+# These kwargs are passed to the backend constructor.
 backend_config:
+  # db_path (str, required)
+  # Path to the DuckDB database file. Created automatically if it doesn't exist.
+  # Use an absolute path. For development, /tmp is fine; for production, use a
+  # persistent volume.
   db_path: "/tmp/rag-vectors.duckdb"
+
+  # embedding_model (str, required)
+  # Ollama model name used for generating embeddings. Must be pulled first:
+  #   ollama pull nomic-embed-text
+  # Common choices:
+  #   "nomic-embed-text"     — 768-dim, fast, good for multilingual (recommended)
+  #   "mxbai-embed-large"    — 1024-dim, higher quality, slower
+  #   "all-minilm"           — 384-dim, very fast, English-focused
   embedding_model: "nomic-embed-text"
+
+  # ollama_url (str, required)
+  # URL of the Ollama server for embedding generation.
+  # Default Ollama install listens on port 11434.
   ollama_url: "http://localhost:11434"
 
+# input_schema (dict, required)
+# action is always required. Other fields depend on the action.
 input_schema:
   type: object
   required: [action]
   properties:
+    # action (str, required) — which operation to perform.
+    # Valid values: "store", "search", "stats"
     action:
       type: string
       enum: [store, search, stats]
+    # chunks (array, required for "store") — TextChunk dicts to embed and persist.
+    # Each chunk must have at minimum: text, source_post_id.
     chunks:
       type: array
       items:
         type: object
       description: "TextChunk dicts (for 'store' action)."
+    # query (str, required for "search") — natural language search query.
+    # The query is embedded using the same model and compared via cosine similarity.
     query:
       type: string
       description: "Search query (for 'search' action)."
+    # limit (int, optional, default: 10) — max results to return for "search".
     limit:
       type: integer
       default: 10
+    # channel_ids (array of int, optional) — filter search results by channel.
+    # Only chunks from posts in these channels are returned.
     channel_ids:
       type: array
       items:
         type: integer
 
+# output_schema (dict, required)
+# Fields present depend on the action:
+#   store:  {stored_count: N}
+#   search: {results: [...]}
+#   stats:  {total: N, count: N}
 output_schema:
   type: object
   properties:
@@ -51,6 +138,15 @@ output_schema:
     count:
       type: integer
 
+# default_model_tier (str, required)
+# "local" is conventional for processor workers.
 default_model_tier: "local"
+
+# reset_after_task (bool, required — MUST be true)
 reset_after_task: true
+
+# timeout_seconds (int, optional, default: 60)
+# 300s (5 min) allows storing large batches of chunks. Embedding generation
+# is the bottleneck — each chunk requires an Ollama API call.
+# For 1000 chunks at ~50ms/embed, that's ~50s. 300s gives ample headroom.
 timeout_seconds: 300

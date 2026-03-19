@@ -16,23 +16,27 @@ Example worker config::
     backend_config:
       db_path: "/tmp/workspace/data.duckdb"
 
-See also:
+See Also:
     loom.worker.processor.SyncProcessingBackend -- base class for sync backends
     loom.contrib.duckdb.DuckDBViewTool -- LLM-callable view tool
     loom.contrib.duckdb.DuckDBVectorTool -- LLM-callable vector search tool
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import duckdb
 import structlog
 
 from loom.worker.processor import BackendError, SyncProcessingBackend
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = structlog.get_logger()
 
@@ -146,10 +150,7 @@ class DuckDBQueryBackend(SyncProcessingBackend):
 
         handler = handlers.get(action)
         if not handler:
-            raise ValueError(
-                f"Unknown action '{action}'. "
-                f"Supported: {', '.join(handlers.keys())}"
-            )
+            raise ValueError(f"Unknown action '{action}'. Supported: {', '.join(handlers.keys())}")
 
         try:
             conn = duckdb.connect(db_path, read_only=True)
@@ -162,9 +163,7 @@ class DuckDBQueryBackend(SyncProcessingBackend):
         except (ValueError, DuckDBQueryError):
             raise
         except Exception as exc:
-            raise DuckDBQueryError(
-                f"Query failed (action={action}): {exc}"
-            ) from exc
+            raise DuckDBQueryError(f"Query failed (action={action}): {exc}") from exc
 
         return {"output": result, "model_used": "duckdb"}
 
@@ -195,7 +194,8 @@ class DuckDBQueryBackend(SyncProcessingBackend):
                 SELECT {cols}, fts.score
                 FROM {self.table_name} d
                 JOIN (
-                    SELECT *, {fts_func}({self.id_column}, ?, fields := '{self.fts_fields}') AS score
+                    SELECT *,
+                        {fts_func}({self.id_column}, ?, fields := '{self.fts_fields}') AS score
                     FROM {self.table_name}
                 ) fts ON d.{self.id_column} = fts.{self.id_column}
                 WHERE fts.score IS NOT NULL
@@ -218,10 +218,10 @@ class DuckDBQueryBackend(SyncProcessingBackend):
                 ORDER BY d.{self.id_column} DESC
                 LIMIT ?
                 """,
-                ilike_params + [limit],
+                [*ilike_params, limit],
             ).fetchall()
 
-        columns = self.result_columns + ["score"]
+        columns = [*self.result_columns, "score"]
         results = [self._row_to_dict(row, columns) for row in rows]
 
         return {"results": results, "total": len(results)}
@@ -249,8 +249,9 @@ class DuckDBQueryBackend(SyncProcessingBackend):
 
         cols = ", ".join(self.result_columns)
         rows = conn.execute(
-            f"SELECT {cols} FROM {self.table_name} {where} ORDER BY {self.default_order_by} LIMIT ?",
-            params + [limit],
+            f"SELECT {cols} FROM {self.table_name} {where}"
+            f" ORDER BY {self.default_order_by} LIMIT ?",
+            [*params, limit],
         ).fetchall()
 
         results = [self._row_to_dict(row, self.result_columns) for row in rows]
@@ -288,18 +289,13 @@ class DuckDBQueryBackend(SyncProcessingBackend):
             SELECT {group_by}, {agg_exprs}
             FROM {self.table_name}
             GROUP BY {group_by}
-            ORDER BY {self.stats_aggregates[0].split(' AS ')[1]} DESC
+            ORDER BY {self.stats_aggregates[0].split(" AS ")[1]} DESC
             """,
         ).fetchall()
 
         # Build result dicts from column descriptions.
-        col_names = [group_by] + [
-            agg.split(" AS ")[1].strip() for agg in self.stats_aggregates
-        ]
-        results = [
-            {col: val for col, val in zip(col_names, row)}
-            for row in rows
-        ]
+        col_names = [group_by] + [agg.split(" AS ")[1].strip() for agg in self.stats_aggregates]
+        results = [dict(zip(col_names, row, strict=False)) for row in rows]
 
         total_row = conn.execute(f"SELECT COUNT(*) FROM {self.table_name}").fetchone()
 
@@ -323,7 +319,7 @@ class DuckDBQueryBackend(SyncProcessingBackend):
 
         all_columns = list(self.result_columns)
         if self.full_text_column and self.full_text_column not in all_columns:
-            all_columns = all_columns + [self.full_text_column]
+            all_columns = [*all_columns, self.full_text_column]
 
         cols = ", ".join(all_columns)
         row = conn.execute(
@@ -366,9 +362,7 @@ class DuckDBQueryBackend(SyncProcessingBackend):
         try:
             query_embedding = asyncio.run(provider.embed(query_text))
         except Exception as exc:
-            raise DuckDBQueryError(
-                f"Failed to generate query embedding: {exc}"
-            ) from exc
+            raise DuckDBQueryError(f"Failed to generate query embedding: {exc}") from exc
 
         cols = ", ".join(f"d.{c}" for c in self.result_columns)
 
@@ -384,7 +378,7 @@ class DuckDBQueryBackend(SyncProcessingBackend):
             [query_embedding, limit],
         ).fetchall()
 
-        columns = self.result_columns + ["similarity"]
+        columns = [*self.result_columns, "similarity"]
         results = [self._row_to_dict(row, columns) for row in rows]
 
         return {"results": results, "total": len(results)}
@@ -403,15 +397,14 @@ class DuckDBQueryBackend(SyncProcessingBackend):
         """
         result: dict[str, Any] = {}
 
-        for col, val in zip(columns, row):
-            if col in self.json_columns and isinstance(val, str):
-                try:
-                    val = json.loads(val)
-                except json.JSONDecodeError:
-                    pass
+        for col, raw_val in zip(columns, row, strict=False):
+            parsed_val = raw_val
+            if col in self.json_columns and isinstance(parsed_val, str):
+                with contextlib.suppress(json.JSONDecodeError):
+                    parsed_val = json.loads(parsed_val)
             # Convert datetime to ISO string for JSON serialization.
-            if hasattr(val, "isoformat"):
-                val = str(val)
-            result[col] = val
+            if hasattr(parsed_val, "isoformat"):
+                parsed_val = str(parsed_val)
+            result[col] = parsed_val
 
         return result

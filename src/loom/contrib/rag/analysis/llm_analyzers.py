@@ -1,7 +1,6 @@
-"""
-loom.contrib.rag.analysis.llm_analyzers
------------------------------------------
-Four LLM-backed analysis actors for the muxed stream:
+"""LLM-backed analysis actors for the muxed stream.
+
+Four actors:
 
   TrendAnalyzer         -- recurring topics across a window
   CorroborationFinder   -- cross-channel claim matching + trust weighting
@@ -29,16 +28,24 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
-from ..schemas.analysis import (
-    TrendSignal, CorroborationMatch, AnomalyFlag, AnomalyType,
-    ExtractedDatum, ExtractedData, ExtractedDataType,
-    AnalysisType, Severity,
-)
-from ..schemas.mux import MuxEntry
 from ..ingestion.telegram_ingestor import DEFAULT_PROFILES
+from ..schemas.analysis import (
+    AnalysisType,
+    AnomalyFlag,
+    AnomalyType,
+    CorroborationMatch,
+    ExtractedData,
+    ExtractedDataType,
+    ExtractedDatum,
+    Severity,
+    TrendSignal,
+)
+
+if TYPE_CHECKING:
+    from ..schemas.mux import MuxEntry
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +58,10 @@ _RETRY_DELAY_S = 2.0
 # LLM backend shim
 # ---------------------------------------------------------------------------
 
+
 class LLMBackend:
-    """
-    Minimal abstraction over Ollama and Anthropic backends.
+    """Minimal abstraction over Ollama and Anthropic backends.
+
     In production this becomes a Loom actor calling rag.llm.request.
     """
 
@@ -72,10 +80,10 @@ class LLMBackend:
         # Detect backend from model prefix
         if model.startswith("ollama:"):
             self._backend = "ollama"
-            self._model_name = model[len("ollama:"):]
+            self._model_name = model[len("ollama:") :]
         elif model.startswith("anthropic:"):
             self._backend = "anthropic"
-            self._model_name = model[len("anthropic:"):]
+            self._model_name = model[len("anthropic:") :]
         else:
             self._backend = "ollama"
             self._model_name = model
@@ -84,8 +92,8 @@ class LLMBackend:
         self._anthropic_client: Any = None
 
     def complete(self, system: str, user: str) -> str:
-        """
-        Synchronous completion with basic retry logic.
+        """Synchronous completion with basic retry logic.
+
         Returns raw response string.
         In actor mode this becomes an async NATS request.
         """
@@ -94,7 +102,7 @@ class LLMBackend:
             try:
                 if self._backend == "ollama":
                     return self._ollama_complete(system, user)
-                elif self._backend == "anthropic":
+                if self._backend == "anthropic":
                     return self._anthropic_complete(system, user)
                 raise ValueError(f"Unknown backend: {self._backend}")
             except Exception as exc:
@@ -102,7 +110,9 @@ class LLMBackend:
                 if attempt < _MAX_RETRIES - 1:
                     logger.warning(
                         "LLM call attempt %d failed (%s), retrying in %.1fs...",
-                        attempt + 1, exc, _RETRY_DELAY_S,
+                        attempt + 1,
+                        exc,
+                        _RETRY_DELAY_S,
                     )
                     time.sleep(_RETRY_DELAY_S)
         logger.error("LLM call failed after %d attempts: %s", _MAX_RETRIES, last_exc)
@@ -124,6 +134,7 @@ class LLMBackend:
 
     def _ollama_complete(self, system: str, user: str) -> str:
         import requests
+
         response = requests.post(
             f"{self._ollama_url}/api/chat",
             json={
@@ -144,6 +155,7 @@ class LLMBackend:
 
     def _anthropic_complete(self, system: str, user: str) -> str:
         import anthropic
+
         if self._anthropic_client is None:
             self._anthropic_client = anthropic.Anthropic()
         msg = self._anthropic_client.messages.create(
@@ -159,14 +171,17 @@ class LLMBackend:
 # Base actor class
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PREFIX = """You are an expert intelligence analyst processing Persian-language Telegram posts.
-Text may be in Persian (Farsi), Arabic, or mixed Persian/English.
-Persian is RTL (right-to-left). Preserve Persian text exactly as-is in your output.
-Always respond with valid JSON only -- no prose, no markdown fences.
-"""
+_SYSTEM_PREFIX = (
+    "You are an expert intelligence analyst processing Persian-language Telegram posts.\n"
+    "Text may be in Persian (Farsi), Arabic, or mixed Persian/English.\n"
+    "Persian is RTL (right-to-left). Preserve Persian text exactly as-is in your output.\n"
+    "Always respond with valid JSON only -- no prose, no markdown fences.\n"
+)
 
 
 class BaseAnalysisActor:
+    """Base class for LLM-backed analysis actors."""
+
     def __init__(
         self,
         actor_id: str,
@@ -191,28 +206,32 @@ class BaseAnalysisActor:
             profile = DEFAULT_PROFILES.get(e.channel_id)
             bias = profile.bias.value if profile else "unknown"
             lines.append(
-                f"[{i+1}] channel={e.channel_name!r} bias={bias} "
+                f"[{i + 1}] channel={e.channel_name!r} bias={bias} "
                 f"ts={e.timestamp.strftime('%Y-%m-%d %H:%M')}\n"
                 f"TEXT: {e.text[:400]}"
             )
         return "\n\n".join(lines)
 
     def _now(self) -> datetime:
-        return datetime.now(tz=timezone.utc)
+        return datetime.now(tz=UTC)
 
 
 # ---------------------------------------------------------------------------
 # TrendAnalyzer
 # ---------------------------------------------------------------------------
 
+
 class TrendAnalyzer(BaseAnalysisActor):
-    """
-    Detects recurring topics and narrative trends across a time window.
+    """Detect recurring topics and narrative trends across a time window.
+
     Operates across all channels simultaneously.
     """
 
-    SYSTEM = _SYSTEM_PREFIX + """
-Your task: identify the top narrative TRENDS in a batch of Telegram posts from multiple Persian news channels.
+    SYSTEM = (
+        _SYSTEM_PREFIX
+        + """
+Your task: identify the top narrative TRENDS in a batch of Telegram posts
+from multiple Persian news channels.
 A trend is a topic that appears in >=2 posts, even if framed differently.
 Return JSON with this exact structure:
 {
@@ -231,17 +250,17 @@ Return JSON with this exact structure:
 }
 Return 3-8 trends. Focus on political, economic, social, and security topics.
 """
+    )
 
-    def analyze(
-        self, entries: list[MuxEntry], confidence: float = 0.7
-    ) -> list[TrendSignal]:
+    def analyze(self, entries: list[MuxEntry], confidence: float = 0.7) -> list[TrendSignal]:
+        """Analyze entries and return detected trend signals."""
         if not entries:
             return []
 
         meta = self._window_meta(entries)
         posts_text = self._format_posts(entries)
 
-        user_prompt = f"""Analyze these {len(entries)} posts from window {meta['window_id']}:
+        user_prompt = f"""Analyze these {len(entries)} posts from window {meta["window_id"]}:
 
 {posts_text}
 
@@ -254,32 +273,32 @@ Identify the top trends."""
         for t in trends_raw:
             post_indices = t.get("post_indices", [])
             exemplar_ids = [
-                entries[i - 1].post.global_id
-                for i in post_indices
-                if 1 <= i <= len(entries)
+                entries[i - 1].post.global_id for i in post_indices if 1 <= i <= len(entries)
             ][:3]
 
             try:
-                signals.append(TrendSignal(
-                    analysis_type=AnalysisType.TREND,
-                    window_id=meta["window_id"],
-                    window_start=meta["window_start"],
-                    window_end=meta["window_end"],
-                    produced_at=self._now(),
-                    actor_id=self.actor_id,
-                    source_entry_ids=[e.post.global_id for e in entries],
-                    confidence=confidence,
-                    model_used=self.llm.model,
-                    topic_label=t.get("topic_label", "unknown"),
-                    topic_label_fa=t.get("topic_label_fa"),
-                    description=t.get("description", ""),
-                    channels_present=t.get("channels_present", []),
-                    post_count=len(post_indices),
-                    exemplar_post_ids=exemplar_ids,
-                    keywords=t.get("keywords", []),
-                    sentiment=t.get("sentiment"),
-                    severity=Severity(t.get("severity", "low")),
-                ))
+                signals.append(
+                    TrendSignal(
+                        analysis_type=AnalysisType.TREND,
+                        window_id=meta["window_id"],
+                        window_start=meta["window_start"],
+                        window_end=meta["window_end"],
+                        produced_at=self._now(),
+                        actor_id=self.actor_id,
+                        source_entry_ids=[e.post.global_id for e in entries],
+                        confidence=confidence,
+                        model_used=self.llm.model,
+                        topic_label=t.get("topic_label", "unknown"),
+                        topic_label_fa=t.get("topic_label_fa"),
+                        description=t.get("description", ""),
+                        channels_present=t.get("channels_present", []),
+                        post_count=len(post_indices),
+                        exemplar_post_ids=exemplar_ids,
+                        keywords=t.get("keywords", []),
+                        sentiment=t.get("sentiment"),
+                        severity=Severity(t.get("severity", "low")),
+                    )
+                )
             except Exception as e:
                 logger.warning("Failed to parse trend: %s -- %s", t, e)
 
@@ -290,13 +309,16 @@ Identify the top trends."""
 # CorroborationFinder
 # ---------------------------------------------------------------------------
 
+
 class CorroborationFinder(BaseAnalysisActor):
-    """
-    Finds claims reported by multiple channels and weights by trust_weight.
+    """Find claims reported by multiple channels and weight by trust_weight.
+
     Flags contradictions between state and independent media.
     """
 
-    SYSTEM = _SYSTEM_PREFIX + """
+    SYSTEM = (
+        _SYSTEM_PREFIX
+        + """
 Your task: find CORROBORATION -- the same factual claim or event reported by multiple channels.
 Also flag CONTRADICTIONS where state and independent channels report opposite facts.
 
@@ -317,11 +339,13 @@ Return JSON:
   ]
 }
 """
+    )
 
     def analyze(
         self, entries: list[MuxEntry], confidence: float = 0.75
     ) -> list[CorroborationMatch]:
-        if len(entries) < 3:   # need enough posts to find overlap
+        """Analyze entries and return corroboration matches."""
+        if len(entries) < 3:  # need enough posts to find overlap
             return []
 
         # Only include multi-channel windows
@@ -342,23 +366,25 @@ Return JSON:
         matches: list[CorroborationMatch] = []
         for c in raw_list:
             try:
-                matches.append(CorroborationMatch(
-                    analysis_type=AnalysisType.CORROBORATION,
-                    window_id=meta["window_id"],
-                    window_start=meta["window_start"],
-                    window_end=meta["window_end"],
-                    produced_at=self._now(),
-                    actor_id=self.actor_id,
-                    source_entry_ids=[e.post.global_id for e in entries],
-                    confidence=confidence,
-                    model_used=self.llm.model,
-                    claim=c.get("claim", ""),
-                    claim_fa=c.get("claim_fa"),
-                    supporting_channels=c.get("supporting_channels", []),
-                    contradicting_channels=c.get("contradicting_channels", []),
-                    corroboration_score=float(c.get("corroboration_score", 0.5)),
-                    notes=c.get("notes", ""),
-                ))
+                matches.append(
+                    CorroborationMatch(
+                        analysis_type=AnalysisType.CORROBORATION,
+                        window_id=meta["window_id"],
+                        window_start=meta["window_start"],
+                        window_end=meta["window_end"],
+                        produced_at=self._now(),
+                        actor_id=self.actor_id,
+                        source_entry_ids=[e.post.global_id for e in entries],
+                        confidence=confidence,
+                        model_used=self.llm.model,
+                        claim=c.get("claim", ""),
+                        claim_fa=c.get("claim_fa"),
+                        supporting_channels=c.get("supporting_channels", []),
+                        contradicting_channels=c.get("contradicting_channels", []),
+                        corroboration_score=float(c.get("corroboration_score", 0.5)),
+                        notes=c.get("notes", ""),
+                    )
+                )
             except Exception as e:
                 logger.warning("Failed to parse corroboration: %s -- %s", c, e)
 
@@ -369,17 +395,20 @@ Return JSON:
 # AnomalyDetector
 # ---------------------------------------------------------------------------
 
+
 class AnomalyDetector(BaseAnalysisActor):
-    """
-    Flags statistical and semantic anomalies in the stream.
+    """Flag statistical and semantic anomalies in the stream.
 
-    Statistical: volume spikes (computed locally, no LLM needed)
-    Semantic: narrative breaks, cross-channel conflicts (LLM)
+    Statistical: volume spikes (computed locally, no LLM needed).
+    Semantic: narrative breaks, cross-channel conflicts (LLM).
     """
 
-    SYSTEM = _SYSTEM_PREFIX + """
+    SYSTEM = (
+        _SYSTEM_PREFIX
+        + """
 Your task: identify ANOMALIES in a batch of Persian Telegram posts.
-Anomaly types: volume_spike, narrative_break, cross_channel_conflict, single_source, timing_anomaly, linguistic
+Anomaly types: volume_spike, narrative_break, cross_channel_conflict,
+single_source, timing_anomaly, linguistic
 
 Return JSON:
 {
@@ -393,17 +422,23 @@ Return JSON:
     }
   ]
 }
-Focus on: state media claiming things independent media ignores, sudden topic silence, unusual posting bursts.
+Focus on: state media claiming things independent media ignores,
+sudden topic silence, unusual posting bursts.
 """
+    )
 
-    def __init__(self, *args, baseline_hourly_rate: dict[int, float] | None = None, **kwargs):
+    def __init__(
+        self,
+        *args: Any,
+        baseline_hourly_rate: dict[int, float] | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(*args, **kwargs)
         # channel_id -> expected posts/hour (computed from full corpus in test pipeline)
         self.baseline_hourly_rate = baseline_hourly_rate or {}
 
-    def analyze(
-        self, entries: list[MuxEntry], confidence: float = 0.65
-    ) -> list[AnomalyFlag]:
+    def analyze(self, entries: list[MuxEntry], confidence: float = 0.65) -> list[AnomalyFlag]:
+        """Analyze entries and return detected anomaly flags."""
         if not entries:
             return []
 
@@ -422,35 +457,33 @@ Focus on: state media claiming things independent media ignores, sudden topic si
         result = self.llm.complete_json(self.SYSTEM, user_prompt)
         for a in result.get("anomalies", []):
             try:
-                anomalies.append(AnomalyFlag(
-                    analysis_type=AnalysisType.ANOMALY,
-                    window_id=meta["window_id"],
-                    window_start=meta["window_start"],
-                    window_end=meta["window_end"],
-                    produced_at=self._now(),
-                    actor_id=self.actor_id,
-                    source_entry_ids=[e.post.global_id for e in entries],
-                    confidence=confidence,
-                    model_used=self.llm.model,
-                    anomaly_type=AnomalyType(a.get("anomaly_type", "linguistic")),
-                    description=a.get("description", ""),
-                    affected_channels=a.get("affected_channels", []),
-                    severity=Severity(a.get("severity", "medium")),
-                    recommendation=a.get("recommendation", ""),
-                ))
+                anomalies.append(
+                    AnomalyFlag(
+                        analysis_type=AnalysisType.ANOMALY,
+                        window_id=meta["window_id"],
+                        window_start=meta["window_start"],
+                        window_end=meta["window_end"],
+                        produced_at=self._now(),
+                        actor_id=self.actor_id,
+                        source_entry_ids=[e.post.global_id for e in entries],
+                        confidence=confidence,
+                        model_used=self.llm.model,
+                        anomaly_type=AnomalyType(a.get("anomaly_type", "linguistic")),
+                        description=a.get("description", ""),
+                        affected_channels=a.get("affected_channels", []),
+                        severity=Severity(a.get("severity", "medium")),
+                        recommendation=a.get("recommendation", ""),
+                    )
+                )
             except Exception as e:
                 logger.warning("Failed to parse anomaly: %s -- %s", a, e)
 
         return anomalies
 
-    def _check_volume_spike(
-        self, entries: list[MuxEntry], meta: dict
-    ) -> list[AnomalyFlag]:
+    def _check_volume_spike(self, entries: list[MuxEntry], meta: dict) -> list[AnomalyFlag]:
         """Flag channels posting >3x their baseline rate."""
         flags: list[AnomalyFlag] = []
-        window_hours = (
-            (meta["window_end"] - meta["window_start"]).total_seconds() / 3600
-        ) or 1.0
+        window_hours = ((meta["window_end"] - meta["window_start"]).total_seconds() / 3600) or 1.0
 
         # Group by channel
         by_channel: dict[int, list[MuxEntry]] = {}
@@ -461,27 +494,29 @@ Focus on: state media claiming things independent media ignores, sudden topic si
             observed_rate = len(ch_entries) / window_hours
             baseline = self.baseline_hourly_rate.get(cid, 0)
             if baseline > 0 and observed_rate > 3 * baseline:
-                flags.append(AnomalyFlag(
-                    analysis_type=AnalysisType.ANOMALY,
-                    window_id=meta["window_id"],
-                    window_start=meta["window_start"],
-                    window_end=meta["window_end"],
-                    produced_at=self._now(),
-                    actor_id=self.actor_id,
-                    source_entry_ids=[e.post.global_id for e in ch_entries],
-                    confidence=0.9,
-                    model_used="statistical",
-                    anomaly_type=AnomalyType.VOLUME_SPIKE,
-                    description=(
-                        f"Channel '{ch_entries[0].channel_name}' posting at "
-                        f"{observed_rate:.1f} posts/hr vs baseline {baseline:.1f} posts/hr"
-                    ),
-                    affected_channels=[ch_entries[0].channel_name],
-                    reference_value=baseline,
-                    observed_value=observed_rate,
-                    severity=Severity.HIGH if observed_rate > 5 * baseline else Severity.MEDIUM,
-                    recommendation="Investigate for coordinated messaging or breaking event",
-                ))
+                flags.append(
+                    AnomalyFlag(
+                        analysis_type=AnalysisType.ANOMALY,
+                        window_id=meta["window_id"],
+                        window_start=meta["window_start"],
+                        window_end=meta["window_end"],
+                        produced_at=self._now(),
+                        actor_id=self.actor_id,
+                        source_entry_ids=[e.post.global_id for e in ch_entries],
+                        confidence=0.9,
+                        model_used="statistical",
+                        anomaly_type=AnomalyType.VOLUME_SPIKE,
+                        description=(
+                            f"Channel '{ch_entries[0].channel_name}' posting at "
+                            f"{observed_rate:.1f} posts/hr vs baseline {baseline:.1f} posts/hr"
+                        ),
+                        affected_channels=[ch_entries[0].channel_name],
+                        reference_value=baseline,
+                        observed_value=observed_rate,
+                        severity=Severity.HIGH if observed_rate > 5 * baseline else Severity.MEDIUM,
+                        recommendation="Investigate for coordinated messaging or breaking event",
+                    )
+                )
 
         return flags
 
@@ -490,13 +525,16 @@ Focus on: state media claiming things independent media ignores, sudden topic si
 # DataExtractor
 # ---------------------------------------------------------------------------
 
+
 class DataExtractor(BaseAnalysisActor):
-    """
-    Extracts structured data points from Persian posts:
-    statistics, named entities, dates, casualties, quotes, prices.
+    """Extract structured data points from Persian posts.
+
+    Covers statistics, named entities, dates, casualties, quotes, prices.
     """
 
-    SYSTEM = _SYSTEM_PREFIX + """
+    SYSTEM = (
+        _SYSTEM_PREFIX
+        + """
 Your task: extract STRUCTURED DATA from Persian Telegram posts.
 For each factual data point found, extract it precisely.
 
@@ -518,10 +556,10 @@ Return JSON:
 Be precise. Include Persian numbers and dates. Translate statistic labels to English.
 For casualties: extract deaths, injuries, arrests separately.
 """
+    )
 
-    def analyze(
-        self, entries: list[MuxEntry], confidence_floor: float = 0.6
-    ) -> ExtractedData:
+    def analyze(self, entries: list[MuxEntry], confidence_floor: float = 0.6) -> ExtractedData:
+        """Analyze entries and return extracted structured data."""
         meta = self._window_meta(entries)
         posts_text = self._format_posts(entries, max_posts=30)
 
@@ -548,18 +586,20 @@ For casualties: extract deaths, injuries, arrests separately.
                 conf = float(d.get("confidence", 0.7))
                 if conf < confidence_floor:
                     continue
-                data_items.append(ExtractedDatum(
-                    datum_type=ExtractedDataType(d.get("datum_type", "statistic")),
-                    value=str(d.get("value", "")),
-                    value_normalized=d.get("value_normalized"),
-                    unit=d.get("unit"),
-                    entity=d.get("entity"),
-                    source_global_id=source_gid,
-                    source_channel=source_ch,
-                    timestamp_unix=ts_unix,
-                    context_snippet=str(d.get("context_snippet", ""))[:150],
-                    confidence=conf,
-                ))
+                data_items.append(
+                    ExtractedDatum(
+                        datum_type=ExtractedDataType(d.get("datum_type", "statistic")),
+                        value=str(d.get("value", "")),
+                        value_normalized=d.get("value_normalized"),
+                        unit=d.get("unit"),
+                        entity=d.get("entity"),
+                        source_global_id=source_gid,
+                        source_channel=source_ch,
+                        timestamp_unix=ts_unix,
+                        context_snippet=str(d.get("context_snippet", ""))[:150],
+                        confidence=conf,
+                    )
+                )
             except Exception as e:
                 logger.warning("Failed to parse datum: %s -- %s", d, e)
 

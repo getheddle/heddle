@@ -4,16 +4,18 @@ EvalRunner — systematic test suite execution with scoring.
 Runs a list of test cases against a worker config, scores each result,
 and persists everything to WorkshopDB.
 """
+
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from loom.workshop.db import WorkshopDB
-from loom.workshop.test_runner import WorkerTestRunner
+if TYPE_CHECKING:
+    from loom.workshop.db import WorkshopDB
+    from loom.workshop.test_runner import WorkerTestRunner
 
 logger = structlog.get_logger()
 
@@ -37,13 +39,12 @@ def _score_field_match(expected: dict, actual: dict) -> tuple[float, dict]:
         elif isinstance(expected_val, str) and isinstance(actual_val, str):
             # Normalized string comparison (case-insensitive, strip whitespace)
             field_scores[key] = (
-                1.0 if expected_val.strip().lower() == actual_val.strip().lower()
-                else 0.0
+                1.0 if expected_val.strip().lower() == actual_val.strip().lower() else 0.0
             )
         elif isinstance(expected_val, list) and isinstance(actual_val, list):
             # Check if expected items are a subset of actual
-            expected_set = set(str(v) for v in expected_val)
-            actual_set = set(str(v) for v in actual_val)
+            expected_set = {str(v) for v in expected_val}
+            actual_set = {str(v) for v in actual_val}
             if expected_set:
                 overlap = len(expected_set & actual_set) / len(expected_set)
                 field_scores[key] = overlap
@@ -177,15 +178,18 @@ class EvalRunner:
 
         # Update run summary
         n = len(test_suite)
-        self.db.update_eval_run(run_id, {
-            "status": "completed",
-            "completed_at": datetime.now(timezone.utc),
-            "passed_cases": passed,
-            "failed_cases": failed,
-            "avg_latency_ms": total_latency / n if n else 0,
-            "avg_prompt_tokens": total_prompt / n if n else 0,
-            "avg_completion_tokens": total_completion / n if n else 0,
-        })
+        self.db.update_eval_run(
+            run_id,
+            {
+                "status": "completed",
+                "completed_at": datetime.now(UTC),
+                "passed_cases": passed,
+                "failed_cases": failed,
+                "avg_latency_ms": total_latency / n if n else 0,
+                "avg_prompt_tokens": total_prompt / n if n else 0,
+                "avg_completion_tokens": total_completion / n if n else 0,
+            },
+        )
 
         logger.info(
             "eval.suite_completed",

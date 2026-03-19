@@ -12,6 +12,7 @@ Limitations compared to NATSBus:
 
 This is intentionally simple. Use NATSBus for production.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -30,6 +31,7 @@ class InMemorySubscription(Subscription):
         self._active = True
 
     async def unsubscribe(self) -> None:
+        """Unsubscribe and unblock any waiting consumer."""
         self._active = False
         # Push a sentinel so any waiting __anext__ unblocks.
         await self._queue.put(None)
@@ -61,23 +63,27 @@ class InMemoryBus(MessageBus):
 
     def __init__(self) -> None:
         # subject -> list of (queue_group | None, subscription)
-        self._subscribers: dict[str, list[tuple[str | None, InMemorySubscription]]] = defaultdict(list)
+        self._subscribers: dict[str, list[tuple[str | None, InMemorySubscription]]] = defaultdict(
+            list
+        )
         # subject -> queue_group -> round-robin counter
         self._group_counters: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
         self._connected = False
 
     async def connect(self) -> None:
+        """Mark the bus as connected."""
         self._connected = True
 
     async def close(self) -> None:
+        """Close the bus and unsubscribe all active subscriptions."""
         self._connected = False
-        # Unsubscribe all active subscriptions.
         for subs in self._subscribers.values():
             for _, sub in subs:
                 await sub.unsubscribe()
         self._subscribers.clear()
 
     async def publish(self, subject: str, data: dict[str, Any]) -> None:
+        """Publish a message to all subscribers on the given subject."""
         subs = self._subscribers.get(subject, [])
         if not subs:
             return
@@ -106,6 +112,7 @@ class InMemoryBus(MessageBus):
         subject: str,
         queue_group: str | None = None,
     ) -> InMemorySubscription:
+        """Subscribe to a subject, optionally with a queue group."""
         sub = InMemorySubscription(subject)
         self._subscribers[subject].append((queue_group, sub))
         return sub

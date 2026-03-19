@@ -4,6 +4,7 @@ PipelineEditor — stateless pipeline config manipulation.
 All methods operate on config dicts and return modified copies.
 No filesystem I/O — use ConfigManager to persist changes.
 """
+
 from __future__ import annotations
 
 import copy
@@ -152,10 +153,7 @@ class PipelineEditor:
         mapping = stage_def.get("input_mapping", {})
         for key, source_path in mapping.items():
             first_segment = source_path.split(".")[0]
-            stage_names = {
-                s["name"]
-                for s in config.get("pipeline_stages", [])
-            }
+            stage_names = {s["name"] for s in config.get("pipeline_stages", [])}
             if first_segment != "goal" and first_segment in stage_names:
                 raise ValueError(
                     f"Parallel branch stage cannot depend on other stages. "

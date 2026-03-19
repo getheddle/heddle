@@ -46,14 +46,16 @@ Input mapping example (from doc_pipeline.yaml):
         payload["text_preview"] = context["extract"]["output"]["text_preview"]
         payload["metadata"] = context["extract"]["output"]["metadata"]
 
-See also:
+See Also:
     loom.orchestrator.runner — dynamic LLM-based orchestrator
     loom.core.messages.OrchestratorGoal — the input message type
     configs/orchestrators/ — pipeline config YAML files
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from typing import Any
 
@@ -75,7 +77,7 @@ logger = structlog.get_logger()
 class PipelineStageError(Exception):
     """Raised when a pipeline stage fails or times out."""
 
-    def __init__(self, stage_name: str, message: str):
+    def __init__(self, stage_name: str, message: str) -> None:
         self.stage_name = stage_name
         super().__init__(message)
 
@@ -98,7 +100,7 @@ class PipelineOrchestrator(BaseActor):
         nats_url: str = "nats://nats:4222",
         *,
         bus: Any | None = None,
-    ):
+    ) -> None:
         self.config = self._load_config(config_path)
         max_goals = self.config.get("max_concurrent_goals", 1)
         super().__init__(actor_id, nats_url, max_concurrent=max_goals, bus=bus)
@@ -178,10 +180,7 @@ class PipelineOrchestrator(BaseActor):
             # Collect all nodes with in-degree 0 (no unresolved deps).
             ready = sorted(n for n in remaining if in_degree[n] == 0)
             if not ready:
-                raise ValueError(
-                    f"Circular dependency detected among stages: "
-                    f"{sorted(remaining)}"
-                )
+                raise ValueError(f"Circular dependency detected among stages: {sorted(remaining)}")
 
             level = [stage_by_name[n] for n in ready]
             levels.append(level)
@@ -231,9 +230,7 @@ class PipelineOrchestrator(BaseActor):
         try:
             payload = self._build_stage_payload(stage, context)
         except (KeyError, ValueError) as e:
-            raise PipelineStageError(
-                stage_name, f"Stage '{stage_name}' mapping error: {e}"
-            )
+            raise PipelineStageError(stage_name, f"Stage '{stage_name}' mapping error: {e}") from e
 
         task = TaskMessage(
             worker_type=stage["worker_type"],
@@ -251,9 +248,7 @@ class PipelineOrchestrator(BaseActor):
 
         # Wait for result.
         stage_timeout = stage.get("timeout_seconds", timeout)
-        result = await self._wait_for_result(
-            task.task_id, goal.goal_id, stage_timeout
-        )
+        result = await self._wait_for_result(task.task_id, goal.goal_id, stage_timeout)
 
         if result is None:
             raise PipelineStageError(
@@ -279,6 +274,7 @@ class PipelineOrchestrator(BaseActor):
     # ------------------------------------------------------------------
 
     async def handle_message(self, data: dict[str, Any]) -> None:
+        """Execute the pipeline for an incoming orchestrator goal."""
         goal = OrchestratorGoal(**data)
         stages = self.config["pipeline_stages"]
         timeout = self.config.get("timeout_seconds", 300)
@@ -290,9 +286,7 @@ class PipelineOrchestrator(BaseActor):
         levels = self._build_execution_levels(stages, deps)
 
         # Log execution plan.
-        level_summary = [
-            [s["name"] for s in level] for level in levels
-        ]
+        level_summary = [[s["name"] for s in level] for level in levels]
         log.info(
             "pipeline.started",
             stages=len(stages),
@@ -318,7 +312,11 @@ class PipelineOrchestrator(BaseActor):
                     # Single stage — no gather overhead.
                     stage = level[0]
                     name, result_dict = await self._execute_stage(
-                        stage, context, goal, timeout, level_log,
+                        stage,
+                        context,
+                        goal,
+                        timeout,
+                        level_log,
                     )
                     if not result_dict.get("_skipped"):
                         context[name] = result_dict
@@ -329,11 +327,11 @@ class PipelineOrchestrator(BaseActor):
                         stages=[s["name"] for s in level],
                     )
                     coros = [
-                        self._execute_stage(s, context, goal, timeout, level_log)
-                        for s in level
+                        self._execute_stage(s, context, goal, timeout, level_log) for s in level
                     ]
                     results = await asyncio.gather(
-                        *coros, return_exceptions=True,
+                        *coros,
+                        return_exceptions=True,
                     )
 
                     # Check for failures.
@@ -344,15 +342,20 @@ class PipelineOrchestrator(BaseActor):
                             raise r
 
                     # Store all results in context.
-                    for name, result_dict in results:
-                        if not result_dict.get("_skipped"):
-                            context[name] = result_dict
+                    context.update(
+                        {
+                            name: result_dict
+                            for name, result_dict in results
+                            if not result_dict.get("_skipped")
+                        }
+                    )
 
         except PipelineStageError as e:
             log.error("pipeline.stage_failed", error=str(e))
             elapsed = int((time.monotonic() - start) * 1000)
             await self._publish_pipeline_result(
-                goal, TaskStatus.FAILED,
+                goal,
+                TaskStatus.FAILED,
                 error=str(e),
                 elapsed=elapsed,
             )
@@ -369,7 +372,8 @@ class PipelineOrchestrator(BaseActor):
             if name != "goal" and isinstance(data, dict) and "output" in data
         }
         await self._publish_pipeline_result(
-            goal, TaskStatus.COMPLETED,
+            goal,
+            TaskStatus.COMPLETED,
             output=final_output,
             elapsed=elapsed,
         )
@@ -379,12 +383,14 @@ class PipelineOrchestrator(BaseActor):
     # ------------------------------------------------------------------
 
     def _build_stage_payload(
-        self, stage: dict[str, Any], context: dict[str, Any],
+        self,
+        stage: dict[str, Any],
+        context: dict[str, Any],
     ) -> dict[str, Any]:
-        """
-        Build a stage's task payload by resolving input_mapping against context.
+        """Build a stage's task payload by resolving input_mapping against context.
 
         Mapping values are dot-separated paths into the context dict.
+
         Examples:
             "goal.context.file_ref" → context["goal"]["context"]["file_ref"]
             "extract.output.page_count" → context["extract"]["output"]["page_count"]
@@ -406,13 +412,14 @@ class PipelineOrchestrator(BaseActor):
                     raise KeyError(f"Path '{path}': key '{part}' not found in context")
                 current = current[part]
             else:
-                raise ValueError(f"Path '{path}': cannot traverse into {type(current).__name__} at '{part}'")
+                raise ValueError(
+                    f"Path '{path}': cannot traverse into {type(current).__name__} at '{part}'"
+                )
         return current
 
     @staticmethod
     def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
-        """
-        Evaluate a simple condition string against context.
+        """Evaluate a simple condition string against context.
 
         Supports: "path.to.value == true", "path.to.value == false",
                   "path.to.value != null"
@@ -438,25 +445,27 @@ class PipelineOrchestrator(BaseActor):
             expected_val = True
         elif expected_lower == "false":
             expected_val = False
-        elif expected_lower == "null" or expected_lower == "none":
+        elif expected_lower in {"null", "none"}:
             expected_val = None
         else:
             expected_val = expected
 
         if op == "==":
             return value == expected_val
-        elif op == "!=":
+        if op == "!=":
             return value != expected_val
-        else:
-            logger.warning("pipeline.unsupported_operator", op=op)
-            return True
+        logger.warning("pipeline.unsupported_operator", op=op)
+        return True
 
     # ------------------------------------------------------------------
     # Result waiting and publishing
     # ------------------------------------------------------------------
 
     async def _wait_for_result(
-        self, task_id: str, goal_id: str, timeout: float,
+        self,
+        task_id: str,
+        goal_id: str,
+        timeout: float,
     ) -> TaskResult | None:
         """
         Wait for a specific TaskResult by subscribing to the results subject.
@@ -469,20 +478,18 @@ class PipelineOrchestrator(BaseActor):
 
         sub = await self._bus.subscribe(subject)
 
-        async def _consume():
+        async def _consume() -> None:
             async for data in sub:
                 if data.get("task_id") == task_id:
-                    try:
+                    with contextlib.suppress(asyncio.InvalidStateError):
                         result_future.set_result(TaskResult(**data))
-                    except asyncio.InvalidStateError:
-                        pass  # Already resolved
                     break
 
         consume_task = asyncio.create_task(_consume())
 
         try:
             return await asyncio.wait_for(result_future, timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
         finally:
             consume_task.cancel()

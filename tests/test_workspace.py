@@ -1,4 +1,5 @@
 """Tests for WorkspaceManager (file-ref resolution, path safety, JSON I/O)."""
+
 import json
 
 import pytest
@@ -19,6 +20,7 @@ def ws(workspace):
 
 
 # --- resolve() ---
+
 
 class TestResolve:
     def test_resolve_valid_file(self, ws, workspace):
@@ -49,6 +51,7 @@ class TestResolve:
 
 # --- read_json() ---
 
+
 class TestReadJson:
     def test_read_json(self, ws, workspace):
         """read_json() reads and parses a JSON file."""
@@ -71,6 +74,7 @@ class TestReadJson:
 
 # --- read_text() ---
 
+
 class TestReadText:
     def test_read_text(self, ws, workspace):
         """read_text() returns file contents as string."""
@@ -79,6 +83,7 @@ class TestReadText:
 
 
 # --- write_json() ---
+
 
 class TestWriteJson:
     def test_write_json(self, ws, workspace):

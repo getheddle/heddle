@@ -1,7 +1,4 @@
-"""
-loom.contrib.rag.vectorstore.duckdb_store
--------------------------------------------
-DuckDB-backed vector store for embedded text chunks.
+"""DuckDB-backed vector store for embedded text chunks.
 
 Stores EmbeddedChunk records in a DuckDB table with a FLOAT[] column for the
 embedding vector.  Supports:
@@ -15,14 +12,17 @@ Uses Loom's OllamaEmbeddingProvider for query embedding generation.
 No external vector DB required — DuckDB handles both structured data and
 vector similarity in a single embedded database.
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..schemas.chunk import TextChunk
 from ..schemas.embedding import EmbeddedChunk, SimilarityResult
+
+if TYPE_CHECKING:
+    from ..schemas.chunk import TextChunk
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class DuckDBVectorStore:
         self._conn: Any = None
         self._embedding_dim: int | None = None
 
-    def initialize(self) -> "DuckDBVectorStore":
+    def initialize(self) -> DuckDBVectorStore:
         """Create the database table if it doesn't exist."""
         import duckdb
 
@@ -98,9 +98,10 @@ class DuckDBVectorStore:
     # Embedding
     # ------------------------------------------------------------------
 
-    def _get_embedder(self):
+    def _get_embedder(self) -> Any:
         """Lazy-load the Ollama embedding provider."""
         from loom.worker.embeddings import OllamaEmbeddingProvider
+
         return OllamaEmbeddingProvider(
             model=self.embedding_model,
             base_url=self.ollama_url,
@@ -109,6 +110,7 @@ class DuckDBVectorStore:
     def _embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a batch of texts synchronously."""
         import asyncio
+
         embedder = self._get_embedder()
         loop = asyncio.new_event_loop()
         try:
@@ -145,7 +147,7 @@ class DuckDBVectorStore:
                 logger.error("Embedding batch %d failed: %s", i // batch_size, exc)
                 continue
 
-            for chunk, emb in zip(batch, embeddings):
+            for chunk, emb in zip(batch, embeddings, strict=False):
                 try:
                     self._conn.execute(
                         f"""INSERT OR REPLACE INTO {self.TABLE_NAME}
@@ -164,7 +166,9 @@ class DuckDBVectorStore:
                             chunk.char_end,
                             chunk.chunk_index,
                             chunk.total_chunks,
-                            chunk.strategy.value if hasattr(chunk.strategy, "value") else str(chunk.strategy),
+                            chunk.strategy.value
+                            if hasattr(chunk.strategy, "value")
+                            else str(chunk.strategy),
                             chunk.timestamp_unix,
                             emb,
                             self.embedding_model,
@@ -256,7 +260,7 @@ class DuckDBVectorStore:
             ORDER BY similarity DESC
             LIMIT ?
             """,
-            [query_emb] + params + [limit],
+            [query_emb, *params, limit],
         ).fetchall()
 
         results: list[SimilarityResult] = []
@@ -264,18 +268,20 @@ class DuckDBVectorStore:
             score = float(row[7]) if row[7] is not None else 0.0
             if score < min_score:
                 continue
-            results.append(SimilarityResult(
-                chunk_id=row[0],
-                text=row[1],
-                score=score,
-                source_channel_id=row[2],
-                source_global_id=row[3],
-                metadata={
-                    "source_channel_name": row[4],
-                    "timestamp_unix": row[5],
-                    "strategy": row[6],
-                },
-            ))
+            results.append(
+                SimilarityResult(
+                    chunk_id=row[0],
+                    text=row[1],
+                    score=score,
+                    source_channel_id=row[2],
+                    source_global_id=row[3],
+                    metadata={
+                        "source_channel_name": row[4],
+                        "timestamp_unix": row[5],
+                        "strategy": row[6],
+                    },
+                )
+            )
 
         return results
 
@@ -285,9 +291,7 @@ class DuckDBVectorStore:
 
     def count(self) -> int:
         """Return total number of stored chunks."""
-        row = self._conn.execute(
-            f"SELECT COUNT(*) FROM {self.TABLE_NAME}"
-        ).fetchone()
+        row = self._conn.execute(f"SELECT COUNT(*) FROM {self.TABLE_NAME}").fetchone()
         return row[0] if row else 0
 
     def get(self, chunk_id: str) -> EmbeddedChunk | None:

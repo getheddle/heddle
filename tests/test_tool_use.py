@@ -1,4 +1,5 @@
 """Tests for LLMWorker tool-use multi-turn execution loop."""
+
 import json
 from unittest.mock import AsyncMock
 
@@ -6,12 +7,13 @@ import pytest
 import yaml
 
 from loom.core.messages import ModelTier, TaskMessage, TaskResult, TaskStatus
-from loom.worker.runner import LLMWorker, _extract_json
-
+from loom.worker.runner import LLMWorker
+from loom.worker.tools import SyncToolProvider
 
 # ---------------------------------------------------------------------------
 # Mock backends with tool-use support
 # ---------------------------------------------------------------------------
+
 
 class ToolUseBackend:
     """Backend that returns a tool call on first request, then a final answer.
@@ -28,8 +30,14 @@ class ToolUseBackend:
         self._call_count = 0
 
     async def complete(
-        self, system_prompt, user_message, max_tokens=2000, temperature=0.0,
-        *, tools=None, messages=None,
+        self,
+        system_prompt,
+        user_message,
+        max_tokens=2000,
+        temperature=0.0,
+        *,
+        tools=None,
+        messages=None,
     ):
         self._call_count += 1
 
@@ -40,23 +48,24 @@ class ToolUseBackend:
                 "model": "mock-tool",
                 "prompt_tokens": 100,
                 "completion_tokens": 20,
-                "tool_calls": [{
-                    "id": "call_1",
-                    "name": self._tool_name,
-                    "arguments": self._tool_args,
-                }],
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "name": self._tool_name,
+                        "arguments": self._tool_args,
+                    }
+                ],
                 "stop_reason": "tool_use",
             }
-        else:
-            # Second call: return final answer
-            return {
-                "content": json.dumps(self._final_output),
-                "model": "mock-tool",
-                "prompt_tokens": 150,
-                "completion_tokens": 50,
-                "tool_calls": None,
-                "stop_reason": "end_turn",
-            }
+        # Second call: return final answer
+        return {
+            "content": json.dumps(self._final_output),
+            "model": "mock-tool",
+            "prompt_tokens": 150,
+            "completion_tokens": 50,
+            "tool_calls": None,
+            "stop_reason": "end_turn",
+        }
 
 
 class MultiRoundBackend:
@@ -68,8 +77,14 @@ class MultiRoundBackend:
         self._call_count = 0
 
     async def complete(
-        self, system_prompt, user_message, max_tokens=2000, temperature=0.0,
-        *, tools=None, messages=None,
+        self,
+        system_prompt,
+        user_message,
+        max_tokens=2000,
+        temperature=0.0,
+        *,
+        tools=None,
+        messages=None,
     ):
         self._call_count += 1
 
@@ -79,22 +94,23 @@ class MultiRoundBackend:
                 "model": "mock-multi",
                 "prompt_tokens": 50,
                 "completion_tokens": 10,
-                "tool_calls": [{
-                    "id": f"call_{self._call_count}",
-                    "name": "search_docs",
-                    "arguments": {"query": f"round {self._call_count}"},
-                }],
+                "tool_calls": [
+                    {
+                        "id": f"call_{self._call_count}",
+                        "name": "search_docs",
+                        "arguments": {"query": f"round {self._call_count}"},
+                    }
+                ],
                 "stop_reason": "tool_use",
             }
-        else:
-            return {
-                "content": json.dumps(self._final_output),
-                "model": "mock-multi",
-                "prompt_tokens": 80,
-                "completion_tokens": 30,
-                "tool_calls": None,
-                "stop_reason": "end_turn",
-            }
+        return {
+            "content": json.dumps(self._final_output),
+            "model": "mock-multi",
+            "prompt_tokens": 80,
+            "completion_tokens": 30,
+            "tool_calls": None,
+            "stop_reason": "end_turn",
+        }
 
 
 class NoToolBackend:
@@ -104,8 +120,14 @@ class NoToolBackend:
         self._output = output or {"summary": "direct answer", "key_points": []}
 
     async def complete(
-        self, system_prompt, user_message, max_tokens=2000, temperature=0.0,
-        *, tools=None, messages=None,
+        self,
+        system_prompt,
+        user_message,
+        max_tokens=2000,
+        temperature=0.0,
+        *,
+        tools=None,
+        messages=None,
     ):
         return {
             "content": json.dumps(self._output),
@@ -157,8 +179,6 @@ def _make_task(payload=None):
 # Mock ToolProvider that tests can import
 # ---------------------------------------------------------------------------
 
-from loom.worker.tools import SyncToolProvider
-
 
 class MockToolProvider(SyncToolProvider):
     """A mock tool provider for testing the tool-use loop."""
@@ -184,6 +204,7 @@ class MockToolProvider(SyncToolProvider):
 # ---------------------------------------------------------------------------
 # Tool-use tests
 # ---------------------------------------------------------------------------
+
 
 class TestToolUseLoop:
     """Tests for the multi-turn tool execution loop in LLMWorker."""
@@ -332,6 +353,7 @@ class TestToolUseWithSiloUpdates:
 # ---------------------------------------------------------------------------
 # Backward compatibility tests
 # ---------------------------------------------------------------------------
+
 
 class TestBackwardCompatibility:
     """Ensure existing tests still pass with the updated backends."""

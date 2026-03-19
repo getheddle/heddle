@@ -8,17 +8,17 @@ with pluggable storage backends.
 All tests use InMemoryCheckpointStore — no external infrastructure needed.
 tiktoken is used directly (it's a pure-Python encoder, no external service).
 """
+
 import pytest
-import tiktoken
 
 from loom.core.messages import CheckpointState
 from loom.orchestrator.checkpoint import CheckpointManager
 from loom.orchestrator.store import InMemoryCheckpointStore
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_manager(
     token_threshold: int = 50_000,
@@ -50,7 +50,11 @@ def _sample_completed_tasks(n: int = 3) -> list[dict]:
 def _sample_pending_tasks(n: int = 2) -> list[dict]:
     """Generate a list of pending task dicts for testing."""
     return [
-        {"task_id": f"pending-{i}", "worker_type": "classifier", "description": f"Classify item {i}"}
+        {
+            "task_id": f"pending-{i}",
+            "worker_type": "classifier",
+            "description": f"Classify item {i}",
+        }
         for i in range(n)
     ]
 
@@ -58,6 +62,7 @@ def _sample_pending_tasks(n: int = 2) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Token counting
 # ---------------------------------------------------------------------------
+
 
 class TestTokenCounting:
     """Verify tiktoken-based token estimation."""
@@ -92,6 +97,7 @@ class TestTokenCounting:
 # Checkpoint trigger (should_checkpoint)
 # ---------------------------------------------------------------------------
 
+
 class TestCheckpointTrigger:
     """Verify that should_checkpoint fires based on token threshold."""
 
@@ -106,8 +112,14 @@ class TestCheckpointTrigger:
         mgr = _make_manager(token_threshold=10)
         # Create a message that is clearly over 10 tokens when JSON-serialized.
         history = [
-            {"role": "user", "content": "This is a sufficiently long message to exceed a small threshold."},
-            {"role": "assistant", "content": "And this response adds even more tokens to push us over."},
+            {
+                "role": "user",
+                "content": "This is a sufficiently long message to exceed a small threshold.",
+            },
+            {
+                "role": "assistant",
+                "content": "And this response adds even more tokens to push us over.",
+            },
         ]
         assert mgr.should_checkpoint(history) is True
 
@@ -129,6 +141,7 @@ class TestCheckpointTrigger:
 # ---------------------------------------------------------------------------
 # Save and load (round-trip through mocked Redis)
 # ---------------------------------------------------------------------------
+
 
 class TestSaveAndLoad:
     """Verify that create_checkpoint persists to the store and load_latest
@@ -201,6 +214,7 @@ class TestSaveAndLoad:
 # TTL configuration
 # ---------------------------------------------------------------------------
 
+
 class TestTTLConfiguration:
     """Verify that custom TTL values are forwarded to the store."""
 
@@ -248,6 +262,7 @@ class TestTTLConfiguration:
 # Missing checkpoint
 # ---------------------------------------------------------------------------
 
+
 class TestMissingCheckpoint:
     """Verify behavior when loading a checkpoint that does not exist."""
 
@@ -276,6 +291,7 @@ class TestMissingCheckpoint:
 # ---------------------------------------------------------------------------
 # Context compression (executive summary construction)
 # ---------------------------------------------------------------------------
+
 
 class TestContextCompression:
     """Verify that the checkpoint executive summary compresses context
@@ -344,8 +360,7 @@ class TestContextCompression:
 
         # But the rendered outcomes should be capped at 10 lines.
         outcome_lines = [
-            line for line in checkpoint.executive_summary.splitlines()
-            if line.startswith("- [")
+            line for line in checkpoint.executive_summary.splitlines() if line.startswith("- [")
         ]
         assert len(outcome_lines) == 10
 
@@ -408,23 +423,24 @@ class TestContextCompression:
 # format_for_injection
 # ---------------------------------------------------------------------------
 
+
 class TestFormatForInjection:
     """Verify that format_for_injection produces a human-readable text block
     suitable for injecting into an orchestrator's context window."""
 
     def _make_checkpoint(self, **overrides) -> CheckpointState:
         """Build a CheckpointState with sensible defaults, allowing overrides."""
-        defaults = dict(
-            goal_id="goal-1",
-            original_instruction="Summarize the report",
-            executive_summary="Goal: Summarize the report\nProgress: 2 completed, 1 pending.",
-            completed_tasks=[{"task_id": "t1", "worker_type": "summarizer", "summary": "Done"}],
-            pending_tasks=[{"task_id": "p1", "description": "Classify"}],
-            open_issues=["Worker timeout on task-1"],
-            decisions_made=["Using summarizer for step 2"],
-            context_token_count=100,
-            checkpoint_number=3,
-        )
+        defaults = {
+            "goal_id": "goal-1",
+            "original_instruction": "Summarize the report",
+            "executive_summary": "Goal: Summarize the report\nProgress: 2 completed, 1 pending.",
+            "completed_tasks": [{"task_id": "t1", "worker_type": "summarizer", "summary": "Done"}],
+            "pending_tasks": [{"task_id": "p1", "description": "Classify"}],
+            "open_issues": ["Worker timeout on task-1"],
+            "decisions_made": ["Using summarizer for step 2"],
+            "context_token_count": 100,
+            "checkpoint_number": 3,
+        }
         defaults.update(overrides)
         return CheckpointState(**defaults)
 

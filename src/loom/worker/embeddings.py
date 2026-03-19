@@ -11,6 +11,7 @@ Example usage::
     vector = await provider.embed("some text to embed")
     vectors = await provider.embed_batch(["text 1", "text 2"])
 """
+
 from __future__ import annotations
 
 import os
@@ -61,11 +62,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         base_url: str | None = None,
     ) -> None:
         self.model = model
-        self.base_url = (
-            base_url
-            or os.environ.get("OLLAMA_URL")
-            or "http://localhost:11434"
-        )
+        self.base_url = base_url or os.environ.get("OLLAMA_URL") or "http://localhost:11434"
         self._dimensions: int | None = None
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=120.0)
 
@@ -112,7 +109,6 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         """Return embedding dimensionality (detected from first call)."""
         if self._dimensions is None:
             raise RuntimeError(
-                "Embedding dimensions not yet known. "
-                "Call embed() or embed_batch() first."
+                "Embedding dimensions not yet known. Call embed() or embed_batch() first."
             )
         return self._dimensions

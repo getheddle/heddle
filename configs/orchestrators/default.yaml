@@ -1,10 +1,66 @@
-# Configuration for the dynamic OrchestratorActor (loom/src/loom/orchestrator/runner.py).
-# The OrchestratorActor uses this config for LLM-driven goal decomposition.
-# For sequential pipelines, use PipelineOrchestrator with pipeline-specific configs instead.
+# =============================================================================
+# Default Orchestrator Configuration (LLM-driven Goal Decomposition)
+# =============================================================================
+#
+# The OrchestratorActor receives high-level goals, uses an LLM to decompose
+# them into subtasks, dispatches subtasks to workers, and synthesizes results.
+# This is the dynamic orchestrator — it decides at runtime which workers to
+# invoke and how to combine results. For deterministic sequential pipelines,
+# use PipelineOrchestrator with configs/orchestrators/rag_pipeline.yaml instead.
+#
+# Component:  src/loom/orchestrator/runner.py (OrchestratorActor)
+# Decomposer: src/loom/orchestrator/decomposer.py (GoalDecomposer)
+# Synthesizer: src/loom/orchestrator/synthesizer.py (ResultSynthesizer)
+# Checkpoint: src/loom/orchestrator/checkpoint.py (CheckpointManager)
+# Loaded by:  loom.core.config.load_config()
+#
+# Run with:
+#   loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
+#
+# Submit goals:
+#   loom submit "Summarize and classify this document" --nats-url nats://localhost:4222
+#   loom submit "Extract invoice data and classify" --context text="..." --nats-url nats://localhost:4222
+#
+# NATS subjects:
+#   loom.goals.incoming            — Orchestrator subscribes here (with queue groups)
+#   loom.tasks.incoming            — Dispatched subtasks go here (router picks up)
+#   loom.results.{goal_id}         — Worker results flow back here
+#
+# Scaling:
+#   Run multiple orchestrator instances — NATS queue groups auto-balance goals.
+#   Each goal is handled by exactly one instance. Set max_concurrent_goals > 1
+#   to process multiple goals within a single instance (Strategy B).
+#
+# Related configs:
+#   configs/router_rules.yaml           — tier overrides & rate limits for dispatched tasks
+#   configs/workers/*.yaml              — worker configs referenced in AVAILABLE WORKERS
+#   configs/mcp/docman.yaml             — MCP gateway that can dispatch goals
+#   configs/orchestrators/rag_pipeline.yaml — alternative: deterministic pipeline orchestrator
+# =============================================================================
 
+# name (str, required)
+# Identifier for this orchestrator configuration.
 name: "default_orchestrator"
+
+# description (str, optional)
+# Human-readable description.
 description: "General-purpose task orchestrator."
 
+# system_prompt (str, required)
+# Instructions for the LLM that drives goal decomposition and synthesis.
+# The orchestrator operates in a loop:
+#   1. Receive goal → LLM decomposes into subtasks
+#   2. Dispatch subtasks → workers process them
+#   3. Collect results → LLM decides: more subtasks, retry, or synthesize
+#   4. Final synthesis → LLM produces the goal result
+#
+# The AVAILABLE WORKERS section tells the LLM what workers exist and what
+# they do. Add new workers here when you create them. The LLM uses these
+# descriptions to decide which worker_type to dispatch to.
+#
+# The TASK DISPATCH FORMAT section defines the JSON block the LLM outputs
+# when it wants to dispatch a subtask. The orchestrator parses these blocks
+# and creates TaskMessage objects.
 system_prompt: |
   You are a task orchestrator in the Loom framework.
 
@@ -33,13 +89,62 @@ system_prompt: |
   - When all subtasks are complete, output: {"final_result": {...}}
   - If a worker fails, decide: retry, escalate tier, or work around it
 
-# Checkpoint settings for self-summarization (see loom/orchestrator/checkpoint.py).
-# When the orchestrator's context exceeds token_threshold, it compresses into a
-# CheckpointState and "reboots" with the summary + recent_window interactions.
+# checkpoint (dict, optional)
+# Self-summarization settings for long-running goals.
+# Source: src/loom/orchestrator/checkpoint.py (CheckpointManager)
+#
+# When the orchestrator's conversation context grows beyond token_threshold,
+# it triggers a checkpoint: the LLM summarizes the conversation so far into
+# a CheckpointState, then the orchestrator "reboots" with:
+#   - The compressed checkpoint summary
+#   - The most recent recent_window interactions (for continuity)
+#
+# This prevents context window overflow during complex multi-step goals.
+# Checkpoints are stored via CheckpointStore (InMemoryCheckpointStore by default,
+# RedisCheckpointStore for production — see src/loom/contrib/redis/store.py).
+#
+# Per-goal isolation (Strategy B): each concurrent goal has its own
+# checkpoint_counter in its GoalState — checkpoints don't interfere.
 checkpoint:
-  token_threshold: 50000      # Compress when context exceeds this many tokens
-  recent_window: 5            # Keep last N interactions alongside the checkpoint
+  # token_threshold (int, default: 50000)
+  # Compress when the orchestrator's context exceeds this many tokens.
+  # Set lower for local models with small context windows (e.g., 8000 for 8K models).
+  # Set higher for frontier models with large context (up to 200K).
+  # The orchestrator estimates token count from conversation history length.
+  token_threshold: 50000
 
-max_concurrent_goals: 1       # Max goals processed simultaneously (>1 enables concurrent goal handling)
-max_concurrent_tasks: 5       # Max subtasks the orchestrator can dispatch at once
-timeout_seconds: 300          # Per-subtask timeout in seconds
+  # recent_window (int, default: 5)
+  # Keep the last N interactions alongside the checkpoint summary.
+  # These provide immediate context so the LLM doesn't lose track of
+  # the most recent subtask results. Higher values = more context preserved
+  # but less compression benefit.
+  recent_window: 5
+
+# max_concurrent_goals (int, optional, default: 1)
+# How many goals this orchestrator instance processes simultaneously.
+# Strategy B (concurrent goals): set > 1 to handle multiple goals at once.
+# Each goal gets its own isolated GoalState (conversation_history,
+# checkpoint_counter) — no shared mutable data, no locks needed.
+#
+# Scaling guidance:
+#   1  — Sequential. Simple, predictable. Good for development.
+#   5  — Moderate concurrency. Good for production with mixed workloads.
+#   10 — High concurrency. Ensure workers can handle the dispatch volume.
+#
+# Note: this controls goals per instance. For more throughput, also run
+# multiple orchestrator instances (NATS queue groups handle distribution).
+max_concurrent_goals: 1
+
+# max_concurrent_tasks (int, optional, default: 5)
+# Maximum number of subtasks the orchestrator can dispatch at once for a
+# single goal. Limits fan-out to prevent overwhelming workers or rate limits.
+# This is per-goal, not per-instance.
+max_concurrent_tasks: 5
+
+# timeout_seconds (int, optional, default: 300)
+# Per-subtask timeout in seconds. If a dispatched task doesn't return a
+# result within this window, it's considered failed. The orchestrator LLM
+# then decides whether to retry, escalate tier, or work around the failure.
+# Note: this is per-subtask, not per-goal. A goal with 5 sequential subtasks
+# could take up to 5 * timeout_seconds total.
+timeout_seconds: 300

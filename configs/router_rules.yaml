@@ -1,27 +1,95 @@
-# Task routing rules — read by TaskRouter (loom/src/loom/router/router.py).
-# These are deterministic — no LLM involved.
+# =============================================================================
+# Task Router Rules
+# =============================================================================
 #
-# The router subscribes to loom.tasks.incoming and republishes each task
-# to loom.tasks.{worker_type}.{tier}, where tier is resolved here.
+# Deterministic routing rules for the TaskRouter. No LLM is involved — the
+# router uses these rules to decide where each task goes.
+#
+# Component:  src/loom/router/router.py (TaskRouter)
+# Loaded by:  loom.core.config.load_config()
+#
+# Run with:
+#   loom router --nats-url nats://localhost:4222
+#   loom router --config configs/router_rules.yaml --nats-url nats://localhost:4222
+#
+# How routing works:
+#   1. Router subscribes to loom.tasks.incoming
+#   2. For each TaskMessage, it resolves the tier:
+#      a. If worker_type is in tier_overrides, use that tier (ignoring the message's tier)
+#      b. Otherwise, use the tier from the TaskMessage itself
+#   3. Router publishes to loom.tasks.{worker_type}.{resolved_tier}
+#   4. If rate-limited, the task goes to loom.tasks.dead_letter instead
+#
+# NATS subjects:
+#   loom.tasks.incoming                     — Router subscribes here
+#   loom.tasks.{worker_type}.{tier}         — Routed tasks land here
+#   loom.tasks.dead_letter                  — Unroutable or rate-limited tasks
+#
+# Related configs:
+#   configs/workers/*.yaml              — workers subscribing to routed subjects
+#   configs/orchestrators/default.yaml  — orchestrator dispatching tasks
+#   configs/mcp/docman.yaml             — MCP gateway dispatching tasks
+# =============================================================================
 
+# tier_overrides (dict, optional)
 # Override the default model tier for specific worker types.
-# If a worker_type is not listed here, the tier from the TaskMessage is used.
-# This lets you force all tasks of a given type to a specific tier,
-# regardless of what the producer requested.
+# If a worker_type is listed here, ALL tasks for that worker use this tier,
+# regardless of what the TaskMessage or worker config specifies.
+#
+# Use cases:
+#   - Force expensive workers to a cheaper tier during development
+#   - Lock critical workers to a specific quality tier in production
+#   - Route all local-capable workers to "local" to minimize API costs
+#
+# If a worker_type is NOT listed here, the tier from the TaskMessage is used
+# (which defaults to the worker's default_model_tier if not set by the caller).
+#
+# Valid tier values: "local" | "standard" | "frontier"
 tier_overrides:
   summarizer: "local"
   classifier: "local"
   extractor: "standard"
   # analyzer: "frontier"
 
-# Per-tier rate limits enforced by the router's token-bucket rate limiter.
-# max_concurrent: bucket capacity (burst limit). Tasks exceeding this are
-#                 sent to loom.tasks.dead_letter with reason "rate_limited".
-# tokens_per_minute: used to derive the refill rate. The bucket refills one
-#                    token every (60 / max_concurrent) seconds.
-# NOTE: This is dispatch-side throttling only. It does not track whether
-#       workers have finished processing. For true backpressure, workers
-#       would need to report completion events.
+# rate_limits (dict, optional)
+# Per-tier token-bucket rate limiting enforced at dispatch time.
+# The router maintains one token bucket per tier.
+#
+# How the token bucket works:
+#   - Each tier has a bucket with capacity = max_concurrent.
+#   - Dispatching a task consumes 1 token from the tier's bucket.
+#   - The bucket refills at: 1 token every (60 / tokens_per_minute) seconds.
+#     Example: tokens_per_minute=100000 -> 1 token every 0.0006s (effectively no delay)
+#     Example: tokens_per_minute=60 -> 1 token every 1.0s
+#   - If the bucket is empty (all tokens consumed), the task is rate-limited.
+#
+# Rate-limited tasks:
+#   Tasks that exceed the bucket capacity are sent to loom.tasks.dead_letter
+#   with reason="rate_limited". They are NOT retried automatically.
+#   To handle dead-lettered tasks, implement a dead-letter consumer that
+#   retries or alerts. (See CLAUDE.md "What to implement next".)
+#
+# IMPORTANT: This is dispatch-side throttling only. It limits how fast the
+# router sends tasks to workers. It does NOT track whether workers have
+# finished processing. For true backpressure (pausing dispatch until workers
+# are free), workers would need to report completion events back to the router.
+#
+# max_concurrent (int)
+#   Bucket capacity = burst limit. Controls how many tasks can be dispatched
+#   simultaneously before rate limiting kicks in.
+#   Example: max_concurrent=4 means 4 tasks can be dispatched in rapid
+#   succession. The 5th task is rate-limited until a token refills.
+#
+# tokens_per_minute (int)
+#   Used to derive the refill rate. Higher = faster refill = higher throughput.
+#   This typically represents the aggregate token budget across all workers
+#   in the tier, not per-worker.
+#   The math: refill_interval = 60 / tokens_per_minute seconds per token.
+#
+# Tuning guidance:
+#   local tier:    High max_concurrent (4+), high tokens/min. Ollama is fast and free.
+#   standard tier: Moderate max_concurrent (10). Balance API cost vs throughput.
+#   frontier tier: Low max_concurrent (3). Expensive, use sparingly.
 rate_limits:
   local:
     max_concurrent: 4

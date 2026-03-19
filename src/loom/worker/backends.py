@@ -18,6 +18,7 @@ Tool-use support:
     When ``messages`` is provided, it replaces the single user_message for
     multi-turn conversations (tool execution loop).
 """
+
 from __future__ import annotations
 
 import json
@@ -42,7 +43,8 @@ class LLMBackend(ABC):
         tools: list[dict[str, Any]] | None = None,
         messages: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """
+        """Complete an LLM request and return a normalized response dict.
+
         Args:
             system_prompt: System instructions for the LLM.
             user_message: User message (ignored when ``messages`` is provided).
@@ -73,7 +75,7 @@ class AnthropicBackend(LLMBackend):
     version coupling.
     """
 
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514") -> None:
         self.api_key = api_key
         self.model = model
         self.client = httpx.AsyncClient(
@@ -89,9 +91,16 @@ class AnthropicBackend(LLMBackend):
         )
 
     async def complete(
-        self, system_prompt, user_message, max_tokens=2000, temperature=0.0,
-        *, tools=None, messages=None,
-    ):
+        self,
+        system_prompt: str,
+        user_message: str,
+        max_tokens: int = 2000,
+        temperature: float = 0.0,
+        *,
+        tools: list[dict[str, Any]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Complete an LLM request via the Anthropic Messages API."""
         # Build messages array
         if messages is not None:
             api_messages = _anthropic_messages(messages)
@@ -131,11 +140,13 @@ class AnthropicBackend(LLMBackend):
             elif block["type"] == "tool_use":
                 if tool_calls is None:
                     tool_calls = []
-                tool_calls.append({
-                    "id": block["id"],
-                    "name": block["name"],
-                    "arguments": block["input"],
-                })
+                tool_calls.append(
+                    {
+                        "id": block["id"],
+                        "name": block["name"],
+                        "arguments": block["input"],
+                    }
+                )
 
         return {
             "content": content,
@@ -157,14 +168,21 @@ class OllamaBackend(LLMBackend):
     absent for some models; we default to 0 in that case.
     """
 
-    def __init__(self, model: str = "llama3.2:3b", base_url: str = "http://ollama:11434"):
+    def __init__(self, model: str = "llama3.2:3b", base_url: str = "http://ollama:11434") -> None:
         self.model = model
         self.client = httpx.AsyncClient(base_url=base_url, timeout=120.0)
 
     async def complete(
-        self, system_prompt, user_message, max_tokens=2000, temperature=0.0,
-        *, tools=None, messages=None,
-    ):
+        self,
+        system_prompt: str,
+        user_message: str,
+        max_tokens: int = 2000,
+        temperature: float = 0.0,
+        *,
+        tools: list[dict[str, Any]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Complete an LLM request via the Ollama HTTP API."""
         # Build messages array
         if messages is not None:
             api_messages = [
@@ -212,11 +230,13 @@ class OllamaBackend(LLMBackend):
             tool_calls = []
             for i, call in enumerate(raw_calls):
                 func = call.get("function", {})
-                tool_calls.append({
-                    "id": f"call_{i}",
-                    "name": func.get("name", ""),
-                    "arguments": func.get("arguments", {}),
-                })
+                tool_calls.append(
+                    {
+                        "id": f"call_{i}",
+                        "name": func.get("name", ""),
+                        "arguments": func.get("arguments", {}),
+                    }
+                )
 
         stop_reason = "tool_use" if tool_calls else "end_turn"
 
@@ -233,7 +253,7 @@ class OllamaBackend(LLMBackend):
 class OpenAICompatibleBackend(LLMBackend):
     """Any OpenAI-compatible API (vLLM, llama.cpp server, LiteLLM, etc.)."""
 
-    def __init__(self, base_url: str, api_key: str = "not-needed", model: str = "default"):
+    def __init__(self, base_url: str, api_key: str = "not-needed", model: str = "default") -> None:
         self.model = model
         self.client = httpx.AsyncClient(
             base_url=base_url,
@@ -242,9 +262,16 @@ class OpenAICompatibleBackend(LLMBackend):
         )
 
     async def complete(
-        self, system_prompt, user_message, max_tokens=2000, temperature=0.0,
-        *, tools=None, messages=None,
-    ):
+        self,
+        system_prompt: str,
+        user_message: str,
+        max_tokens: int = 2000,
+        temperature: float = 0.0,
+        *,
+        tools: list[dict[str, Any]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Complete an LLM request via an OpenAI-compatible API."""
         # Build messages array
         if messages is not None:
             api_messages = [
@@ -300,11 +327,13 @@ class OpenAICompatibleBackend(LLMBackend):
                         args = json.loads(args)
                     except json.JSONDecodeError:
                         args = {"_raw": args}
-                tool_calls.append({
-                    "id": call.get("id", ""),
-                    "name": func.get("name", ""),
-                    "arguments": args,
-                })
+                tool_calls.append(
+                    {
+                        "id": call.get("id", ""),
+                        "name": func.get("name", ""),
+                        "arguments": args,
+                    }
+                )
 
         finish_reason = choice.get("finish_reason", "stop")
         stop_reason = "tool_use" if finish_reason == "tool_calls" else "end_turn"
@@ -323,6 +352,7 @@ class OpenAICompatibleBackend(LLMBackend):
 # Message format helpers
 # ---------------------------------------------------------------------------
 
+
 def _anthropic_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Convert internal message format to Anthropic Messages API format."""
     result = []
@@ -337,24 +367,30 @@ def _anthropic_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             content_blocks = []
             if msg.get("content"):
                 content_blocks.append({"type": "text", "text": msg["content"]})
-            for call in msg.get("tool_calls", []):
-                content_blocks.append({
+            content_blocks.extend(
+                {
                     "type": "tool_use",
                     "id": call["id"],
                     "name": call["name"],
                     "input": call["arguments"],
-                })
+                }
+                for call in msg.get("tool_calls", [])
+            )
             result.append({"role": "assistant", "content": content_blocks})
 
         elif role == "tool":
-            result.append({
-                "role": "user",
-                "content": [{
-                    "type": "tool_result",
-                    "tool_use_id": msg["tool_call_id"],
-                    "content": msg["content"],
-                }],
-            })
+            result.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": msg["tool_call_id"],
+                            "content": msg["content"],
+                        }
+                    ],
+                }
+            )
 
     return result
 
@@ -385,10 +421,12 @@ def _ollama_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             result.append(entry)
 
         elif role == "tool":
-            result.append({
-                "role": "tool",
-                "content": msg["content"],
-            })
+            result.append(
+                {
+                    "role": "tool",
+                    "content": msg["content"],
+                }
+            )
 
     return result
 
@@ -421,11 +459,13 @@ def _openai_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             result.append(entry)
 
         elif role == "tool":
-            result.append({
-                "role": "tool",
-                "tool_call_id": msg["tool_call_id"],
-                "content": msg["content"],
-            })
+            result.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": msg["tool_call_id"],
+                    "content": msg["content"],
+                }
+            )
 
     return result
 
@@ -448,9 +488,7 @@ def build_backends_from_env() -> dict[str, LLMBackend]:
 
     if os.getenv("OLLAMA_URL"):
         ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-        backends["local"] = OllamaBackend(
-            model=ollama_model, base_url=os.getenv("OLLAMA_URL")
-        )
+        backends["local"] = OllamaBackend(model=ollama_model, base_url=os.getenv("OLLAMA_URL"))
 
     if os.getenv("ANTHROPIC_API_KEY"):
         backends["standard"] = AnthropicBackend(api_key=os.getenv("ANTHROPIC_API_KEY"))

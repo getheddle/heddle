@@ -14,16 +14,16 @@ Three call patterns:
 - ``call_pipeline`` — pipeline goal via ``loom.goals.incoming``
 - ``call_query``    — worker dispatch with ``action`` field in payload
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from loom.bus.base import MessageBus
 from loom.core.messages import (
     ModelTier,
     OrchestratorGoal,
@@ -31,6 +31,11 @@ from loom.core.messages import (
     TaskResult,
     TaskStatus,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from loom.bus.base import MessageBus
 
 logger = structlog.get_logger()
 
@@ -154,7 +159,10 @@ class MCPBridge:
             # Intermediate stage results also arrive on this subject (from
             # individual workers) but with different task_ids.
             final_result = await self._collect_pipeline_results(
-                sub, goal.goal_id, timeout, progress_callback,
+                sub,
+                goal.goal_id,
+                timeout,
+                progress_callback,
             )
         finally:
             await sub.unsubscribe()
@@ -201,11 +209,10 @@ class MCPBridge:
         remaining = deadline - asyncio.get_event_loop().time()
         try:
             return await asyncio.wait_for(_consume(), timeout=max(remaining, 0))
-        except asyncio.TimeoutError:
+        except TimeoutError as exc:
             raise BridgeTimeoutError(
-                f"Pipeline {goal_id} timed out after {timeout}s "
-                f"({stage_count} stages completed)"
-            )
+                f"Pipeline {goal_id} timed out after {timeout}s ({stage_count} stages completed)"
+            ) from exc
 
     # ------------------------------------------------------------------
     # Query dispatch
@@ -247,13 +254,11 @@ class MCPBridge:
         result_future: asyncio.Future[TaskResult] = asyncio.get_running_loop().create_future()
         sub = await self.bus.subscribe(result_subject)
 
-        async def _consume():
+        async def _consume() -> None:
             async for data in sub:
                 if data.get("task_id") == match_task_id:
-                    try:
+                    with contextlib.suppress(asyncio.InvalidStateError):
                         result_future.set_result(TaskResult(**data))
-                    except asyncio.InvalidStateError:
-                        pass
                     break
 
         consume_task = asyncio.create_task(_consume())
@@ -264,10 +269,10 @@ class MCPBridge:
 
         try:
             return await asyncio.wait_for(result_future, timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError as exc:
             raise BridgeTimeoutError(
                 f"No result for task {match_task_id} within {timeout}s"
-            )
+            ) from exc
         finally:
             consume_task.cancel()
             await sub.unsubscribe()

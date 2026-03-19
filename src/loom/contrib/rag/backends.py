@@ -1,7 +1,4 @@
-"""
-loom.contrib.rag.backends
---------------------------
-Loom SyncProcessingBackend wrappers for the RAG pipeline stages.
+"""Loom SyncProcessingBackend wrappers for the RAG pipeline stages.
 
 Each backend wraps a standalone class (TelegramIngestor, StreamMux,
 SentenceChunker) and exposes it through the standard ``process_sync()``
@@ -16,17 +13,17 @@ Usage in a worker YAML config::
 These backends are CPU-bound (no LLM calls) so they extend
 SyncProcessingBackend which automatically offloads to a thread pool.
 """
+
 from __future__ import annotations
 
 from typing import Any
 
-from loom.worker.processor import SyncProcessingBackend
-
+from loom.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post
 from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
 from loom.contrib.rag.mux.stream_mux import StreamMux
-from loom.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post
-from loom.contrib.rag.schemas.post import NormalizedPost
 from loom.contrib.rag.schemas.mux import MuxWindowConfig
+from loom.contrib.rag.schemas.post import NormalizedPost
+from loom.worker.processor import SyncProcessingBackend
 
 
 class IngestorBackend(SyncProcessingBackend):
@@ -46,6 +43,7 @@ class IngestorBackend(SyncProcessingBackend):
         self._default_source = source_path
 
     def process_sync(self, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+        """Ingest a Telegram JSON export and return normalized posts."""
         source = payload.get("source_path") or self._default_source
         if not source:
             raise ValueError("source_path is required")
@@ -79,11 +77,13 @@ class MuxBackend(SyncProcessingBackend):
     """
 
     def process_sync(self, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+        """Multiplex channel post streams into a merged stream."""
         posts_by_channel = payload.get("posts_by_channel", [])
         window_hours = payload.get("window_hours", 6.0)
         sliding_step = payload.get("sliding_step_hours")
 
         from datetime import timedelta
+
         window_config = MuxWindowConfig(
             window_duration=timedelta(hours=window_hours),
             step=timedelta(hours=sliding_step) if sliding_step else None,
@@ -132,6 +132,7 @@ class ChunkerBackend(SyncProcessingBackend):
         )
 
     def process_sync(self, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+        """Chunk normalized posts into text segments."""
         posts_raw = payload.get("posts", [])
         chunk_cfg = ChunkConfig(
             target_chars=payload.get("target_chars", self._default_config.target_chars),
@@ -182,8 +183,9 @@ class VectorStoreBackend(SyncProcessingBackend):
         self._ollama_url = ollama_url
 
     def process_sync(self, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-        from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+        """Execute a vector store operation (store, search, or stats)."""
         from loom.contrib.rag.schemas.chunk import TextChunk
+        from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
 
         action = payload.get("action", "")
         db_path = config.get("db_path", self._db_path)
@@ -203,7 +205,7 @@ class VectorStoreBackend(SyncProcessingBackend):
                     "model_used": f"duckdb+{self._embedding_model}",
                 }
 
-            elif action == "search":
+            if action == "search":
                 query = payload.get("query", "")
                 limit = payload.get("limit", 10)
                 channel_ids = payload.get("channel_ids")
@@ -216,13 +218,12 @@ class VectorStoreBackend(SyncProcessingBackend):
                     "model_used": f"duckdb+{self._embedding_model}",
                 }
 
-            elif action == "stats":
+            if action == "stats":
                 return {
                     "output": store.stats(),
                     "model_used": "duckdb",
                 }
 
-            else:
-                raise ValueError(f"Unknown action '{action}'. Supported: store, search, stats")
+            raise ValueError(f"Unknown action '{action}'. Supported: store, search, stats")
         finally:
             store.close()

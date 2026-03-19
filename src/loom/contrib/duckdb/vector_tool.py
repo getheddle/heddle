@@ -20,10 +20,11 @@ Example knowledge_silos config::
           description: "Find records semantically similar to a query"
           embedding_model: "nomic-embed-text"
 
-See also:
+See Also:
     loom.worker.embeddings -- OllamaEmbeddingProvider
     loom.worker.tools -- SyncToolProvider base class
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -98,9 +99,9 @@ class DuckDBVectorTool(SyncToolProvider):
             try:
                 rows = conn.execute(f"DESCRIBE {self.table_name}").fetchall()
                 return [
-                    row[0] for row in rows
-                    if row[0] not in exclude
-                    and not row[1].upper().startswith("FLOAT[")
+                    row[0]
+                    for row in rows
+                    if row[0] not in exclude and not row[1].upper().startswith("FLOAT[")
                 ]
             finally:
                 conn.close()
@@ -195,10 +196,7 @@ class DuckDBVectorTool(SyncToolProvider):
             [query_embedding, limit],
         ).fetchall()
 
-        result_cols = self.result_columns + ["similarity"]
-        results = [
-            {col: val for col, val in zip(result_cols, row)}
-            for row in rows
-        ]
+        result_cols = [*self.result_columns, "similarity"]
+        results = [dict(zip(result_cols, row, strict=False)) for row in rows]
 
         return {"results": results, "total": len(results)}

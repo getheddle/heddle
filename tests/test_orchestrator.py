@@ -11,6 +11,7 @@ Tests cover:
 
 All tests use InMemoryBus -- no NATS or external infrastructure required.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -25,7 +26,6 @@ import yaml
 
 from loom.bus.memory import InMemoryBus
 from loom.core.messages import (
-    ModelTier,
     OrchestratorGoal,
     TaskMessage,
     TaskResult,
@@ -34,7 +34,6 @@ from loom.core.messages import (
 from loom.orchestrator.runner import GoalState, OrchestratorActor
 from loom.orchestrator.store import InMemoryCheckpointStore
 from loom.worker.backends import LLMBackend
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -72,7 +71,8 @@ def _write_config(
         "name": "test-orchestrator",
         "timeout_seconds": timeout_seconds,
         "max_concurrent_tasks": 5,
-        "available_workers": available_workers or [
+        "available_workers": available_workers
+        or [
             {
                 "name": "summarizer",
                 "description": "Summarizes text",
@@ -158,7 +158,7 @@ class TestGoalState:
         assert state.pending_count == 3
 
         # Collect one result
-        first_id = list(state.dispatched_tasks.keys())[0]
+        first_id = next(iter(state.dispatched_tasks.keys()))
         state.collected_results[first_id] = TaskResult(
             task_id=first_id,
             worker_type="summarizer",
@@ -235,10 +235,14 @@ class TestHandleMessage:
         config_path = _write_config(timeout_seconds=1)
         try:
             # Return a valid subtask plan
-            plan = json.dumps([{
-                "worker_type": "summarizer",
-                "payload": {"text": "test"},
-            }])
+            plan = json.dumps(
+                [
+                    {
+                        "worker_type": "summarizer",
+                        "payload": {"text": "test"},
+                    }
+                ]
+            )
             backend = MockOrchestratorBackend(plan)
             bus = InMemoryBus()
             actor = OrchestratorActor(
@@ -502,14 +506,20 @@ class TestFullLifecycle:
     async def test_full_goal_lifecycle_with_simulated_worker(self):
         """Full decompose → dispatch → collect → synthesize → publish cycle."""
         # Backend that returns a valid single-task plan
-        plan = json.dumps([{
-            "worker_type": "summarizer",
-            "payload": {"text": "test content"},
-        }])
-        synthesis = json.dumps({
-            "summary": "synthesized result",
-            "confidence": "high",
-        })
+        plan = json.dumps(
+            [
+                {
+                    "worker_type": "summarizer",
+                    "payload": {"text": "test content"},
+                }
+            ]
+        )
+        synthesis = json.dumps(
+            {
+                "summary": "synthesized result",
+                "confidence": "high",
+            }
+        )
         backend = MockOrchestratorBackend(plan, synthesis)
 
         config_path = _write_config(timeout_seconds=5)
@@ -583,10 +593,9 @@ class TestFullLifecycle:
     async def test_subtask_limit_truncates_plan(self):
         """When decomposition returns more subtasks than max_concurrent_tasks, truncate."""
         # Return 10 subtasks
-        plan = json.dumps([
-            {"worker_type": "summarizer", "payload": {"text": f"chunk {i}"}}
-            for i in range(10)
-        ])
+        plan = json.dumps(
+            [{"worker_type": "summarizer", "payload": {"text": f"chunk {i}"}} for i in range(10)]
+        )
         backend = MockOrchestratorBackend(plan)
 
         config_path = _write_config(timeout_seconds=1)
@@ -613,7 +622,7 @@ class TestFullLifecycle:
                 try:
                     msg = await asyncio.wait_for(task_sub.__anext__(), timeout=0.5)
                     dispatched.append(msg)
-                except (asyncio.TimeoutError, StopAsyncIteration):
+                except (TimeoutError, StopAsyncIteration):
                     break
             assert len(dispatched) == 5
         finally:
@@ -659,10 +668,9 @@ class TestFullLifecycle:
     async def test_collection_timeout_returns_partial_results(self):
         """When timeout expires before all results arrive, partial results are synthesized."""
         # Plan with 3 subtasks, only 1 will respond
-        plan = json.dumps([
-            {"worker_type": "summarizer", "payload": {"text": f"chunk {i}"}}
-            for i in range(3)
-        ])
+        plan = json.dumps(
+            [{"worker_type": "summarizer", "payload": {"text": f"chunk {i}"}} for i in range(3)]
+        )
         synthesis = json.dumps({"partial": True, "confidence": "low"})
         backend = MockOrchestratorBackend(plan, synthesis)
 
@@ -756,13 +764,16 @@ class TestCheckpointing:
                 await actor._record_in_history(goal_state, results, {"confidence": "high"})
 
             import structlog
+
             log = structlog.get_logger().bind(goal_id=goal.goal_id)
             await actor._maybe_checkpoint(goal_state, log)
 
             # Checkpoint should have been created
             assert goal_state.checkpoint_counter == 1
             # History should be trimmed to recent window
-            assert len(goal_state.conversation_history) <= actor._checkpoint_manager.recent_window_size
+            assert (
+                len(goal_state.conversation_history) <= actor._checkpoint_manager.recent_window_size
+            )
         finally:
             os.unlink(config_path)
 
@@ -801,6 +812,7 @@ class TestCheckpointing:
                 await actor._record_in_history(goal_state, results, {})
 
             import structlog
+
             log = structlog.get_logger().bind(goal_id=goal.goal_id)
 
             # Should not raise
@@ -825,6 +837,7 @@ class TestCheckpointing:
             goal_state = GoalState(goal=goal)
 
             import structlog
+
             log = structlog.get_logger().bind(goal_id=goal.goal_id)
             await actor._maybe_checkpoint(goal_state, log)
             assert goal_state.checkpoint_counter == 0

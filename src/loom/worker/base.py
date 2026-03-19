@@ -5,6 +5,7 @@ Extracts the reusable worker lifecycle from the LLM-specific worker:
 message parsing, I/O contract validation, result publishing, timing,
 and error handling. Subclasses implement process() to do the actual work.
 """
+
 from __future__ import annotations
 
 import time
@@ -39,7 +40,7 @@ class TaskWorker(BaseActor):
         actor_id: str,
         config_path: str,
         nats_url: str = "nats://nats:4222",
-    ):
+    ) -> None:
         super().__init__(actor_id, nats_url)
         self.config = self._load_config(config_path)
 
@@ -48,6 +49,7 @@ class TaskWorker(BaseActor):
             return yaml.safe_load(f)
 
     async def handle_message(self, data: dict[str, Any]) -> None:
+        """Handle an incoming task message through the full worker lifecycle."""
         task = TaskMessage(**data)
         start = time.monotonic()
 
@@ -61,7 +63,9 @@ class TaskWorker(BaseActor):
             # 1. Validate input
             errors = validate_input(task.payload, self.config.get("input_schema", {}))
             if errors:
-                await self._publish_result(task, TaskStatus.FAILED, error=f"Input validation: {errors}")
+                await self._publish_result(
+                    task, TaskStatus.FAILED, error=f"Input validation: {errors}"
+                )
                 return
 
             # 2. Delegate to subclass — inject model_tier into metadata
@@ -74,7 +78,8 @@ class TaskWorker(BaseActor):
             output_errors = validate_output(output, self.config.get("output_schema", {}))
             if output_errors:
                 await self._publish_result(
-                    task, TaskStatus.FAILED,
+                    task,
+                    TaskStatus.FAILED,
                     error=f"Output validation: {output_errors}",
                     model_used=result.get("model_used"),
                     tokens=result.get("token_usage"),
@@ -84,7 +89,8 @@ class TaskWorker(BaseActor):
             # 4. Publish success
             elapsed = int((time.monotonic() - start) * 1000)
             await self._publish_result(
-                task, TaskStatus.COMPLETED,
+                task,
+                TaskStatus.COMPLETED,
                 output=output,
                 model_used=result.get("model_used"),
                 tokens=result.get("token_usage"),
@@ -114,7 +120,7 @@ class TaskWorker(BaseActor):
             {
                 "output": dict,              # Must match output_schema
                 "model_used": str | None,    # Identifier for what processed this
-                "token_usage": dict | None,  # {"prompt_tokens": int, "completion_tokens": int} or empty
+                "token_usage": dict | None,  # {"prompt_tokens": int, ...} or empty
             }
         """
         ...

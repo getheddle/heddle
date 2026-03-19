@@ -44,20 +44,21 @@ State tracking:
 
     Workers and the router are stateless by design.
 
-See also:
+See Also:
     loom.orchestrator.pipeline -- PipelineOrchestrator (fixed stage sequence)
     loom.orchestrator.decomposer -- GoalDecomposer (LLM-based task breakdown)
     loom.orchestrator.synthesizer -- ResultSynthesizer (result combination)
     loom.orchestrator.checkpoint -- CheckpointManager (context compression)
     loom.core.messages -- all message schemas
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 import yaml
@@ -71,9 +72,11 @@ from loom.core.messages import (
 )
 from loom.orchestrator.checkpoint import CheckpointManager
 from loom.orchestrator.decomposer import GoalDecomposer
-from loom.orchestrator.store import CheckpointStore
 from loom.orchestrator.synthesizer import ResultSynthesizer
-from loom.worker.backends import LLMBackend
+
+if TYPE_CHECKING:
+    from loom.orchestrator.store import CheckpointStore
+    from loom.worker.backends import LLMBackend
 
 logger = structlog.get_logger()
 
@@ -118,9 +121,8 @@ class GoalState:
     @property
     def all_collected(self) -> bool:
         """True when every dispatched task has a corresponding result."""
-        return (
-            len(self.dispatched_tasks) > 0
-            and len(self.collected_results) >= len(self.dispatched_tasks)
+        return len(self.dispatched_tasks) > 0 and len(self.collected_results) >= len(
+            self.dispatched_tasks
         )
 
     @property
@@ -173,7 +175,7 @@ class OrchestratorActor(BaseActor):
     checkpoint_store : CheckpointStore | None
         Checkpoint persistence backend.  Pass None to disable checkpointing.
 
-    Example
+    Example:
     -------
     ::
 
@@ -201,7 +203,7 @@ class OrchestratorActor(BaseActor):
         checkpoint_store: CheckpointStore | None = None,
         *,
         bus: Any | None = None,
-    ):
+    ) -> None:
         # Load config first so we can read max_concurrent_goals before
         # passing it to BaseActor.
         self.config = self._load_config(config_path)
@@ -239,12 +241,8 @@ class OrchestratorActor(BaseActor):
             )
 
         # Configurable timeouts and concurrency limits from YAML.
-        self._task_timeout: float = float(
-            self.config.get("timeout_seconds", 300)
-        )
-        self._max_concurrent_tasks: int = self.config.get(
-            "max_concurrent_tasks", 5
-        )
+        self._task_timeout: float = float(self.config.get("timeout_seconds", 300))
+        self._max_concurrent_tasks: int = self.config.get("max_concurrent_tasks", 5)
 
         # ---------- Mutable state ----------
         # Active goals being processed.  Keyed by goal_id.
@@ -369,7 +367,7 @@ class OrchestratorActor(BaseActor):
     ) -> list[TaskMessage]:
         """Use the GoalDecomposer to break a goal into subtasks.
 
-        Returns
+        Returns:
         -------
         list[TaskMessage]
             Ready-to-dispatch task messages.  May be empty if the LLM
@@ -453,7 +451,7 @@ class OrchestratorActor(BaseActor):
         On timeout, whatever results have been collected so far are returned.
         The synthesizer handles partial results gracefully.
 
-        Returns
+        Returns:
         -------
         list[TaskResult]
             Collected results (may be fewer than dispatched on timeout).
@@ -524,7 +522,7 @@ class OrchestratorActor(BaseActor):
         try:
             await asyncio.wait_for(all_done.wait(), timeout=self._task_timeout)
             log.info("orchestrator.all_results_collected")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             collected = len(goal_state.collected_results)
             log.warning(
                 "orchestrator.collection_timeout",
@@ -554,7 +552,7 @@ class OrchestratorActor(BaseActor):
         to produce an LLM-driven coherent narrative.  If no LLM backend is
         available, falls back to deterministic merge.
 
-        Returns
+        Returns:
         -------
         dict[str, Any]
             The synthesized output dict, ready for inclusion in the final
@@ -676,24 +674,23 @@ class OrchestratorActor(BaseActor):
 
         goal = goal_state.goal
 
-        if not self._checkpoint_manager.should_checkpoint(
-            goal_state.conversation_history
-        ):
+        if not self._checkpoint_manager.should_checkpoint(goal_state.conversation_history):
             return
 
         log.info("orchestrator.checkpoint_triggered")
         goal_state.checkpoint_counter += 1
 
         # Build completed/pending task summaries for the checkpoint.
-        completed_tasks = []
-        for entry in goal_state.conversation_history:
-            for r in entry.get("results", []):
-                completed_tasks.append({
-                    "task_id": r.get("task_id"),
-                    "worker_type": r.get("worker_type"),
-                    "status": r.get("status"),
-                    "summary": r.get("output_preview", r.get("error", "")),
-                })
+        completed_tasks = [
+            {
+                "task_id": r.get("task_id"),
+                "worker_type": r.get("worker_type"),
+                "status": r.get("status"),
+                "summary": r.get("output_preview", r.get("error", "")),
+            }
+            for entry in goal_state.conversation_history
+            for r in entry.get("results", [])
+        ]
 
         try:
             checkpoint = await self._checkpoint_manager.create_checkpoint(
@@ -708,9 +705,7 @@ class OrchestratorActor(BaseActor):
 
             # Reset conversation history, keeping only the recent window.
             window = self._checkpoint_manager.recent_window_size
-            goal_state.conversation_history = (
-                goal_state.conversation_history[-window:]
-            )
+            goal_state.conversation_history = goal_state.conversation_history[-window:]
 
             log.info(
                 "orchestrator.checkpoint_created",

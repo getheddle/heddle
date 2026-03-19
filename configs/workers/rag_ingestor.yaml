@@ -1,16 +1,71 @@
-# RAG Pipeline — Telegram Ingestor (processor worker)
-# Reads a Telegram JSON export and produces NormalizedPost objects.
+# =============================================================================
+# RAG Ingestor Worker Configuration (Processor)
+# =============================================================================
 #
-# Usage:
+# Reads a Telegram JSON export file and produces NormalizedPost objects.
+# This is a processor worker — it does NOT call an LLM. Instead, it runs
+# a Python backend class that parses and normalizes the raw export data.
+#
+# Component:  Processor worker (worker_kind: "processor")
+# Source:     src/loom/worker/processor.py (ProcessorWorker)
+# Backend:    src/loom/contrib/rag/backends.py (IngestorBackend)
+# Parser:     src/loom/contrib/rag/ingestion/telegram_ingestor.py (TelegramIngestor)
+# Loaded by:  loom.core.config.load_config()
+# Validated:  loom.core.contracts.py (I/O schema enforcement)
+#
+# Run with:
 #   loom processor --config configs/workers/rag_ingestor.yaml
+#   loom processor --config configs/workers/rag_ingestor.yaml --nats-url nats://localhost:4222
+#
+# NATS subject:  loom.tasks.rag_ingestor.local
+# Queue group:   Workers auto-join queue groups for load balancing.
+#
+# Data flow (RAG pipeline):
+#   [rag_ingestor] --> rag_mux --> rag_chunker --> rag_vectorstore
+#   source_path (Telegram JSON) --> NormalizedPost objects
+#
+# Telegram JSON export format:
+#   The input file must be a Telegram Desktop JSON export (Settings > Export).
+#   Expected structure: {"name": "...", "id": 12345, "messages": [...]}
+#   Each message has: id, type, date, text (string or list of text entities).
+#
+# Related configs:
+#   configs/orchestrators/rag_pipeline.yaml — pipeline that chains this worker
+#   configs/workers/rag_mux.yaml            — next stage (multiplexer)
+#   configs/workers/_template.yaml          — annotated template for new workers
+# =============================================================================
 
+# name (str, required)
+# Must match the worker_type used in pipeline stage definitions and routing.
 name: "rag_ingestor"
+
+# description (str, optional)
+# Shown in Workshop UI and MCP tool discovery.
 description: "Ingests Telegram JSON exports into NormalizedPost objects."
+
+# worker_kind (str, required for processor workers)
+# "processor" — runs a Python backend class instead of calling an LLM.
+# "llm" — calls an LLM backend (default if omitted).
 worker_kind: "processor"
 
+# processing_backend (str, required for processor workers)
+# Fully qualified Python class path. The class must extend
+# loom.worker.processor.SyncProcessingBackend and implement process(payload).
+# Available RAG backends in loom.contrib.rag.backends:
+#   - IngestorBackend   — Telegram JSON export parsing
+#   - MuxBackend        — Multi-channel stream multiplexing
+#   - ChunkerBackend    — Sentence-level text chunking
+#   - VectorStoreBackend — DuckDB vector storage and search
 processing_backend: "loom.contrib.rag.backends.IngestorBackend"
+
+# backend_config (dict, optional)
+# Keyword arguments passed to the backend constructor.
+# IngestorBackend takes no constructor args — the source_path is provided
+# per-task in the payload. Leave empty or omit entirely.
 backend_config: {}
 
+# input_schema (dict, required)
+# Validated before the backend's process() method is called.
 input_schema:
   type: object
   required: [source_path]
@@ -19,6 +74,11 @@ input_schema:
       type: string
       description: "Absolute path to a Telegram JSON export file."
 
+# output_schema (dict, required)
+# Validated after the backend's process() method returns.
+# posts: list of NormalizedPost dicts (see loom.contrib.rag.schemas.post)
+# channel_id/channel_name: extracted from the Telegram export metadata
+# post_count: total number of parsed posts (for pipeline progress tracking)
 output_schema:
   type: object
   required: [posts, channel_id, channel_name, post_count]
@@ -34,6 +94,17 @@ output_schema:
     post_count:
       type: integer
 
+# default_model_tier (str, required)
+# Processor workers don't use an LLM, but the tier determines the NATS
+# subject for routing: loom.tasks.rag_ingestor.{tier}
+# "local" is conventional for processor workers.
 default_model_tier: "local"
+
+# reset_after_task (bool, required — MUST be true)
+# Workers are stateless. No state carries between tasks.
 reset_after_task: true
+
+# timeout_seconds (int, optional, default: 60)
+# 120s allows parsing large Telegram exports (10K+ messages).
+# Increase for very large channels.
 timeout_seconds: 120

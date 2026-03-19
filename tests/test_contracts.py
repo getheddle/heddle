@@ -1,4 +1,5 @@
 """Test I/O contract validation."""
+
 from loom.core.contracts import validate_input, validate_output
 
 

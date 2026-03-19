@@ -1,16 +1,61 @@
-# RAG Pipeline — Trend Analyzer (LLM worker)
-# Detects recurring topics and narrative trends across a time window.
+# =============================================================================
+# RAG Trend Analyzer Worker Configuration (LLM)
+# =============================================================================
 #
-# This is an LLM worker (not processor) — it calls an LLM backend to
-# analyze muxed stream windows.
+# Detects recurring narrative topics and trends across multi-channel Telegram
+# post windows. Unlike the other RAG workers, this is an LLM worker — it sends
+# formatted post batches to an LLM for analysis and receives structured JSON.
 #
-# Usage:
+# Component:  LLM worker (worker_kind: "llm")
+# Source:     src/loom/worker/runner.py (LLMWorker)
+# Analysis:   src/loom/contrib/rag/analysis/llm_analyzers.py (TrendAnalyzer)
+# Loaded by:  loom.core.config.load_config()
+# Validated:  loom.core.contracts.py (I/O schema enforcement)
+#
+# Run with:
 #   loom worker --config configs/workers/rag_trend_analyzer.yaml --tier local
+#   loom worker --config configs/workers/rag_trend_analyzer.yaml --tier standard
+#
+# NATS subject:  loom.tasks.rag_trend_analyzer.{tier}
+#
+# This worker is designed for Persian (Farsi) content but works with any language.
+# The system prompt instructs the LLM to preserve Persian text and handle RTL.
+#
+# Related LLM analyzers (defined in llm_analyzers.py, each needs its own config):
+#   - TrendAnalyzer       — this worker; detects recurring topics
+#   - CorroborationFinder — finds cross-channel confirmation of claims
+#   - AnomalyDetector     — flags unusual posts or patterns
+#   - DataExtractor       — extracts structured data (names, dates, numbers)
+#
+# Tier selection:
+#   "local"    — Ollama. Fast, free, good for development and testing.
+#                May miss subtle trends or produce lower-quality analysis.
+#   "standard" — Claude Sonnet. Recommended for production. Good balance
+#                of quality and cost for trend analysis.
+#   "frontier" — Claude Opus. Best for complex geopolitical analysis where
+#                nuance and reasoning quality are critical.
+#
+# Related configs:
+#   configs/orchestrators/rag_pipeline.yaml — can be added as a pipeline stage
+#   configs/workers/rag_mux.yaml            — produces the muxed windows this analyzes
+#   configs/workers/_template.yaml          — annotated template for new workers
+# =============================================================================
 
+# name (str, required)
 name: "rag_trend_analyzer"
+
+# description (str, optional)
 description: "Detects narrative trends across multi-channel Telegram windows."
+
+# worker_kind (str, optional — "llm" is the default)
+# Explicitly set to "llm" to clarify this is an LLM worker, unlike the other
+# RAG workers which are processors.
 worker_kind: "llm"
 
+# system_prompt (str, required for LLM workers)
+# This prompt handles Persian/Arabic/mixed content. The LLM must return
+# valid JSON matching the output_schema below. The prompt asks for 3-8 trends
+# with topic labels, descriptions, channel presence, and severity ratings.
 system_prompt: |
   You are an expert intelligence analyst processing Persian-language Telegram posts.
   Text may be in Persian (Farsi), Arabic, or mixed Persian/English.
@@ -38,6 +83,11 @@ system_prompt: |
   }
   Return 3-8 trends. Focus on political, economic, social, and security topics.
 
+# input_schema (dict, required)
+# posts: pre-formatted text containing multiple posts for analysis.
+#   Typically produced by formatting MuxedStream window entries.
+# window_id: optional identifier for the time window being analyzed.
+# entry_count: optional count of posts in the window (for logging/tracking).
 input_schema:
   type: object
   required: [posts]
@@ -50,6 +100,9 @@ input_schema:
     entry_count:
       type: integer
 
+# output_schema (dict, required)
+# trends: array of trend objects. Each trend has topic_label, description,
+# and optionally severity, sentiment, channels_present, post_indices, keywords.
 output_schema:
   type: object
   required: [trends]
@@ -67,8 +120,25 @@ output_schema:
           severity:
             type: string
 
+# default_model_tier (str, required)
+# "local" for development; upgrade to "standard" for production analysis.
+# Valid: "local" | "standard" | "frontier"
 default_model_tier: "local"
+
+# max_input_tokens (int, optional)
+# 8000 tokens accommodates ~20-30 Telegram posts in a single window.
+# For larger windows, increase or batch the analysis.
 max_input_tokens: 8000
+
+# max_output_tokens (int, optional)
+# 4000 tokens allows 3-8 detailed trend objects with descriptions and metadata.
+# Trend analysis output is typically 1500-3000 tokens.
 max_output_tokens: 4000
+
+# reset_after_task (bool, required — MUST be true)
 reset_after_task: true
+
+# timeout_seconds (int, optional, default: 60)
+# 120s for trend analysis. LLM needs time to read posts, identify patterns,
+# and produce structured JSON. Local models may need the full window.
 timeout_seconds: 120

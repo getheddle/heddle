@@ -1,8 +1,4 @@
-"""
-loom.contrib.rag.mux.stream_mux
----------------------------------
-StreamMux: merges multiple NormalizedPost iterables (one per channel) into
-a single time-ordered MuxedStream.
+"""StreamMux: merge multiple NormalizedPost iterables into a time-ordered stream.
 
 Key behaviors:
   - Stable sort by timestamp (UTC), tie-break by channel_id
@@ -20,19 +16,22 @@ from __future__ import annotations
 
 import logging
 from itertools import chain
-from typing import Iterable
+from typing import TYPE_CHECKING
 
-from ..schemas.post import NormalizedPost
-from ..schemas.mux import MuxEntry, MuxedStream, MuxWindowConfig
-from ..ingestion.telegram_ingestor import TelegramIngestor
-from ..tools.temporal_batcher import tumbling_windows, sliding_windows, describe_windows
+from ..schemas.mux import MuxedStream, MuxEntry, MuxWindowConfig
+from ..tools.temporal_batcher import describe_windows, sliding_windows, tumbling_windows
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from ..ingestion.telegram_ingestor import TelegramIngestor
+    from ..schemas.post import NormalizedPost
 
 logger = logging.getLogger(__name__)
 
 
 class StreamMux:
-    """
-    Multiplexes N NormalizedPost streams into a single chronological MuxedStream.
+    """Multiplex N NormalizedPost streams into a single chronological MuxedStream.
 
     Typical usage::
 
@@ -48,17 +47,17 @@ class StreamMux:
 
     def __init__(self) -> None:
         self._streams: list[Iterable[NormalizedPost]] = []
-        self._channel_meta: list[tuple[int, str]] = []   # (id, name)
+        self._channel_meta: list[tuple[int, str]] = []  # (id, name)
 
     def add_stream(
         self,
         posts: Iterable[NormalizedPost],
         channel_id: int | None = None,
         channel_name: str | None = None,
-    ) -> "StreamMux":
-        """
-        Register a post stream. channel_id/name are auto-detected from first post
-        if not provided.
+    ) -> StreamMux:
+        """Register a post stream.
+
+        channel_id/name are auto-detected from first post if not provided.
         """
         # Materialize to list so we can inspect metadata
         post_list = list(posts)
@@ -93,24 +92,24 @@ class StreamMux:
             raise ValueError("All registered streams were empty.")
 
         # Assign window IDs if config provided
-        window_map: dict[str, str] = {}   # global_id -> window_id
+        window_map: dict[str, str] = {}  # global_id -> window_id
         window_seq_map: dict[str, int] = {}
 
         if window_config:
-            window_map, window_seq_map = self._compute_window_assignments(
-                all_posts, window_config
-            )
+            window_map, window_seq_map = self._compute_window_assignments(all_posts, window_config)
 
         # Build MuxEntry list
         entries: list[MuxEntry] = []
         for seq, post in enumerate(all_posts):
             gid = post.global_id
-            entries.append(MuxEntry(
-                mux_seq=seq,
-                post=post,
-                window_id=window_map.get(gid),
-                window_seq=window_seq_map.get(gid),
-            ))
+            entries.append(
+                MuxEntry(
+                    mux_seq=seq,
+                    post=post,
+                    window_id=window_map.get(gid),
+                    window_seq=window_seq_map.get(gid),
+                )
+            )
 
         source_ids = [m[0] for m in self._channel_meta]
         source_names = [m[1] for m in self._channel_meta]
@@ -139,11 +138,11 @@ class StreamMux:
         posts: list[NormalizedPost],
         config: MuxWindowConfig,
     ) -> tuple[dict[str, str], dict[str, int]]:
-        """
-        Pre-compute window_id for each post so MuxEntry can carry it.
+        """Pre-compute window_id for each post so MuxEntry can carry it.
+
         Returns (window_map, window_seq_map).
 
-        NormalizedPost already has a `timestamp` attribute, so no proxy
+        NormalizedPost already has a ``timestamp`` attribute, so no proxy
         adapter is needed to satisfy the HasTimestamp protocol.
         """
         window_map: dict[str, str] = {}

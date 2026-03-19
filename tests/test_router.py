@@ -6,6 +6,7 @@ Tests cover:
 - TaskRouter.resolve_tier: override, default, unknown
 - TaskRouter.route: happy path, malformed message, rate-limited, dead-letter
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -17,9 +18,8 @@ import pytest
 import yaml
 
 from loom.bus.memory import InMemoryBus
-from loom.core.messages import ModelTier, TaskMessage, TaskPriority
+from loom.core.messages import ModelTier, TaskMessage
 from loom.router.router import DEAD_LETTER_SUBJECT, TaskRouter, TokenBucketRateLimiter
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -129,13 +129,15 @@ class TestRoute:
 
     @pytest.fixture
     def rules_path(self):
-        path = _write_rules({
-            "tier_overrides": {},
-            "rate_limits": {
-                "local": {"max_concurrent": 10},
-                "standard": {"max_concurrent": 5},
-            },
-        })
+        path = _write_rules(
+            {
+                "tier_overrides": {},
+                "rate_limits": {
+                    "local": {"max_concurrent": 10},
+                    "standard": {"max_concurrent": 5},
+                },
+            }
+        )
         yield path
         os.unlink(path)
 
@@ -170,10 +172,12 @@ class TestRoute:
     @pytest.mark.asyncio
     async def test_route_rate_limited_dead_letters(self, bus):
         """Rate-limited task goes to dead letter."""
-        rules_path = _write_rules({
-            "tier_overrides": {},
-            "rate_limits": {"local": {"max_concurrent": 1}},
-        })
+        rules_path = _write_rules(
+            {
+                "tier_overrides": {},
+                "rate_limits": {"local": {"max_concurrent": 1}},
+            }
+        )
         try:
             router = TaskRouter(rules_path, bus)
             await bus.connect()
@@ -199,10 +203,12 @@ class TestRoute:
     @pytest.mark.asyncio
     async def test_route_with_tier_override(self, bus):
         """Tier override redirects task to different tier subject."""
-        rules_path = _write_rules({
-            "tier_overrides": {"summarizer": "frontier"},
-            "rate_limits": {},
-        })
+        rules_path = _write_rules(
+            {
+                "tier_overrides": {"summarizer": "frontier"},
+                "rate_limits": {},
+            }
+        )
         try:
             router = TaskRouter(rules_path, bus)
             await bus.connect()
@@ -295,10 +301,12 @@ class TestRunAndProcessMessages:
     @pytest.mark.asyncio
     async def test_route_invalid_tier_override_dead_letters(self):
         """Invalid tier override sends task to dead letter."""
-        rules_path = _write_rules({
-            "tier_overrides": {"summarizer": "nonexistent_tier"},
-            "rate_limits": {},
-        })
+        rules_path = _write_rules(
+            {
+                "tier_overrides": {"summarizer": "nonexistent_tier"},
+                "rate_limits": {},
+            }
+        )
         try:
             bus = InMemoryBus()
             router = TaskRouter(rules_path, bus)

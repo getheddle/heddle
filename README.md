@@ -44,8 +44,8 @@ complex goals into subtasks, dispatches them to appropriate workers, collects
 results, and synthesizes final answers. Self-checkpointing to Redis prevents
 context overflow.
 
-**Pipeline Orchestration** — sequential multi-stage pipelines where each stage
-maps inputs from previous stage outputs, with conditions and timeouts.
+**Pipeline Orchestration** — dependency-aware parallel stage execution with
+automatic parallelism, conditional stages, and concurrent goal processing.
 
 **Deterministic Routing** — a pure-logic router dispatches tasks by worker type
 and model tier with token-bucket rate limiting and dead-letter handling. No LLM
@@ -101,7 +101,7 @@ that separates concerns across specialized actors.
 | MCP gateway (config-driven tool server) | Complete |
 | Contrib: DuckDB, Redis, RAG | Complete |
 | Worker Workshop (web UI) | Complete |
-| Unit tests | 831 passing |
+| Unit tests | 991 passing, 87% coverage |
 
 ---
 
@@ -113,6 +113,9 @@ uv sync --all-extras
 
 # Run unit tests (no infrastructure needed)
 uv run pytest tests/ -v -m "not integration"
+
+# Lint
+uv run ruff check src/ tests/
 ```
 
 For the full 7-step setup with infrastructure and LLM backends, see
@@ -135,6 +138,7 @@ For the full 7-step setup with infrastructure and LLM backends, see
   chunking, vector storage, and analysis
 - **[Kubernetes Deployment](docs/KUBERNETES.md)** — Minikube manifests,
   container builds, environment variables
+- **[Coding Guide](docs/CODING_GUIDE.md)** — Coding, documentation, and commenting standards for contributors
 - **[Contributing](docs/CONTRIBUTING.md)** — CLA, technical standards, PR process
 
 ---

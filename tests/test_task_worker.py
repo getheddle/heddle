@@ -1,14 +1,14 @@
 """Test TaskWorker base class (unit tests, no infrastructure)."""
-import json
-from unittest.mock import AsyncMock, patch
+
+from unittest.mock import AsyncMock
 
 import pytest
 
 from loom.core.messages import ModelTier, TaskMessage, TaskResult, TaskStatus
 from loom.worker.base import TaskWorker
 
-
 # --- Mock implementation ---
+
 
 class EchoWorker(TaskWorker):
     """Simple test worker that echoes payload."""
@@ -66,6 +66,7 @@ def _make_task(payload=None, worker_type="echo_worker"):
 
 
 # --- Tests ---
+
 
 @pytest.mark.asyncio
 async def test_task_worker_valid_input_output(tmp_path):
@@ -179,6 +180,8 @@ async def test_task_worker_result_subject_default(tmp_path):
 
 # --- Helpers ---
 
+
 def _yaml_dump(data):
     import yaml
+
     return yaml.dump(data)

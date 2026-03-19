@@ -1,4 +1,5 @@
 """Tests for DuckDBVectorTool — semantic similarity search."""
+
 import json
 
 import duckdb

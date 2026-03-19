@@ -5,6 +5,7 @@ Validates the YAML config structure at startup to catch common mistakes
 (missing fields, mutually exclusive options, invalid values) before the
 scheduler begins its timer loop.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -48,7 +49,7 @@ def validate_scheduler_config(
     return errors
 
 
-def _validate_schedule_entry(
+def _validate_schedule_entry(  # noqa: PLR0912
     entry: Any,
     index: int,
     path: str,
@@ -77,6 +78,7 @@ def _validate_schedule_entry(
     if has_cron:
         try:
             from croniter import croniter
+
             croniter(entry["cron"])
         except (ValueError, KeyError) as exc:
             errors.append(f"{prefix}: invalid cron expression '{entry.get('cron')}': {exc}")
@@ -94,9 +96,7 @@ def _validate_schedule_entry(
     # Dispatch type
     dispatch_type = entry.get("dispatch_type")
     if dispatch_type and dispatch_type not in _VALID_DISPATCH_TYPES:
-        errors.append(
-            f"{prefix}: 'dispatch_type' must be 'goal' or 'task', got '{dispatch_type}'"
-        )
+        errors.append(f"{prefix}: 'dispatch_type' must be 'goal' or 'task', got '{dispatch_type}'")
 
     # Dispatch-specific validation
     if dispatch_type == "goal":

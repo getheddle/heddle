@@ -7,16 +7,19 @@ workflow.  Uses DuckDB for zero-config embedded analytics.
 The database is created at ``~/.loom/workshop.duckdb`` by default (or
 ``:memory:`` for testing).  Schema is auto-created on first connection.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import uuid
-from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import duckdb
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 
 class WorkshopDB:
@@ -150,8 +153,12 @@ class WorkshopDB:
         ).fetchall()
         return [
             {
-                "id": r[0], "worker_name": r[1], "config_hash": r[2],
-                "config_yaml": r[3], "created_at": r[4], "description": r[5],
+                "id": r[0],
+                "worker_name": r[1],
+                "config_hash": r[2],
+                "config_yaml": r[3],
+                "created_at": r[4],
+                "description": r[5],
             }
             for r in rows
         ]
@@ -174,8 +181,14 @@ class WorkshopDB:
             """INSERT INTO eval_runs
                (id, worker_name, worker_version_id, tier, total_cases, status, metadata)
                VALUES (?, ?, ?, ?, ?, 'running', ?)""",
-            [run_id, worker_name, worker_version_id, tier, total_cases,
-             json.dumps(metadata) if metadata else None],
+            [
+                run_id,
+                worker_name,
+                worker_version_id,
+                tier,
+                total_cases,
+                json.dumps(metadata) if metadata else None,
+            ],
         )
         return run_id
 
@@ -193,7 +206,9 @@ class WorkshopDB:
         )
 
     def get_eval_runs(
-        self, worker_name: str | None = None, limit: int = 50,
+        self,
+        worker_name: str | None = None,
+        limit: int = 50,
     ) -> list[dict[str, Any]]:
         """Get eval runs, optionally filtered by worker name."""
         if worker_name:
@@ -215,10 +230,17 @@ class WorkshopDB:
             ).fetchall()
         return [
             {
-                "id": r[0], "worker_name": r[1], "worker_version_id": r[2],
-                "tier": r[3], "started_at": r[4], "completed_at": r[5],
-                "status": r[6], "total_cases": r[7], "passed_cases": r[8],
-                "failed_cases": r[9], "avg_latency_ms": r[10],
+                "id": r[0],
+                "worker_name": r[1],
+                "worker_version_id": r[2],
+                "tier": r[3],
+                "started_at": r[4],
+                "completed_at": r[5],
+                "status": r[6],
+                "total_cases": r[7],
+                "passed_cases": r[8],
+                "failed_cases": r[9],
+                "avg_latency_ms": r[10],
             }
             for r in rows
         ]
@@ -255,7 +277,9 @@ class WorkshopDB:
                 model_used, passed, error)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [
-                result_id, run_id, case_name,
+                result_id,
+                run_id,
+                case_name,
                 json.dumps(input_payload),
                 json.dumps(expected_output) if expected_output else None,
                 json.dumps(actual_output) if actual_output else None,
@@ -263,8 +287,12 @@ class WorkshopDB:
                 json.dumps(validation_errors) if validation_errors else None,
                 score,
                 json.dumps(score_details) if score_details else None,
-                latency_ms, prompt_tokens, completion_tokens,
-                model_used, passed, error,
+                latency_ms,
+                prompt_tokens,
+                completion_tokens,
+                model_used,
+                passed,
+                error,
             ],
         )
         return result_id
@@ -282,19 +310,30 @@ class WorkshopDB:
         ).fetchall()
         return [
             {
-                "id": r[0], "run_id": r[1], "case_name": r[2],
-                "input_payload": r[3], "expected_output": r[4],
-                "actual_output": r[5], "raw_response": r[6],
-                "validation_errors": r[7], "score": r[8],
-                "score_details": r[9], "latency_ms": r[10],
-                "prompt_tokens": r[11], "completion_tokens": r[12],
-                "model_used": r[13], "passed": r[14], "error": r[15],
+                "id": r[0],
+                "run_id": r[1],
+                "case_name": r[2],
+                "input_payload": r[3],
+                "expected_output": r[4],
+                "actual_output": r[5],
+                "raw_response": r[6],
+                "validation_errors": r[7],
+                "score": r[8],
+                "score_details": r[9],
+                "latency_ms": r[10],
+                "prompt_tokens": r[11],
+                "completion_tokens": r[12],
+                "model_used": r[13],
+                "passed": r[14],
+                "error": r[15],
             }
             for r in rows
         ]
 
     def compare_eval_runs(
-        self, run_id_a: str, run_id_b: str,
+        self,
+        run_id_a: str,
+        run_id_b: str,
     ) -> dict[str, Any]:
         """Compare two eval runs side-by-side.
 
@@ -309,13 +348,14 @@ class WorkshopDB:
         results_b = {r["case_name"]: r for r in self.get_eval_results(run_id_b)}
 
         all_cases = sorted(set(results_a.keys()) | set(results_b.keys()))
-        comparison = []
-        for case in all_cases:
-            comparison.append({
+        comparison = [
+            {
                 "case_name": case,
                 "a": results_a.get(case),
                 "b": results_b.get(case),
-            })
+            }
+            for case in all_cases
+        ]
 
         return {
             "run_a": run_a,
@@ -349,10 +389,17 @@ class WorkshopDB:
                 avg_prompt_tokens, avg_completion_tokens)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [
-                metric_id, worker_name, tier, window_seconds,
-                request_count, success_count, failure_count,
-                avg_latency_ms, p95_latency_ms,
-                avg_prompt_tokens, avg_completion_tokens,
+                metric_id,
+                worker_name,
+                tier,
+                window_seconds,
+                request_count,
+                success_count,
+                failure_count,
+                avg_latency_ms,
+                p95_latency_ms,
+                avg_prompt_tokens,
+                avg_completion_tokens,
             ],
         )
         return metric_id
@@ -388,11 +435,17 @@ class WorkshopDB:
             ).fetchall()
         return [
             {
-                "id": r[0], "worker_name": r[1], "tier": r[2],
-                "recorded_at": r[3], "window_seconds": r[4],
-                "request_count": r[5], "success_count": r[6],
-                "failure_count": r[7], "avg_latency_ms": r[8],
-                "p95_latency_ms": r[9], "avg_prompt_tokens": r[10],
+                "id": r[0],
+                "worker_name": r[1],
+                "tier": r[2],
+                "recorded_at": r[3],
+                "window_seconds": r[4],
+                "request_count": r[5],
+                "success_count": r[6],
+                "failure_count": r[7],
+                "avg_latency_ms": r[8],
+                "p95_latency_ms": r[9],
+                "avg_prompt_tokens": r[10],
                 "avg_completion_tokens": r[11],
             }
             for r in rows

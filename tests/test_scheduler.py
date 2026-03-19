@@ -11,13 +11,12 @@ Tests cover:
 
 All tests use InMemoryBus -- no NATS or external infrastructure required.
 """
+
 from __future__ import annotations
 
 import asyncio
 import signal
 import time
-from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 import yaml
@@ -28,11 +27,9 @@ from loom.core.messages import (
     OrchestratorGoal,
     TaskMessage,
     TaskPriority,
-    TaskStatus,
 )
 from loom.scheduler.config import validate_scheduler_config
 from loom.scheduler.scheduler import ScheduleEntry, SchedulerActor
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -146,7 +143,9 @@ class TestValidateSchedulerConfig:
     def test_schedule_entry_missing_name(self):
         config = {
             "name": "sched",
-            "schedules": [{"dispatch_type": "goal", "cron": "* * * * *", "goal": {"instruction": "x"}}],
+            "schedules": [
+                {"dispatch_type": "goal", "cron": "* * * * *", "goal": {"instruction": "x"}}
+            ],
         }
         errors = validate_scheduler_config(config)
         assert any("missing required key 'name'" in e for e in errors)
@@ -294,7 +293,9 @@ class TestDispatch:
         sub = await actor._bus.subscribe("loom.goals.incoming")
 
         entry = ScheduleEntry(
-            name="g1", cron=None, interval_seconds=60,
+            name="g1",
+            cron=None,
+            interval_seconds=60,
             dispatch_type="goal",
             goal_config={"instruction": "Test goal", "context": {"a": 1}},
         )
@@ -312,7 +313,9 @@ class TestDispatch:
         sub = await actor._bus.subscribe("loom.goals.incoming")
 
         entry = ScheduleEntry(
-            name="g2", cron=None, interval_seconds=60,
+            name="g2",
+            cron=None,
+            interval_seconds=60,
             dispatch_type="goal",
             goal_config={"instruction": "High pri", "priority": "high"},
         )
@@ -328,7 +331,9 @@ class TestDispatch:
         sub = await actor._bus.subscribe("loom.goals.incoming")
 
         entry = ScheduleEntry(
-            name="g3", cron=None, interval_seconds=60,
+            name="g3",
+            cron=None,
+            interval_seconds=60,
             dispatch_type="goal",
             goal_config={"instruction": "Repeat"},
         )
@@ -345,7 +350,9 @@ class TestDispatch:
         sub = await actor._bus.subscribe("loom.tasks.incoming")
 
         entry = ScheduleEntry(
-            name="t1", cron=None, interval_seconds=60,
+            name="t1",
+            cron=None,
+            interval_seconds=60,
             dispatch_type="task",
             task_config={
                 "worker_type": "summarizer",
@@ -367,7 +374,9 @@ class TestDispatch:
         sub = await actor._bus.subscribe("loom.tasks.incoming")
 
         entry = ScheduleEntry(
-            name="meta_test", cron=None, interval_seconds=60,
+            name="meta_test",
+            cron=None,
+            interval_seconds=60,
             dispatch_type="task",
             task_config={"worker_type": "w", "payload": {}},
         )
@@ -382,7 +391,9 @@ class TestDispatch:
         sub = await actor._bus.subscribe("loom.tasks.incoming")
 
         entry = ScheduleEntry(
-            name="t2", cron=None, interval_seconds=60,
+            name="t2",
+            cron=None,
+            interval_seconds=60,
             dispatch_type="task",
             task_config={
                 "worker_type": "w",
@@ -404,7 +415,9 @@ class TestDispatch:
         sub = await actor._bus.subscribe("loom.goals.incoming")
 
         entry = ScheduleEntry(
-            name="route_goal", cron=None, interval_seconds=60,
+            name="route_goal",
+            cron=None,
+            interval_seconds=60,
             dispatch_type="goal",
             goal_config={"instruction": "routed"},
         )
@@ -419,7 +432,9 @@ class TestDispatch:
         sub = await actor._bus.subscribe("loom.tasks.incoming")
 
         entry = ScheduleEntry(
-            name="route_task", cron=None, interval_seconds=60,
+            name="route_task",
+            cron=None,
+            interval_seconds=60,
             dispatch_type="task",
             task_config={"worker_type": "w", "payload": {}},
         )
@@ -434,7 +449,9 @@ class TestDispatch:
         await actor._bus.connect()
 
         entry = ScheduleEntry(
-            name="bad", cron=None, interval_seconds=60,
+            name="bad",
+            cron=None,
+            interval_seconds=60,
             dispatch_type="task",
             task_config=None,  # Will cause KeyError in _dispatch_task
         )

@@ -1,25 +1,85 @@
-# Worker configuration template
-# Copy this file and customize for each worker type.
+# =============================================================================
+# Worker Configuration Template — Definitive Reference
+# =============================================================================
+#
+# Copy this file and customize for each new worker type.
+# This template documents EVERY field available in a worker config.
 #
 # Two kinds of workers:
-#   worker_kind: "llm"       — Calls an LLM backend (default if omitted)
-#   worker_kind: "processor"  — Runs a non-LLM processing backend
+#   worker_kind: "llm"       — Calls an LLM backend to process tasks (default)
+#   worker_kind: "processor"  — Runs a Python processing backend (no LLM)
 #
-# For processor workers, specify:
-#   processing_backend: "mypackage.module.ClassName"
-#   backend_config: {key: value, ...}  (passed to backend constructor)
+# Component:  src/loom/worker/runner.py (LLMWorker) or
+#             src/loom/worker/processor.py (ProcessorWorker)
+# Loaded by:  loom.core.config.load_config()
+# Validated:  loom.core.contracts.py (I/O schema enforcement)
+#
+# Run LLM workers with:
+#   loom worker --config configs/workers/my_worker.yaml --tier local
+#   loom worker --config configs/workers/my_worker.yaml --tier standard --nats-url nats://localhost:4222
+#
+# Run processor workers with:
+#   loom processor --config configs/workers/my_processor.yaml
+#   loom processor --config configs/workers/my_processor.yaml --nats-url nats://localhost:4222
+#
+# NATS subject convention:
+#   loom.tasks.{name}.{tier}    — Workers subscribe here (with queue groups)
+#   loom.results.{goal_id}      — Results flow back to orchestrators
+#   loom.tasks.dead_letter      — Unroutable/rate-limited tasks
+#
+# Related configs:
+#   configs/router_rules.yaml              — tier overrides & rate limits
+#   configs/orchestrators/default.yaml     — orchestrator that dispatches to workers
+#   configs/orchestrators/rag_pipeline.yaml — pipeline that chains workers
+#   configs/mcp/docman.yaml                — MCP gateway exposing workers as tools
+#   configs/workers/summarizer.yaml        — example LLM worker
+#   configs/workers/rag_ingestor.yaml      — example processor worker
+# =============================================================================
 
+
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║  IDENTITY                                                                ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+# name (str, required)
+# Unique identifier for this worker type. Must match:
+#   - The worker_type field in TaskMessage routing
+#   - The worker_type field in pipeline stage definitions
+#   - The filename (without .yaml) by convention
+# Format: lowercase, underscores. Examples: "summarizer", "rag_ingestor"
 name: "template_worker"
+
+# description (str, optional)
+# Human-readable description. Shown in:
+#   - Workshop UI worker list and detail page
+#   - MCP tool discovery (becomes the MCP tool description for clients)
+#   - Orchestrator's AVAILABLE WORKERS list (helps LLM pick the right worker)
+# Keep concise — one sentence describing what the worker does.
 description: "What this worker does in one sentence."
 
-# Worker kind: "llm" (default) or "processor"
+# worker_kind (str, optional, default: "llm")
+# "llm"       — Calls an LLM backend. Requires system_prompt.
+# "processor"  — Runs a Python backend class. Requires processing_backend.
 # worker_kind: "llm"
 
-# --- LLM worker fields ---
 
-# System prompt — the ONLY instructions the worker sees.
-# Keep narrow and specific. No general-purpose instructions.
-# (Not used by processor workers.)
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║  LLM WORKER FIELDS (only used when worker_kind is "llm")               ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+# system_prompt (str, required for LLM workers)
+# The ONLY instructions the LLM sees. The worker builds the prompt as:
+#   System message: system_prompt (+ injected knowledge silos if configured)
+#   User message:   the validated task payload (JSON)
+#
+# Best practices:
+#   - Keep narrow and task-specific. One worker = one job.
+#   - Define INPUT FORMAT, OUTPUT FORMAT, and RULES sections.
+#   - Output must be valid JSON matching output_schema.
+#   - Include error format: {"error": "description"} for invalid inputs.
+#   - Never add general-purpose instructions (reasoning, creativity, etc.).
+#   - Never reference previous conversations (workers are stateless).
+# (Not used by processor workers — omit or comment out.)
 system_prompt: |
   You are a specialized agent that does exactly ONE thing: [specific task].
 
@@ -40,19 +100,49 @@ system_prompt: |
   - Never deviate from the output format
   - Never reference previous conversations (you have none)
 
-# --- Processor worker fields ---
 
-# Fully qualified class path for the processing backend.
-# (Only used when worker_kind: "processor")
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║  PROCESSOR WORKER FIELDS (only used when worker_kind is "processor")    ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+# processing_backend (str, required for processor workers)
+# Fully qualified Python class path. The class must extend
+# loom.worker.processor.SyncProcessingBackend and implement:
+#   process(payload: dict) -> dict
+#
+# The process() method receives the validated input payload and must return
+# a dict matching output_schema.
+#
+# Built-in backends:
+#   loom.contrib.rag.backends.IngestorBackend    — Telegram JSON parsing
+#   loom.contrib.rag.backends.MuxBackend         — Stream multiplexing
+#   loom.contrib.rag.backends.ChunkerBackend     — Sentence chunking
+#   loom.contrib.rag.backends.VectorStoreBackend — DuckDB vector storage
+#
+# (Only used when worker_kind: "processor". Omit for LLM workers.)
 # processing_backend: "mypackage.backends.MyBackend"
 
-# Config dict passed to the backend constructor as kwargs.
+# backend_config (dict, optional)
+# Keyword arguments passed to the backend constructor as **kwargs.
+# Example for a workspace-aware backend:
 # backend_config:
 #   workspace_dir: "/tmp/loom-workspace"
+#   max_retries: 3
 
-# --- Common fields ---
 
-# I/O contract for validation (used by both LLM and processor workers)
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║  I/O CONTRACT (required for both LLM and processor workers)             ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+# input_schema (dict, required)
+# JSON Schema used by contracts.py to validate the incoming task payload
+# BEFORE processing. Invalid payloads are rejected immediately with
+# TaskResult(status=INVALID_INPUT) — no LLM call or backend execution occurs.
+#
+# Format: standard JSON Schema draft-07.
+# Must be type: object with required and properties.
+# Supported types: string, integer, number, boolean, array, object, null.
+# contracts.py correctly distinguishes boolean from integer (Python-specific).
 input_schema:
   type: object
   required: [field_one]
@@ -64,6 +154,11 @@ input_schema:
       items:
         type: string
 
+# output_schema (dict, required)
+# JSON Schema used by contracts.py to validate the output AFTER processing.
+# For LLM workers: validates the parsed JSON from the LLM response.
+# For processor workers: validates the dict returned by process().
+# If validation fails, the task fails with TaskStatus.INVALID_OUTPUT.
 output_schema:
   type: object
   required: [result_field, confidence]
@@ -75,27 +170,143 @@ output_schema:
       minimum: 0.0
       maximum: 1.0
 
-# Model routing defaults (can be overridden per-task)
+
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║  MODEL ROUTING (LLM workers only — ignored by processor workers)        ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+# default_model_tier (str, required)
+# Which LLM backend tier to use when no tier is specified in the TaskMessage.
+# Valid values:
+#   "local"     — Ollama (fast, free, limited reasoning).
+#                 Env: OLLAMA_URL (default: http://localhost:11434)
+#                 Good for: summarization, classification, simple extraction.
+#   "standard"  — Claude Sonnet via Anthropic API.
+#                 Env: ANTHROPIC_API_KEY
+#                 Good for: complex extraction, analysis, nuanced tasks.
+#   "frontier"  — Claude Opus via Anthropic API.
+#                 Env: ANTHROPIC_API_KEY
+#                 Good for: multi-step reasoning, complex analysis.
+#
+# Note: configs/router_rules.yaml tier_overrides can force a different tier
+# at dispatch time, regardless of what the TaskMessage or this default says.
+#
+# For processor workers, the tier is still used for NATS subject routing
+# (loom.tasks.{name}.{tier}) even though no LLM is called.
 default_model_tier: "standard"
+
+# max_input_tokens (int, optional)
+# Maximum token count for the input payload sent to the LLM.
+# Exceeding this fails the task before the LLM call.
+# Token count guidance:
+#   1 token ~ 4 characters (English), ~2-3 characters (Persian/Arabic)
+#   4000 tokens ~ 3000 words ~ 6 pages of text
+#   8000 tokens ~ 6000 words ~ 12 pages of text
+# Local models: typically 4K-8K context window.
+# Standard/frontier: up to 200K context but cost scales with input.
 max_input_tokens: 4000
+
+# max_output_tokens (int, optional)
+# Maximum tokens the LLM can generate. Controls response length and cost.
+# Too low: truncated JSON (parsing fails). Too high: wasted budget.
+# Guidance: 500 for simple outputs, 1000-2000 for structured extraction,
+#           4000+ for analysis with multiple objects.
 max_output_tokens: 2000
 
-# Knowledge context (optional, LLM workers only)
-# Files listed here are loaded and injected into the system prompt
+
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║  KNOWLEDGE SILOS (optional, LLM workers only)                           ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+# knowledge_sources (list, optional)
+# Files loaded and injected into the system prompt as additional context.
+# Supports two injection modes:
+#   "reference" — Appended to the system prompt as reference material.
+#                 Good for glossaries, domain definitions, style guides.
+#   "few_shot"  — Formatted as example input/output exchanges.
+#                 Good for teaching the LLM expected behavior by example.
+#
+# File formats: YAML, JSON, JSONL, plain text.
+# Paths are relative to the working directory.
 knowledge_sources: []
   # - path: "configs/knowledge/domain_glossary.yaml"
   #   inject_as: "reference"    # "reference" = append to system prompt
   # - path: "configs/knowledge/examples.jsonl"
   #   inject_as: "few_shot"     # "few_shot" = format as example exchanges
 
-# File-ref resolution (optional, LLM workers only)
-# When set, the worker reads JSON files from workspace_dir and injects
-# their content into the payload before building the LLM prompt.
-# For each field listed in resolve_file_refs, the worker adds a
-# "{field}_content" key with the parsed JSON data.
+# knowledge_silos (list, optional)
+# Structured knowledge injection with folder-based and tool-based silos.
+# More powerful than knowledge_sources — supports read-only, read-write,
+# and tool-based access patterns.
+#
+# Silo types:
+#   "folder_readonly"  — Load all files from a directory into system prompt.
+#                        Files are read once at task start.
+#   "folder_readwrite" — Like readonly, but worker can write back results.
+#                        Used for accumulating knowledge across tasks.
+#   "tool"             — Expose a DuckDB table or vector index as a callable
+#                        tool the LLM can invoke during execution.
+#                        Requires tool_provider configuration.
+#
+# Example:
+# knowledge_silos:
+#   - type: "folder_readonly"
+#     path: "configs/knowledge/domain_terms/"
+#     description: "Domain terminology and abbreviations"
+#   - type: "folder_readwrite"
+#     path: "/tmp/loom-workspace/accumulated/"
+#     description: "Accumulated analysis results"
+#   - type: "tool"
+#     tool_provider: "loom.contrib.duckdb.vector_tool.DuckDBVectorTool"
+#     tool_config:
+#       db_path: "/tmp/rag-vectors.duckdb"
+#       embedding_model: "nomic-embed-text"
+#     description: "Semantic search over ingested documents"
+
+
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║  FILE-REF RESOLUTION (optional, LLM workers only)                       ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+# workspace_dir (str, optional)
+# Base directory for file-ref resolution. When set along with resolve_file_refs,
+# the worker reads JSON files from this directory and injects their content
+# into the payload before building the LLM prompt.
+#
+# Security: path traversal protection is enforced by WorkspaceManager
+# (src/loom/core/workspace.py). Paths like "../../../etc/passwd" are rejected.
 # workspace_dir: "/tmp/loom-workspace"
+
+# resolve_file_refs (list[str], optional)
+# List of payload field names that contain file references (filenames).
+# For each field listed, the worker:
+#   1. Reads workspace_dir/{field_value} as JSON
+#   2. Adds "{field}_content" key to the payload with the parsed data
+# Example: resolve_file_refs: ["file_ref"] with payload {"file_ref": "data.json"}
+#   → reads /tmp/loom-workspace/data.json → adds "file_ref_content" to payload.
 # resolve_file_refs: ["file_ref"]
 
-# Session behavior
-reset_after_task: true     # ALWAYS true for workers. Non-negotiable.
+
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║  SESSION BEHAVIOR (required for both LLM and processor workers)         ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+# reset_after_task (bool, required — MUST be true)
+# Workers are stateless by design. After each task, the worker resets its
+# conversation history (LLM workers) or internal state (processor workers).
+# This is enforced, not optional. Setting to false would break:
+#   - Horizontal scaling (multiple replicas can't share conversation state)
+#   - Task isolation (one task's context leaking into another)
+#   - Reproducibility (same input must produce same output)
+# NEVER set this to false in production.
+reset_after_task: true
+
+# timeout_seconds (int, optional, default: 60)
+# Per-task timeout in seconds. If the worker doesn't complete within this
+# window, the task fails with TaskStatus.TIMEOUT.
+# Guidance:
+#   - Local LLM (Ollama): 15-30s for simple tasks, 60-120s for analysis
+#   - Standard (Claude Sonnet): 30-60s typical
+#   - Frontier (Claude Opus): 60-120s for complex reasoning
+#   - Processor workers: depends on backend complexity
 timeout_seconds: 60

@@ -37,16 +37,19 @@ Rate limiting:
     max_concurrent gives the refill rate). This is a simple dispatch-side
     throttle -- it does not track actual worker completion.
 """
+
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 import yaml
 
-from loom.bus.base import MessageBus
 from loom.core.messages import ModelTier, TaskMessage
+
+if TYPE_CHECKING:
+    from loom.bus.base import MessageBus
 
 logger = structlog.get_logger()
 

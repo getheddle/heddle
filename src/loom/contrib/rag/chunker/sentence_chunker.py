@@ -1,7 +1,4 @@
-"""
-loom.contrib.rag.chunker.sentence_chunker
--------------------------------------------
-Persian-aware sentence-boundary chunker for RAG text splitting.
+r"""Persian-aware sentence-boundary chunker for RAG text splitting.
 
 Persian sentence endings:
   - U+06D4 (Arabic full stop -- rare but present)
@@ -19,34 +16,40 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from ..schemas.chunk import TextChunk, ChunkStrategy
-from ..schemas.mux import MuxEntry
-from ..schemas.post import NormalizedPost
+from ..schemas.chunk import ChunkStrategy, TextChunk
 
+if TYPE_CHECKING:
+    from ..schemas.mux import MuxEntry
+    from ..schemas.post import NormalizedPost
 
 # Paragraph boundary -- two or more newlines
 _PARA_SPLIT = re.compile(r"\n{2,}")
 
 # Bullet prefix common in Telegram
-_BULLET_SPLIT = re.compile(r"(?=\U0001f539|\U0001f538|\u2022|\u25aa|\U0001f534|\U0001f535)", re.UNICODE)
+_BULLET_SPLIT = re.compile(
+    r"(?=\U0001f539|\U0001f538|\u2022|\u25aa|\U0001f534|\U0001f535)", re.UNICODE
+)
 
 
 @dataclass
 class ChunkConfig:
+    """Configuration for text chunking."""
+
     strategy: ChunkStrategy = ChunkStrategy.SENTENCE
-    target_chars: int = 400       # soft target per chunk
-    max_chars: int = 600          # hard ceiling
-    overlap_chars: int = 50       # overlap between consecutive chunks
-    min_chars: int = 20           # don't emit chunks shorter than this
+    target_chars: int = 400  # soft target per chunk
+    max_chars: int = 600  # hard ceiling
+    overlap_chars: int = 50  # overlap between consecutive chunks
+    min_chars: int = 20  # don't emit chunks shorter than this
 
 
 def chunk_post(
     post: NormalizedPost,
     config: ChunkConfig | None = None,
 ) -> list[TextChunk]:
-    """
-    Split a NormalizedPost into TextChunk objects.
+    """Split a NormalizedPost into TextChunk objects.
+
     Returns at least one chunk (the full text) even if < min_chars.
     """
     cfg = config or ChunkConfig()
@@ -85,7 +88,7 @@ def chunk_post(
         # Locate segment in original text using cumulative offset
         seg_idx = text.find(seg, cumulative_offset)
         if seg_idx == -1:
-            seg_idx = cumulative_offset   # fallback
+            seg_idx = cumulative_offset  # fallback
         char_start = seg_idx
         char_end = seg_idx + len(seg)
         cumulative_offset = char_end
@@ -95,20 +98,22 @@ def chunk_post(
     total = len(chunks)
     final: list[TextChunk] = []
     for i, chunk in enumerate(chunks):
-        final.append(TextChunk(
-            chunk_id=f"{post.global_id}:{i}",
-            source_global_id=post.global_id,
-            source_channel_id=post.source_channel_id,
-            source_channel_name=post.source_channel_name,
-            timestamp_unix=post.timestamp_unix,
-            text=chunk.text,
-            char_start=chunk.char_start,
-            char_end=chunk.char_end,
-            chunk_index=i,
-            total_chunks=total,
-            strategy=cfg.strategy,
-            overlap_chars=cfg.overlap_chars,
-        ))
+        final.append(
+            TextChunk(
+                chunk_id=f"{post.global_id}:{i}",
+                source_global_id=post.global_id,
+                source_channel_id=post.source_channel_id,
+                source_channel_name=post.source_channel_name,
+                timestamp_unix=post.timestamp_unix,
+                text=chunk.text,
+                char_start=chunk.char_start,
+                char_end=chunk.char_end,
+                chunk_index=i,
+                total_chunks=total,
+                strategy=cfg.strategy,
+                overlap_chars=cfg.overlap_chars,
+            )
+        )
 
     return final
 
@@ -122,6 +127,7 @@ def chunk_mux_entry(entry: MuxEntry, config: ChunkConfig | None = None) -> list[
 # Internal splitting helpers
 # ---------------------------------------------------------------------------
 
+
 def _para_split(text: str) -> list[str]:
     """Split on paragraph breaks (double newlines)."""
     parts = _PARA_SPLIT.split(text)
@@ -129,8 +135,8 @@ def _para_split(text: str) -> list[str]:
 
 
 def _sentence_split(text: str) -> list[str]:
-    """
-    Split on paragraph breaks first, then on sentence terminals.
+    """Split on paragraph breaks first, then on sentence terminals.
+
     Also splits on bullet markers common in Telegram.
     """
     paragraphs = _para_split(text)
@@ -158,12 +164,10 @@ def _sentence_split(text: str) -> list[str]:
 
 def _fixed_char_split(text: str, max_chars: int) -> list[str]:
     """Hard split every max_chars characters."""
-    return [text[i: i + max_chars] for i in range(0, len(text), max_chars)]
+    return [text[i : i + max_chars] for i in range(0, len(text), max_chars)]
 
 
-def _merge_segments(
-    segments: list[str], target: int, max_chars: int
-) -> list[str]:
+def _merge_segments(segments: list[str], target: int, max_chars: int) -> list[str]:
     """Merge short consecutive segments up to target; hard-split if > max_chars."""
     merged: list[str] = []
     buf = ""

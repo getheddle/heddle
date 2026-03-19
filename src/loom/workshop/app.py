@@ -4,6 +4,7 @@ Workshop web application — FastAPI + HTMX + Jinja2.
 Entry point: ``create_app()`` returns a configured FastAPI application.
 Start via CLI: ``loom workshop --port 8080``
 """
+
 from __future__ import annotations
 
 import json
@@ -30,17 +31,17 @@ _TEMPLATES_DIR = _THIS_DIR / "templates"
 _STATIC_DIR = _THIS_DIR / "static"
 
 
-def create_app(
+def create_app(  # noqa: PLR0915
     configs_dir: str = "configs/",
     db_path: str = "~/.loom/workshop.duckdb",
-    nats_url: str | None = None,
+    nats_url: str | None = None,  # noqa: ARG001
 ) -> FastAPI:
     """Create the Workshop FastAPI application.
 
     Args:
         configs_dir: Root directory containing ``workers/`` and ``orchestrators/``.
         db_path: DuckDB database path (``~`` is expanded).
-        nats_url: Optional NATS URL for live metrics.
+        nats_url: Optional NATS URL for live metrics (reserved for future use).
     """
     app = FastAPI(title="Loom Workshop", docs_url=None, redoc_url=None)
 
@@ -81,9 +82,13 @@ def create_app(
     @app.get("/workers", response_class=HTMLResponse)
     async def workers_list(request: Request):
         workers = config_mgr.list_workers()
-        return templates.TemplateResponse("workers/list.html", {
-            "request": request, "workers": workers,
-        })
+        return templates.TemplateResponse(
+            "workers/list.html",
+            {
+                "request": request,
+                "workers": workers,
+            },
+        )
 
     @app.get("/workers/{name}", response_class=HTMLResponse)
     async def worker_detail(request: Request, name: str):
@@ -93,15 +98,22 @@ def create_app(
         except FileNotFoundError:
             return HTMLResponse("Worker not found", status_code=404)
         versions = config_mgr.get_worker_version_history(name)
-        return templates.TemplateResponse("workers/detail.html", {
-            "request": request, "config": config, "yaml_content": yaml_content,
-            "name": name, "versions": versions,
-        })
+        return templates.TemplateResponse(
+            "workers/detail.html",
+            {
+                "request": request,
+                "config": config,
+                "yaml_content": yaml_content,
+                "name": name,
+                "versions": versions,
+            },
+        )
 
     @app.post("/workers/{name}", response_class=HTMLResponse)
     async def worker_save(request: Request, name: str):
         form = await request.form()
         import yaml
+
         try:
             config = yaml.safe_load(form["yaml_content"])
         except Exception as e:
@@ -128,10 +140,15 @@ def create_app(
             config = config_mgr.get_worker(name)
         except FileNotFoundError:
             return HTMLResponse("Worker not found", status_code=404)
-        return templates.TemplateResponse("workers/test.html", {
-            "request": request, "config": config, "name": name,
-            "available_tiers": list(backends.keys()),
-        })
+        return templates.TemplateResponse(
+            "workers/test.html",
+            {
+                "request": request,
+                "config": config,
+                "name": name,
+                "available_tiers": list(backends.keys()),
+            },
+        )
 
     @app.post("/workers/{name}/test/run", response_class=HTMLResponse)
     async def worker_test_run(request: Request, name: str):
@@ -143,14 +160,22 @@ def create_app(
         except FileNotFoundError:
             return HTMLResponse("Worker not found", status_code=404)
         except json.JSONDecodeError as e:
-            return templates.TemplateResponse("partials/test_result.html", {
-                "request": request, "error": f"Invalid JSON payload: {e}",
-            })
+            return templates.TemplateResponse(
+                "partials/test_result.html",
+                {
+                    "request": request,
+                    "error": f"Invalid JSON payload: {e}",
+                },
+            )
 
         result = await test_runner.run(config, payload, tier=tier)
-        return templates.TemplateResponse("partials/test_result.html", {
-            "request": request, "result": result,
-        })
+        return templates.TemplateResponse(
+            "partials/test_result.html",
+            {
+                "request": request,
+                "result": result,
+            },
+        )
 
     # --- Eval ---
 
@@ -161,10 +186,16 @@ def create_app(
         except FileNotFoundError:
             return HTMLResponse("Worker not found", status_code=404)
         runs = db.get_eval_runs(name)
-        return templates.TemplateResponse("workers/eval.html", {
-            "request": request, "config": config, "name": name,
-            "runs": runs, "available_tiers": list(backends.keys()),
-        })
+        return templates.TemplateResponse(
+            "workers/eval.html",
+            {
+                "request": request,
+                "config": config,
+                "name": name,
+                "runs": runs,
+                "available_tiers": list(backends.keys()),
+            },
+        )
 
     @app.post("/workers/{name}/eval/run", response_class=HTMLResponse)
     async def worker_eval_run(request: Request, name: str):
@@ -172,6 +203,7 @@ def create_app(
         try:
             config = config_mgr.get_worker(name)
             import yaml
+
             suite = yaml.safe_load(form["test_suite"])
             if not isinstance(suite, list):
                 raise ValueError("Test suite must be a YAML list")
@@ -190,18 +222,28 @@ def create_app(
         if not run:
             return HTMLResponse("Eval run not found", status_code=404)
         results = db.get_eval_results(run_id)
-        return templates.TemplateResponse("workers/eval_detail.html", {
-            "request": request, "name": name, "run": run, "results": results,
-        })
+        return templates.TemplateResponse(
+            "workers/eval_detail.html",
+            {
+                "request": request,
+                "name": name,
+                "run": run,
+                "results": results,
+            },
+        )
 
     # --- Pipelines ---
 
     @app.get("/pipelines", response_class=HTMLResponse)
     async def pipelines_list(request: Request):
         pipelines = config_mgr.list_pipelines()
-        return templates.TemplateResponse("pipelines/list.html", {
-            "request": request, "pipelines": pipelines,
-        })
+        return templates.TemplateResponse(
+            "pipelines/list.html",
+            {
+                "request": request,
+                "pipelines": pipelines,
+            },
+        )
 
     @app.get("/pipelines/{name}", response_class=HTMLResponse)
     async def pipeline_detail(request: Request, name: str):
@@ -211,10 +253,16 @@ def create_app(
             return HTMLResponse("Pipeline not found", status_code=404)
         graph = PipelineEditor.get_dependency_graph(config)
         workers = config_mgr.list_workers()
-        return templates.TemplateResponse("pipelines/editor.html", {
-            "request": request, "config": config, "name": name,
-            "graph": graph, "workers": workers,
-        })
+        return templates.TemplateResponse(
+            "pipelines/editor.html",
+            {
+                "request": request,
+                "config": config,
+                "name": name,
+                "graph": graph,
+                "workers": workers,
+            },
+        )
 
     @app.post("/pipelines/{name}/stage", response_class=HTMLResponse)
     async def pipeline_stage_edit(request: Request, name: str):
@@ -225,6 +273,7 @@ def create_app(
 
             if action == "insert":
                 import yaml
+
                 stage_def = yaml.safe_load(form["stage_yaml"])
                 after = form.get("after_stage") or None
                 config = PipelineEditor.insert_stage(config, stage_def, after)
@@ -232,11 +281,14 @@ def create_app(
                 config = PipelineEditor.remove_stage(config, form["stage_name"])
             elif action == "swap":
                 config = PipelineEditor.swap_worker(
-                    config, form["stage_name"], form["new_worker_type"],
+                    config,
+                    form["stage_name"],
+                    form["new_worker_type"],
                     form.get("new_tier") or None,
                 )
             elif action == "branch":
                 import yaml
+
                 stage_def = yaml.safe_load(form["stage_yaml"])
                 config = PipelineEditor.add_parallel_branch(config, stage_def)
 

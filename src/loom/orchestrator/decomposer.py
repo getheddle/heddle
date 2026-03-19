@@ -25,23 +25,26 @@ Each entry maps directly to a TaskMessage. The parent_task_id is set to the
 caller-provided value so that worker results route back to the orchestrator
 via loom.results.{goal_id}.
 
-See also:
+See Also:
     loom.core.messages.TaskMessage — the output message type
     loom.core.messages.OrchestratorGoal — the input message type
     loom.worker.backends.LLMBackend — the LLM interface used for decomposition
 """
+
 from __future__ import annotations
 
 import json
 import re
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from loom.core.messages import ModelTier, TaskMessage, TaskPriority
-from loom.worker.backends import LLMBackend
+
+if TYPE_CHECKING:
+    from loom.worker.backends import LLMBackend
 
 logger = structlog.get_logger()
 
@@ -54,10 +57,10 @@ logger = structlog.get_logger()
 _FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?\s*```$", re.DOTALL)
 
 
-def _extract_json_array(raw: str) -> list[dict[str, Any]]:
+def _extract_json_array(raw: str) -> list[dict[str, Any]]:  # noqa: PLR0912
     """Extract a JSON array from an LLM response, handling common quirks.
 
-    LLMs frequently wrap valid JSON in markdown code fences (``\u0060\u0060\u0060json ... \u0060\u0060\u0060``)
+    LLMs frequently wrap valid JSON in markdown code fences
     or add explanatory text before/after the JSON body. This function
     handles those cases in order of preference:
 
@@ -126,10 +129,10 @@ def _extract_json_array(raw: str) -> list[dict[str, Any]]:
 
 @dataclass(frozen=True)
 class WorkerDescriptor:
-    """Metadata about an available worker type, used to ground the LLM's
-    decomposition in what the system can actually execute.
+    """Metadata about an available worker type.
 
-    Typically constructed from a worker's YAML config file via the
+    Used to ground the LLM's decomposition in what the system can actually
+    execute.  Typically constructed from a worker's YAML config file via the
     :meth:`GoalDecomposer.from_worker_configs` factory method.
 
     Attributes:
@@ -250,8 +253,10 @@ def _build_user_message(goal: str, context: dict[str, Any] | None) -> str:
 
 
 class GoalDecomposer:
-    """LLM-based goal decomposition: turns a high-level goal string into a
-    list of TaskMessage objects ready for dispatch through the router.
+    """LLM-based goal decomposition.
+
+    Turns a high-level goal string into a list of TaskMessage objects ready
+    for dispatch through the router.
 
     The decomposer asks an LLM to plan which workers to invoke and how to
     parameterize each one. It then parses the structured JSON response into
@@ -303,7 +308,7 @@ class GoalDecomposer:
         *,
         max_tokens: int = 2000,
         temperature: float = 0.0,
-    ):
+    ) -> None:
         self._backend = backend
         self._workers = workers
         self._worker_names = {w.name for w in workers}
@@ -577,8 +582,7 @@ class GoalDecomposer:
         configs: list[dict[str, Any]],
         **kwargs: Any,
     ) -> GoalDecomposer:
-        """Convenience factory that builds WorkerDescriptors from raw worker
-        config dicts (as loaded from YAML files).
+        """Build WorkerDescriptors from raw worker config dicts.
 
         This avoids the caller having to manually construct WorkerDescriptor
         objects when the data is already available as parsed YAML configs.

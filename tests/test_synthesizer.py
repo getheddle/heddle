@@ -9,6 +9,7 @@ Tests cover:
 - _partition(): succeeded vs. failed grouping
 - _build_user_message(): prompt construction and truncation
 """
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,6 @@ import pytest
 from loom.core.messages import TaskResult, TaskStatus
 from loom.orchestrator.synthesizer import ResultSynthesizer
 from loom.worker.backends import LLMBackend
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -181,7 +181,7 @@ class TestParseLlmJson:
 
     def test_array_returns_none(self):
         """Only dict results are accepted, not arrays."""
-        result = ResultSynthesizer._parse_llm_json('[1, 2, 3]')
+        result = ResultSynthesizer._parse_llm_json("[1, 2, 3]")
         assert result is None
 
 
@@ -218,12 +218,14 @@ class TestSynthesize:
 
     @pytest.mark.asyncio
     async def test_synthesize_with_llm(self):
-        llm_output = json.dumps({
-            "synthesis": "Combined answer from workers",
-            "confidence": "high",
-            "conflicts": [],
-            "gaps": [],
-        })
+        llm_output = json.dumps(
+            {
+                "synthesis": "Combined answer from workers",
+                "confidence": "high",
+                "conflicts": [],
+                "gaps": [],
+            }
+        )
         results = [_make_result(), _make_result(worker_type="classifier")]
         synth = ResultSynthesizer(backend=MockSynthesisBackend(llm_output))
         output = await synth.synthesize(results, goal="Summarize and classify")

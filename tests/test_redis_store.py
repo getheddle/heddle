@@ -4,12 +4,12 @@ Test Redis checkpoint store (unit tests, no infrastructure).
 Tests the RedisCheckpointStore from loom.contrib.redis.store.
 All Redis interactions are mocked — no running Redis server is needed.
 """
+
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from loom.contrib.redis.store import RedisCheckpointStore
-
 
 # ---------------------------------------------------------------------------
 # Helpers

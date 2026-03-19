@@ -17,6 +17,7 @@ This module also provides:
         Subclasses implement ``process_sync()`` which is automatically
         offloaded to a thread pool via ``asyncio.run_in_executor``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -133,11 +134,12 @@ class ProcessorWorker(TaskWorker):
         config_path: str,
         backend: ProcessingBackend,
         nats_url: str = "nats://nats:4222",
-    ):
+    ) -> None:
         super().__init__(actor_id, config_path, nats_url)
         self.backend = backend
 
     async def process(self, payload: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
+        """Delegate processing to the backend and return the result."""
         logger.info("processor.processing", backend=type(self.backend).__name__)
         result = await self.backend.process(payload, self.config)
         return {

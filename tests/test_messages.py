@@ -1,5 +1,4 @@
 """Test message schema validation and serialization."""
-import pytest
 
 from loom.core.messages import ModelTier, TaskMessage, TaskResult, TaskStatus
 

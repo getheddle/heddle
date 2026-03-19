@@ -12,7 +12,7 @@ The core idea: instead of one big LLM context, split work across narrowly-scoped
 src/loom/
   core/
     actor.py              # BaseActor — async actor with signal handling, configurable concurrency
-    config.py             # load_config(), ConfigValidationError, YAML schema validation
+    config.py             # load_config(), ConfigValidationError, worker/pipeline/orchestrator/router validation
     contracts.py          # I/O contract validation (bool/int distinction, schema enforcement)
     messages.py           # Pydantic models: TaskMessage, TaskResult, OrchestratorGoal,
                           #   CheckpointState, ModelTier, TaskStatus
@@ -120,9 +120,13 @@ docs/                     # Project documentation
   GETTING_STARTED.md      # Quickstart guide
   KUBERNETES.md           # Kubernetes deployment guide
   CONTRIBUTING.md         # Contribution guidelines
+  CODING_GUIDE.md         # Coding, documentation, and commenting standards
   building-workflows.md   # How to build custom workflows
   rag-howto.md            # RAG pipeline setup guide
   workshop.md             # Workshop web app design, architecture, enhancement guide
+  conf.py                 # Sphinx configuration for API docs
+  index.md                # Sphinx documentation index
+  Makefile                # Sphinx build commands
 
 examples/
   rag_demo.py             # End-to-end RAG pipeline demo
@@ -130,7 +134,7 @@ examples/
 docker/                   # Dockerfiles (orchestrator, router, worker) + entrypoint.sh
 k8s/                      # Kubernetes manifests (namespace, NATS, Redis, workers, Kustomize)
 
-tests/                    # 50 test files, 831 unit tests + 1 integration test
+tests/                    # 55 test files, 991 unit tests + 1 integration test (87% coverage)
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -138,12 +142,14 @@ tests/                    # 50 test files, 831 unit tests + 1 integration test
   test_synthesizer.py     test_orchestrator.py    test_pipeline.py
   test_router.py          test_scheduler.py       test_extract_json.py
   test_backends.py        test_config_validation.py  test_scheduler_config.py
+  test_config_shipped.py  test_config_validation_extended.py
   test_store.py           test_actor.py           test_nats_adapter.py
   test_cli.py             test_redis_store.py     test_extract_json_extended.py
   test_contrib_duckdb_query.py  test_contrib_duckdb_vector.py  test_contrib_duckdb_view.py
   test_mcp_config.py      test_mcp_discovery.py   test_mcp_bridge.py
   test_mcp_resources.py   test_mcp_server.py
-  test_bus_memory.py      test_e2e_operations.py  # InMemoryBus edge cases + E2E integration
+  test_bus_memory.py      test_e2e_operations.py  # InMemoryBus E2E (happy path)
+  test_e2e_advanced.py                            # E2E failure paths, timeouts, diamonds
   test_workshop_runner.py test_workshop_db.py     test_workshop_eval.py
   test_workshop_config.py test_workshop_pipeline_editor.py
   test_integration.py                             # @pytest.mark.integration (needs NATS)
@@ -179,8 +185,12 @@ uv run pytest tests/ -v -m "not integration"
 # Run ALL tests including integration (needs NATS + workers running)
 uv run pytest tests/ -v
 
-# Lint
-uv run ruff check src/
+# Lint (src + tests)
+uv run ruff check src/ tests/
+uv run ruff format --check src/ tests/
+
+# Build API documentation (static HTML)
+uv run sphinx-build -b html docs/ docs/_build/html
 
 # Run a worker locally (needs NATS running)
 uv run loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
@@ -220,6 +230,7 @@ uv sync --extra rag           # RAG pipeline (DuckDB + requests for Ollama)
 uv sync --extra scheduler     # Cron expression parsing (croniter)
 uv sync --extra mcp           # MCP gateway (Model Context Protocol SDK)
 uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
+uv sync --extra docs           # Sphinx API documentation generation
 uv sync --all-extras          # All dependencies including dev/test
 ```
 

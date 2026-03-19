@@ -4,6 +4,7 @@ Covers:
 - Message format converters: _anthropic_messages, _ollama_messages, _openai_messages
 - Backend complete() methods with mocked httpx responses
 """
+
 from __future__ import annotations
 
 import json
@@ -20,10 +21,10 @@ from loom.worker.backends import (
     _openai_messages,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_response(json_data: dict) -> MagicMock:
     """Create a mock httpx.Response with .json() and .raise_for_status().
@@ -40,6 +41,7 @@ def _mock_response(json_data: dict) -> MagicMock:
 # ---------------------------------------------------------------------------
 # _anthropic_messages
 # ---------------------------------------------------------------------------
+
 
 class TestAnthropicMessages:
     def test_user_passthrough(self):
@@ -133,6 +135,7 @@ class TestAnthropicMessages:
 # _ollama_messages
 # ---------------------------------------------------------------------------
 
+
 class TestOllamaMessages:
     def test_user_passthrough(self):
         msgs = [{"role": "user", "content": "hello"}]
@@ -179,6 +182,7 @@ class TestOllamaMessages:
 # ---------------------------------------------------------------------------
 # _openai_messages
 # ---------------------------------------------------------------------------
+
 
 class TestOpenAIMessages:
     def test_user_passthrough(self):
@@ -234,6 +238,7 @@ class TestOpenAIMessages:
 # ---------------------------------------------------------------------------
 # AnthropicBackend.complete
 # ---------------------------------------------------------------------------
+
 
 class TestAnthropicBackendComplete:
     @pytest.fixture
@@ -312,12 +317,15 @@ class TestAnthropicBackendComplete:
         mock_post = AsyncMock(return_value=_mock_response(api_data))
         with patch.object(backend.client, "post", mock_post):
             await backend.complete(
-                "sys", "msg",
-                tools=[{
-                    "name": "my_tool",
-                    "description": "A tool",
-                    "parameters": {"type": "object", "properties": {"x": {"type": "string"}}},
-                }],
+                "sys",
+                "msg",
+                tools=[
+                    {
+                        "name": "my_tool",
+                        "description": "A tool",
+                        "parameters": {"type": "object", "properties": {"x": {"type": "string"}}},
+                    }
+                ],
             )
 
         call_body = mock_post.call_args[1]["json"]
@@ -341,7 +349,8 @@ class TestAnthropicBackendComplete:
         mock_post = AsyncMock(return_value=_mock_response(api_data))
         with patch.object(backend.client, "post", mock_post):
             await backend.complete(
-                "sys", "ignored_user_msg",
+                "sys",
+                "ignored_user_msg",
                 messages=[{"role": "user", "content": "actual msg"}],
             )
 
@@ -352,6 +361,7 @@ class TestAnthropicBackendComplete:
 # ---------------------------------------------------------------------------
 # OllamaBackend.complete
 # ---------------------------------------------------------------------------
+
 
 class TestOllamaBackendComplete:
     @pytest.fixture
@@ -423,7 +433,8 @@ class TestOllamaBackendComplete:
         mock_post = AsyncMock(return_value=_mock_response(api_data))
         with patch.object(backend.client, "post", mock_post):
             await backend.complete(
-                "system instructions", "ignored",
+                "system instructions",
+                "ignored",
                 messages=[{"role": "user", "content": "actual"}],
             )
 
@@ -438,7 +449,8 @@ class TestOllamaBackendComplete:
         mock_post = AsyncMock(return_value=_mock_response(api_data))
         with patch.object(backend.client, "post", mock_post):
             await backend.complete(
-                "sys", "msg",
+                "sys",
+                "msg",
                 tools=[{"name": "my_fn", "description": "desc", "parameters": {"type": "object"}}],
             )
 
@@ -452,6 +464,7 @@ class TestOllamaBackendComplete:
 # ---------------------------------------------------------------------------
 # OpenAICompatibleBackend.complete
 # ---------------------------------------------------------------------------
+
 
 class TestOpenAICompatibleBackendComplete:
     @pytest.fixture
@@ -681,7 +694,8 @@ class TestOpenAICompatibleBackendComplete:
         mock_post = AsyncMock(return_value=_mock_response(api_data))
         with patch.object(backend.client, "post", mock_post):
             await backend.complete(
-                "system instructions", "ignored",
+                "system instructions",
+                "ignored",
                 messages=[{"role": "user", "content": "real msg"}],
             )
 

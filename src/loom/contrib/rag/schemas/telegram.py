@@ -1,7 +1,4 @@
-"""
-loom.contrib.rag.schemas.telegram
-----------------------------------
-Raw Telegram JSON export schema (Telegram Desktop export format).
+"""Raw Telegram JSON export schema (Telegram Desktop export format).
 
 The ``text`` field in Telegram exports is polymorphic:
   - str   -> plain text message
@@ -16,17 +13,19 @@ Note: all ``datetime`` fields coming from the Telegram export are **naive**
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import Any, Union
-from datetime import datetime
+from datetime import datetime  # noqa: TC003 - needed at runtime by Pydantic
+from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
 
-class TelegramMediaType(str, Enum):
+class TelegramMediaType(StrEnum):
+    """Media types in Telegram exports."""
+
     AUDIO = "audio"
     DOCUMENT = "document"
-    PHOTO = "photo"          # photo is a separate field, not media_type
+    PHOTO = "photo"  # photo is a separate field, not media_type
     VIDEO = "video"
     VIDEO_FILE = "video_file"
     VOICE_MESSAGE = "voice_message"
@@ -36,34 +35,38 @@ class TelegramMediaType(str, Enum):
 
 class TextEntity(BaseModel):
     """A single entity within a Telegram text list."""
-    type: str                          # plain, bold, italic, link, mention, custom_emoji, ...
+
+    type: str  # plain, bold, italic, link, mention, custom_emoji, ...
     text: str
-    href: str | None = None            # for text_link type
-    document_id: str | None = None     # for custom_emoji type
+    href: str | None = None  # for text_link type
+    document_id: str | None = None  # for custom_emoji type
 
     model_config = {"extra": "allow"}
 
 
 # Telegram text field: either a plain str or a list of str / TextEntity
-TelegramTextFragment = Union[str, TextEntity]
-TelegramTextField = Union[str, list[TelegramTextFragment]]
+TelegramTextFragment = str | TextEntity
+TelegramTextField = str | list[TelegramTextFragment]
 
 
 class ReactionCount(BaseModel):
-    type: str   # "emoji" | "paid" (Telegram Stars reactions have no emoji field)
+    """Reaction count for a Telegram message."""
+
+    type: str  # "emoji" | "paid" (Telegram Stars reactions have no emoji field)
     count: int
-    emoji: str | None = None   # None for type="paid"
+    emoji: str | None = None  # None for type="paid"
 
     model_config = {"extra": "allow"}
 
 
 class RawTelegramMessage(BaseModel):
-    """
-    Represents a single message from a Telegram JSON export.
+    """Represents a single message from a Telegram JSON export.
+
     Non-message records (service events, etc.) are filtered out at ingestion.
     """
+
     id: int
-    type: str                                    # "message" | "service"
+    type: str  # "message" | "service"
     date: datetime
     date_unixtime: str
     from_: str | None = Field(None, alias="from")
@@ -122,23 +125,28 @@ class RawTelegramMessage(BaseModel):
 
     @property
     def has_text(self) -> bool:
+        """Return True if the message contains non-empty text."""
         return bool(self.plain_text.strip())
 
     @property
     def has_media(self) -> bool:
+        """Return True if the message contains media."""
         return bool(self.photo or self.media_type)
 
     @property
     def reaction_total(self) -> int:
+        """Return the total number of reactions."""
         return sum(r.count for r in self.reactions)
 
     @property
     def is_forward(self) -> bool:
+        """Return True if the message is forwarded."""
         return self.forwarded_from is not None
 
     @field_validator("text", mode="before")
     @classmethod
     def coerce_text(cls, v: Any) -> TelegramTextField:
+        """Coerce None and mixed lists into a valid TelegramTextField."""
         if v is None:
             return ""
         if isinstance(v, str):
@@ -158,8 +166,9 @@ class RawTelegramMessage(BaseModel):
 
 class TelegramChannel(BaseModel):
     """Top-level structure of a Telegram JSON channel export."""
+
     name: str
-    type: str       # "public_channel" | "private_channel" | "private_group" | ...
+    type: str  # "public_channel" | "private_channel" | "private_group" | ...
     id: int
     messages: list[RawTelegramMessage] = Field(default_factory=list)
 

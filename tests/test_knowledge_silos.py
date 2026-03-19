@@ -1,17 +1,15 @@
 """Tests for knowledge silo loading and write-back."""
-import json
-
-import pytest
 
 from loom.core.config import validate_worker_config
 from loom.worker.knowledge import (
+    _format_few_shot,
     _is_ignored,
     _load_folder_contents,
     _load_siloignore,
     apply_silo_updates,
     load_knowledge_silos,
+    load_knowledge_sources,
 )
-
 
 # --- Folder loading ---
 
@@ -186,13 +184,20 @@ class TestApplySiloUpdates:
         silo_dir = tmp_path / "silo"
         silo_dir.mkdir()
         return [
-            {"name": "my_silo", "type": "folder", "path": str(silo_dir), "permissions": "read_write"},
+            {
+                "name": "my_silo",
+                "type": "folder",
+                "path": str(silo_dir),
+                "permissions": "read_write",
+            },
         ]
 
     def test_add_file(self, tmp_path):
         """Add action creates a new file in the silo."""
         silos = self._writable_silos(tmp_path)
-        updates = [{"silo": "my_silo", "action": "add", "filename": "new.md", "content": "new content"}]
+        updates = [
+            {"silo": "my_silo", "action": "add", "filename": "new.md", "content": "new content"}
+        ]
 
         apply_silo_updates(updates, silos)
 
@@ -206,7 +211,9 @@ class TestApplySiloUpdates:
         existing = tmp_path / "silo" / "existing.md"
         existing.write_text("old content")
 
-        updates = [{"silo": "my_silo", "action": "modify", "filename": "existing.md", "content": "updated"}]
+        updates = [
+            {"silo": "my_silo", "action": "modify", "filename": "existing.md", "content": "updated"}
+        ]
         apply_silo_updates(updates, silos)
 
         assert existing.read_text() == "updated"
@@ -250,7 +257,9 @@ class TestApplySiloUpdates:
     def test_rejects_path_traversal_dotdot(self, tmp_path):
         """Filenames with .. are rejected."""
         silos = self._writable_silos(tmp_path)
-        updates = [{"silo": "my_silo", "action": "add", "filename": "../escape.md", "content": "bad"}]
+        updates = [
+            {"silo": "my_silo", "action": "add", "filename": "../escape.md", "content": "bad"}
+        ]
 
         apply_silo_updates(updates, silos)
         assert not (tmp_path / "escape.md").exists()
@@ -258,7 +267,9 @@ class TestApplySiloUpdates:
     def test_rejects_absolute_path(self, tmp_path):
         """Filenames starting with / are rejected."""
         silos = self._writable_silos(tmp_path)
-        updates = [{"silo": "my_silo", "action": "add", "filename": "/etc/passwd", "content": "bad"}]
+        updates = [
+            {"silo": "my_silo", "action": "add", "filename": "/etc/passwd", "content": "bad"}
+        ]
         apply_silo_updates(updates, silos)
 
     def test_rejects_unknown_silo(self, tmp_path):
@@ -276,7 +287,9 @@ class TestApplySiloUpdates:
     def test_add_creates_subdirectories(self, tmp_path):
         """Add action creates parent directories if needed."""
         silos = self._writable_silos(tmp_path)
-        updates = [{"silo": "my_silo", "action": "add", "filename": "sub/deep/new.md", "content": "deep"}]
+        updates = [
+            {"silo": "my_silo", "action": "add", "filename": "sub/deep/new.md", "content": "deep"}
+        ]
 
         apply_silo_updates(updates, silos)
         assert (tmp_path / "silo" / "sub" / "deep" / "new.md").read_text() == "deep"
@@ -374,3 +387,167 @@ class TestKnowledgeSilosValidation:
         }
         errors = validate_worker_config(config)
         assert any("should be a list" in e for e in errors)
+
+
+# --- Knowledge sources (load_knowledge_sources + _format_few_shot) ---
+
+
+class TestLoadKnowledgeSources:
+    """Tests for load_knowledge_sources() — covers lines 50-55, 61-62."""
+
+    def test_missing_source_file_skipped(self, tmp_path):
+        """Source with non-existent path is skipped (lines 50-55)."""
+        sources = [{"path": str(tmp_path / "does_not_exist.md"), "inject_as": "reference"}]
+        result = load_knowledge_sources(sources)
+        assert result == ""
+
+    def test_missing_source_continues_to_next(self, tmp_path):
+        """Missing source is skipped but valid sources still load."""
+        valid_file = tmp_path / "valid.md"
+        valid_file.write_text("Valid content")
+
+        sources = [
+            {"path": str(tmp_path / "missing.md")},
+            {"path": str(valid_file)},
+        ]
+        result = load_knowledge_sources(sources)
+        assert "Valid content" in result
+        assert "valid.md" in result
+
+    def test_few_shot_inject_as(self, tmp_path):
+        """Source with inject_as='few_shot' uses _format_few_shot (lines 61-62)."""
+        examples_file = tmp_path / "examples.txt"
+        examples_file.write_text("example 1\nexample 2")
+
+        sources = [{"path": str(examples_file), "inject_as": "few_shot"}]
+        result = load_knowledge_sources(sources)
+        assert "Few-Shot Examples" in result
+        assert "example 1" in result
+
+    def test_few_shot_yaml_list(self, tmp_path):
+        """YAML list source formatted as numbered examples (lines 69-77)."""
+        yaml_file = tmp_path / "examples.yaml"
+        yaml_file.write_text(
+            "- input: 'hello'\n  output: 'world'\n- input: 'foo'\n  output: 'bar'\n"
+        )
+
+        sources = [{"path": str(yaml_file), "inject_as": "few_shot"}]
+        result = load_knowledge_sources(sources)
+        assert "Example 1:" in result
+        assert "Input: hello" in result
+        assert "Output: world" in result
+        assert "Example 2:" in result
+        assert "Input: foo" in result
+        assert "Output: bar" in result
+
+
+class TestFormatFewShot:
+    """Tests for _format_few_shot() — covers lines 69-80."""
+
+    def test_yaml_list_format(self):
+        """YAML list content is formatted as numbered examples (lines 69-77)."""
+        content = "- input: 'q1'\n  output: 'a1'\n- input: 'q2'\n  output: 'a2'\n"
+        result = _format_few_shot(content, ".yaml")
+        assert "--- Few-Shot Examples ---" in result
+        assert "Example 1:" in result
+        assert "Input: q1" in result
+        assert "Output: a1" in result
+        assert "Example 2:" in result
+
+    def test_yml_extension(self):
+        """The .yml extension also triggers YAML parsing (line 69)."""
+        content = "- input: 'x'\n  output: 'y'\n"
+        result = _format_few_shot(content, ".yml")
+        assert "Example 1:" in result
+        assert "Input: x" in result
+
+    def test_yaml_non_list_falls_through(self):
+        """YAML that is not a list falls through to plain text (lines 71, 79-80)."""
+        content = "key: value\nnested:\n  a: 1\n"
+        result = _format_few_shot(content, ".yaml")
+        assert "--- Few-Shot Examples ---" in result
+        assert "key: value" in result
+
+    def test_plain_text_fallback(self):
+        """Non-YAML content returns as-is with header (lines 79-80)."""
+        content = "line 1\nline 2\n"
+        result = _format_few_shot(content, ".txt")
+        assert "--- Few-Shot Examples ---" in result
+        assert "line 1" in result
+
+    def test_json_extension_fallback(self):
+        """JSON extension falls through to plain text path (lines 79-80)."""
+        content = '{"examples": [1, 2, 3]}'
+        result = _format_few_shot(content, ".json")
+        assert "--- Few-Shot Examples ---" in result
+        assert content in result
+
+
+# --- Additional edge cases for folder contents ---
+
+
+class TestLoadFolderContentsEdgeCases:
+    """Additional tests for _load_folder_contents() edge cases."""
+
+    def test_siloignore_file_itself_skipped(self, tmp_path):
+        """The .siloignore file itself is not included in output (line 136)."""
+        (tmp_path / ".siloignore").write_text("*.log\n")
+        (tmp_path / "visible.md").write_text("I am visible")
+
+        result = _load_folder_contents(tmp_path)
+        assert "I am visible" in result
+        assert ".siloignore" not in result
+
+    def test_unreadable_file_skipped(self, tmp_path):
+        """Files that raise OSError/UnicodeDecodeError are skipped (lines 145-146)."""
+        # Create a file with invalid UTF-8 bytes
+        bad_file = tmp_path / "bad.txt"
+        bad_file.write_bytes(b"\x80\x81\x82\x83\xff\xfe")
+
+        good_file = tmp_path / "good.md"
+        good_file.write_text("readable content")
+
+        result = _load_folder_contents(tmp_path)
+        assert "readable content" in result
+        # bad.txt should have been skipped due to UnicodeDecodeError
+
+
+class TestApplySiloUpdatesPathEscape:
+    """Tests for path resolution escape in apply_silo_updates (lines 227-234)."""
+
+    def _writable_silos(self, tmp_path):
+        silo_dir = tmp_path / "silo"
+        silo_dir.mkdir()
+        return [
+            {
+                "name": "my_silo",
+                "type": "folder",
+                "path": str(silo_dir),
+                "permissions": "read_write",
+            },
+        ]
+
+    def test_symlink_escape_rejected(self, tmp_path):
+        """Symlink that resolves outside silo folder is rejected (lines 227-234)."""
+        silos = self._writable_silos(tmp_path)
+        silo_dir = tmp_path / "silo"
+
+        # Create a symlink inside the silo pointing outside
+        escape_target = tmp_path / "outside"
+        escape_target.mkdir()
+        symlink_dir = silo_dir / "escape_link"
+        symlink_dir.symlink_to(escape_target)
+
+        updates = [
+            {
+                "silo": "my_silo",
+                "action": "add",
+                "filename": "escape_link/evil.md",
+                "content": "escaped!",
+            }
+        ]
+
+        apply_silo_updates(updates, silos)
+
+        # The file should NOT have been created outside the silo
+        assert not (escape_target / "evil.md").exists()

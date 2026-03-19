@@ -1,16 +1,68 @@
-# RAG Pipeline — Stream Multiplexer (processor worker)
-# Merges multi-channel post streams into a chronological MuxedStream.
+# =============================================================================
+# RAG Stream Multiplexer Worker Configuration (Processor)
+# =============================================================================
 #
-# Usage:
+# Merges multi-channel NormalizedPost streams into a single chronologically
+# ordered MuxedStream with configurable time windows. Used to combine posts
+# from multiple Telegram channels for cross-channel analysis.
+#
+# Component:  Processor worker (worker_kind: "processor")
+# Source:     src/loom/worker/processor.py (ProcessorWorker)
+# Backend:    src/loom/contrib/rag/backends.py (MuxBackend)
+# Engine:     src/loom/contrib/rag/mux/stream_mux.py (StreamMux)
+# Loaded by:  loom.core.config.load_config()
+# Validated:  loom.core.contracts.py (I/O schema enforcement)
+#
+# Run with:
 #   loom processor --config configs/workers/rag_mux.yaml
+#   loom processor --config configs/workers/rag_mux.yaml --nats-url nats://localhost:4222
+#
+# NATS subject:  loom.tasks.rag_mux.local
+#
+# Data flow (RAG pipeline):
+#   rag_ingestor --> [rag_mux] --> rag_chunker --> rag_vectorstore
+#   NormalizedPost[] per channel --> MuxedStream (chronological windows)
+#
+# Windowing modes:
+#   Tumbling windows (default):
+#     Posts are grouped into non-overlapping windows of window_hours duration.
+#     Example: window_hours=6 produces 4 windows per day (00-06, 06-12, 12-18, 18-24).
+#
+#   Sliding windows:
+#     Set sliding_step_hours < window_hours for overlapping windows.
+#     Example: window_hours=6, sliding_step_hours=2 produces windows that
+#     overlap by 4 hours. Useful for trend detection that shouldn't miss
+#     events near window boundaries.
+#
+# Related configs:
+#   configs/orchestrators/rag_pipeline.yaml — pipeline that chains this worker
+#   configs/workers/rag_ingestor.yaml       — previous stage (ingestion)
+#   configs/workers/rag_chunker.yaml        — next stage (chunking)
+#   configs/workers/_template.yaml          — annotated template for new workers
+# =============================================================================
 
+# name (str, required)
+# Must match the worker_type used in pipeline stage definitions.
 name: "rag_mux"
+
+# description (str, optional)
 description: "Multiplexes multi-channel post streams with time windowing."
+
+# worker_kind (str, required for processor workers)
 worker_kind: "processor"
 
+# processing_backend (str, required for processor workers)
+# MuxBackend wraps StreamMux to merge and window multi-channel post streams.
 processing_backend: "loom.contrib.rag.backends.MuxBackend"
+
+# backend_config (dict, optional)
+# MuxBackend takes no constructor args. Windowing parameters are provided
+# per-task in the payload (window_hours, sliding_step_hours).
 backend_config: {}
 
+# input_schema (dict, required)
+# posts_by_channel: outer list = channels, inner list = NormalizedPost dicts per channel.
+# Example: [[{post1_ch1}, {post2_ch1}], [{post1_ch2}, {post2_ch2}]]
 input_schema:
   type: object
   required: [posts_by_channel]
@@ -22,14 +74,27 @@ input_schema:
         items:
           type: object
       description: "List of channel post lists (each a list of NormalizedPost dicts)."
+    # window_hours (number, optional, default: 6.0)
+    # Duration of each time window in hours. Controls granularity of analysis.
+    # Smaller windows = more granular analysis but more windows to process.
+    # Typical values: 1.0 (hourly), 6.0 (quarter-day), 24.0 (daily).
     window_hours:
       type: number
       default: 6.0
       description: "Window duration in hours."
+    # sliding_step_hours (number, optional)
+    # Step interval for sliding windows. If omitted, tumbling windows are used
+    # (non-overlapping, step = window_hours). Set to less than window_hours
+    # for overlapping windows. Example: window_hours=6, sliding_step_hours=2
+    # gives windows [0-6, 2-8, 4-10, ...].
     sliding_step_hours:
       type: number
       description: "Step interval for sliding windows (omit for tumbling)."
 
+# output_schema (dict, required)
+# stream: MuxedStream object with windows containing interleaved posts.
+# total_entries: total post count across all windows.
+# window_count: number of time windows generated.
 output_schema:
   type: object
   required: [stream, total_entries, window_count]
@@ -41,6 +106,13 @@ output_schema:
     window_count:
       type: integer
 
+# default_model_tier (str, required)
+# "local" is conventional for processor workers (no LLM call).
 default_model_tier: "local"
+
+# reset_after_task (bool, required — MUST be true)
 reset_after_task: true
+
+# timeout_seconds (int, optional, default: 60)
+# 120s allows merging and windowing large multi-channel datasets.
 timeout_seconds: 120

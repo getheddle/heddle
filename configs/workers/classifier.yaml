@@ -1,11 +1,50 @@
-# Classifier worker — assigns text to one of a predefined set of categories.
-# Run with:  loom worker --config configs/workers/classifier.yaml --tier local
-# Subscribes to:  loom.tasks.classifier.local
-# Router override: tier_overrides in router_rules.yaml forces this to "local"
+# =============================================================================
+# Classifier Worker Configuration
+# =============================================================================
+#
+# Assigns text to one of a predefined set of categories with confidence scoring.
+# Categories are provided at call time, not hard-coded — making this a generic
+# classification worker suitable for any taxonomy.
+#
+# Component:  LLM worker (worker_kind: "llm", the default)
+# Source:     src/loom/worker/runner.py (LLMWorker)
+# Loaded by:  loom.core.config.load_config()
+# Validated:  loom.core.contracts.py (I/O schema enforcement)
+#
+# Run with:
+#   loom worker --config configs/workers/classifier.yaml --tier local
+#   loom worker --config configs/workers/classifier.yaml --tier local --nats-url nats://localhost:4222
+#
+# NATS subject:  loom.tasks.classifier.local  (tier forced by router_rules.yaml)
+# Queue group:   Workers auto-join queue groups, so multiple replicas load-balance.
+#
+# Router override: tier_overrides in configs/router_rules.yaml forces this to "local"
+#
+# Category design tips:
+#   - Provide 2-10 categories for best accuracy. More than 10 degrades quality.
+#   - Use clear, non-overlapping category names (e.g., "invoice", "contract", "memo").
+#   - Add category_descriptions for ambiguous or domain-specific categories.
+#   - For hierarchical classification, chain two classifier calls:
+#     first broad categories, then subcategories for the winner.
+#
+# Related configs:
+#   configs/router_rules.yaml          — tier override & rate limits
+#   configs/orchestrators/default.yaml — lists this as an available_worker
+#   configs/mcp/docman.yaml            — exposes as "classify_document" MCP tool
+#   configs/workers/_template.yaml     — annotated template for new workers
+# =============================================================================
 
+# name (str, required)
+# Must match the worker_type in TaskMessage routing. Convention: lowercase, underscores.
 name: "classifier"
+
+# description (str, optional)
+# Shown in Workshop UI and MCP tool discovery.
 description: "Classifies input into predefined categories with confidence."
 
+# system_prompt (str, required for LLM workers)
+# The ONLY instructions the LLM sees. Categories are passed in the task payload,
+# not embedded here — this keeps the worker generic and reusable.
 system_prompt: |
   You are a text classifier. You assign inputs to exactly one category.
 
@@ -25,6 +64,10 @@ system_prompt: |
   - Category MUST be from the provided list. Never invent categories.
   - If genuinely ambiguous (<0.4 confidence), pick best guess and note in reasoning.
 
+# input_schema (dict, required)
+# JSON Schema for payload validation. categories must have at least 2 items —
+# single-category classification is meaningless.
+# category_descriptions is optional but improves accuracy for domain-specific taxonomies.
 input_schema:
   type: object
   required: [text, categories]
@@ -39,6 +82,9 @@ input_schema:
     category_descriptions:
       type: object
 
+# output_schema (dict, required)
+# The LLM must return exactly one category (from the input list), a confidence
+# score (0.0 = random guess, 1.0 = certain), and a brief reasoning string.
 output_schema:
   type: object
   required: [category, confidence, reasoning]
@@ -50,8 +96,25 @@ output_schema:
     reasoning:
       type: string
 
+# default_model_tier (str, required)
+# "local" is sufficient for most classification tasks. Upgrade to "standard" if
+# categories are nuanced or domain-specific and accuracy matters more than speed.
+# Valid: "local" | "standard" | "frontier"
 default_model_tier: "local"
+
+# max_input_tokens (int, optional)
+# 4000 tokens is generous for classification — the text + categories + descriptions
+# rarely exceed 2000 tokens. Increase only for very long documents.
 max_input_tokens: 4000
+
+# max_output_tokens (int, optional)
+# 500 tokens is ample for a single category + confidence + one-sentence reasoning.
 max_output_tokens: 500
+
+# reset_after_task (bool, required — MUST be true)
+# Workers are stateless. No state carries between tasks.
 reset_after_task: true
+
+# timeout_seconds (int, optional, default: 60)
+# Classification is fast. 20s is generous even for local models.
 timeout_seconds: 20

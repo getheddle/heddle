@@ -11,6 +11,7 @@ Storage contract:
 This is intentionally minimal. The CheckpointManager handles serialization
 and key naming; the store is just a key-value backend.
 """
+
 from __future__ import annotations
 
 import time
@@ -49,10 +50,12 @@ class InMemoryCheckpointStore(CheckpointStore):
         self._data: dict[str, tuple[str, float | None]] = {}
 
     async def set(self, key: str, value: str, ttl_seconds: int | None = None) -> None:
+        """Store a value with optional TTL."""
         expires_at = time.monotonic() + ttl_seconds if ttl_seconds else None
         self._data[key] = (value, expires_at)
 
     async def get(self, key: str) -> str | None:
+        """Retrieve a value, or None if missing/expired."""
         entry = self._data.get(key)
         if entry is None:
             return None

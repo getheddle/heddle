@@ -1,9 +1,8 @@
-"""
-loom.contrib.rag.ingestion.telegram_ingestor
-----------------------------------------------
-TelegramIngestor: Loom Actor that reads a Telegram JSON channel export,
-validates via Pydantic, normalizes text, and emits NormalizedPost objects
-onto the NATS subject ``rag.ingestion.<channel_id>``.
+"""TelegramIngestor: parse Telegram JSON exports and emit NormalizedPost objects.
+
+Reads a Telegram JSON channel export, validates via Pydantic, normalizes text,
+and emits NormalizedPost objects onto the NATS subject
+``rag.ingestion.<channel_id>``.
 
 In batch/test mode it can return a list directly (no NATS required).
 
@@ -19,11 +18,14 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Generator
+from typing import TYPE_CHECKING
 
-from ..schemas.telegram import TelegramChannel, RawTelegramMessage
-from ..schemas.post import NormalizedPost, Language, ChannelEditorProfile, ChannelBias
-from ..tools.rtl_normalizer import normalize, extract_links_from_entities
+from ..schemas.post import ChannelBias, ChannelEditorProfile, Language, NormalizedPost
+from ..schemas.telegram import RawTelegramMessage, TelegramChannel
+from ..tools.rtl_normalizer import extract_links_from_entities, normalize
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 
@@ -102,12 +104,10 @@ class TelegramIngestor:
     # Public API
     # ------------------------------------------------------------------
 
-    def load(self) -> "TelegramIngestor":
+    def load(self) -> TelegramIngestor:
         """Parse and validate the JSON export. Call before ingest()."""
         if not self.source_path.exists():
-            raise FileNotFoundError(
-                f"Telegram export file not found: {self.source_path}"
-            )
+            raise FileNotFoundError(f"Telegram export file not found: {self.source_path}")
         raw = json.loads(self.source_path.read_text(encoding="utf-8"))
         self._channel = TelegramChannel(**raw)
         self._profile = self._resolve_profile()
@@ -120,8 +120,8 @@ class TelegramIngestor:
         return self
 
     def ingest(self) -> Generator[NormalizedPost, None, None]:
-        """
-        Yield NormalizedPost objects for each qualifying message.
+        """Yield NormalizedPost objects for each qualifying message.
+
         Call load() first.
         """
         if self._channel is None:
@@ -154,8 +154,7 @@ class TelegramIngestor:
             yield post
 
         logger.info(
-            "Ingestion complete -- %s: total=%d yielded=%d "
-            "skipped(type=%d short=%d) errors=%d",
+            "Ingestion complete -- %s: total=%d yielded=%d skipped(type=%d short=%d) errors=%d",
             self._channel.name,
             stats["total"],
             stats["yielded"],
@@ -195,10 +194,7 @@ class TelegramIngestor:
             return None
 
         # Extract links from entities
-        entities_raw = (
-            [e.model_dump() for e in msg.text_entities]
-            if msg.text_entities else []
-        )
+        entities_raw = [e.model_dump() for e in msg.text_entities] if msg.text_entities else []
         links = extract_links_from_entities(entities_raw)
 
         # Normalize text
@@ -215,9 +211,7 @@ class TelegramIngestor:
             return None
 
         # Reaction breakdown (skip 'paid' type which has no emoji)
-        reaction_breakdown = {
-            r.emoji: r.count for r in msg.reactions if r.emoji is not None
-        }
+        reaction_breakdown = {r.emoji: r.count for r in msg.reactions if r.emoji is not None}
 
         # Resolve language hint safely
         try:
@@ -252,12 +246,15 @@ class TelegramIngestor:
 
     @property
     def channel_id(self) -> int | None:
+        """Return the channel ID, or None if not loaded."""
         return self._channel.id if self._channel else None
 
     @property
     def channel_name(self) -> str | None:
+        """Return the channel name, or None if not loaded."""
         return self._channel.name if self._channel else None
 
     @property
     def profile(self) -> ChannelEditorProfile | None:
+        """Return the resolved editorial profile."""
         return self._profile

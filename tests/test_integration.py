@@ -25,16 +25,17 @@ Prerequisites:
 NOTE: Without infrastructure the test will fail — this is expected.
       Unit tests (``pytest tests/ -m "not integration"``) do not require it.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import time
 
-import pytest
 import nats as nats_lib
+import pytest
 
-from loom.core.messages import TaskMessage, TaskResult, ModelTier
+from loom.core.messages import ModelTier, TaskMessage, TaskResult
 
 # ---------------------------------------------------------------------------
 # Configuration constants
@@ -89,9 +90,7 @@ async def test_roundtrip():
     task = TaskMessage(
         worker_type="summarizer",
         payload={
-            "text": (
-                "This is a test document with several sentences about testing."
-            ),
+            "text": ("This is a test document with several sentences about testing."),
         },
         model_tier=ModelTier.LOCAL,
     )

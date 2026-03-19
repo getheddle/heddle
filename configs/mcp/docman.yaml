@@ -1,48 +1,193 @@
-# Docman MCP server — exposes document processing workers and query backend.
+# =============================================================================
+# Docman MCP Server Configuration
+# =============================================================================
+#
+# Exposes document processing workers, pipelines, and query backends as MCP
+# (Model Context Protocol) tools. Any MCP client (Claude Desktop, Cursor, etc.)
+# can connect and use these tools without MCP-specific code.
+#
+# Component:  src/loom/mcp/server.py (MCPGateway, create_server)
+# Config:     src/loom/mcp/config.py (validation)
+# Discovery:  src/loom/mcp/discovery.py (tool definition generators)
+# Bridge:     src/loom/mcp/bridge.py (MCPBridge — tool calls -> NATS dispatch)
+# Resources:  src/loom/mcp/resources.py (workspace files as MCP resources)
 #
 # Run with:
+#   # stdio transport (for Claude Desktop, pipe-based clients)
 #   loom mcp --config configs/mcp/docman.yaml
+#
+#   # Streamable HTTP transport (for web-based clients, multi-client)
 #   loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
 #
-# Requires:
-#   pip install loom[mcp,duckdb]
+# Prerequisites:
+#   uv sync --extra mcp --extra duckdb
 #   NATS running at nats://localhost:4222
-#   Workers started for summarizer, classifier, extractor
+#   Workers started: summarizer, classifier, extractor
+#   (Pipeline workers if using pipeline tools: rag_ingestor, rag_chunker, etc.)
+#
+# Tool discovery flow:
+#   Worker YAML name + input_schema + description -> MCP tool definition
+#   Pipeline input_mapping "goal.context.*" fields -> MCP tool input schema
+#   Query backend _get_handlers() -> per-action tools with auto-generated schemas
+#
+# Related configs:
+#   configs/workers/summarizer.yaml        — worker exposed as MCP tool
+#   configs/workers/classifier.yaml        — worker exposed as "classify_document"
+#   configs/workers/extractor.yaml         — worker exposed as MCP tool
+#   configs/orchestrators/rag_pipeline.yaml — pipeline exposed as "ingest_document"
+#   configs/router_rules.yaml              — tier overrides for dispatched tasks
+# =============================================================================
 
+# name (str, required)
+# MCP server name. Shown to MCP clients during initialization.
 name: "docman"
+
+# description (str, optional)
+# Human-readable description of what this MCP server offers.
+# Shown to MCP clients that display server metadata.
 description: "Document management — classify, extract, summarize, and query documents"
+
+# nats_url (str, required)
+# NATS server URL. The MCP bridge dispatches tasks via NATS and collects
+# results. All worker communication goes through this bus.
 nats_url: "nats://localhost:4222"
 
+# tools (dict, required)
+# Defines which MCP tools this server exposes. Three tool sources:
+#   workers:   Each worker config becomes one MCP tool.
+#   pipelines: Each pipeline config becomes one MCP tool.
+#   queries:   Each backend action becomes one MCP tool.
 tools:
+
+  # workers (list, optional)
+  # Each entry references a worker YAML config. The worker's name, description,
+  # and input_schema are used to generate the MCP tool definition.
+  # When an MCP client calls the tool, MCPBridge dispatches a TaskMessage
+  # to the worker via NATS and returns the result.
   workers:
+    # Minimal form — uses the worker's name and description as-is.
+    # Tool name: "summarizer", schema from configs/workers/summarizer.yaml
     - config: "configs/workers/summarizer.yaml"
+
+    # Override form — custom MCP tool name and description.
+    # Useful when the worker name is too generic or you want a domain-specific label.
+    # Tool name: "classify_document" (overrides "classifier")
     - config: "configs/workers/classifier.yaml"
       name: "classify_document"
       description: "Classify a document by type (e.g., invoice, contract, report)"
+
+    # Another minimal form.
     - config: "configs/workers/extractor.yaml"
 
+  # pipelines (list, optional)
+  # Each entry references a pipeline orchestrator config. The pipeline's
+  # input_mapping "goal.context.*" fields become the MCP tool's input schema.
+  # When called, MCPBridge dispatches an OrchestratorGoal and collects the
+  # final pipeline result (filtering out intermediate stage results).
   pipelines:
+    # Pipeline tools require name and description (pipelines don't have
+    # natural single-word names like workers do).
     - config: "configs/orchestrators/rag_pipeline.yaml"
       name: "ingest_document"
       description: "Ingest a document: parse, chunk, and store vector embeddings"
 
+  # queries (list, optional)
+  # Each entry configures a query backend. The backend's action handlers
+  # become individual MCP tools with auto-generated schemas.
+  #
+  # Available backends:
+  #   loom.contrib.duckdb.query_backend.DuckDBQueryBackend
+  #     Actions: search (FTS), filter (parameterized), stats (aggregates), get (by ID)
+  #     Also: vector (semantic similarity, if embedding config provided)
   queries:
+    # backend (str, required)
+    # Fully qualified Python class path for the query backend.
+    # Must implement _get_handlers() returning action -> handler mappings.
     - backend: "loom.contrib.duckdb.query_backend.DuckDBQueryBackend"
+
+      # actions (list[str], required)
+      # Which backend actions to expose as MCP tools.
+      # Each action becomes a separate tool: {name_prefix}_{action}
+      # Available actions for DuckDBQueryBackend:
+      #   "search" — Full-text search using DuckDB FTS index.
+      #              Input: {query: "search terms"}
+      #              Searches fields listed in fts_fields.
+      #   "filter" — Parameterized filtering using predefined conditions.
+      #              Input: {filters: {field: value}}
+      #              Conditions defined in filter_fields below.
+      #   "stats"  — Aggregate statistics grouped by configured fields.
+      #              Input: {} (no params needed)
+      #              Groups and aggregates defined below.
+      #   "get"    — Retrieve a single record by ID.
+      #              Input: {id: "record_id"}
+      #              Uses id_column for lookup.
       actions: ["search", "filter", "stats", "get"]
+
+      # name_prefix (str, required)
+      # Prefix for generated tool names: {prefix}_{action}
+      # Example: "docs" -> tools: docs_search, docs_filter, docs_stats, docs_get
       name_prefix: "docs"
+
+      # backend_config (dict, required)
+      # Configuration passed to the DuckDBQueryBackend constructor.
       backend_config:
+        # db_path (str, required)
+        # Path to the DuckDB database file. Must exist and contain the table.
         db_path: "/tmp/docman-workspace/docman.duckdb"
+
+        # table_name (str, required)
+        # The DuckDB table to query. Must exist in the database.
         table_name: "documents"
+
+        # result_columns (list[str], required)
+        # Columns returned in query results. Controls what data MCP clients see.
+        # List only columns that are safe and useful to expose.
         result_columns: ["id", "filename", "doc_type", "summary", "created_at"]
+
+        # id_column (str, required)
+        # Column used for the "get" action's ID lookup.
         id_column: "id"
+
+        # full_text_column (str, required for "search" action)
+        # Column containing the full text content for FTS indexing.
         full_text_column: "full_text"
+
+        # fts_fields (str, required for "search" action)
+        # Comma-separated column names indexed for full-text search.
+        # DuckDB FTS searches across all listed columns.
         fts_fields: "full_text,summary"
+
+        # filter_fields (dict, required for "filter" action)
+        # Maps filter parameter names to SQL WHERE clause fragments.
+        # The "?" placeholder is replaced with the filter value.
+        # Filters without "?" are treated as boolean conditions.
+        # Examples:
+        #   doc_type: "doc_type = ?"      — Equality filter (parameterized)
+        #   has_summary: "summary IS NOT NULL"  — Boolean condition (no param)
         filter_fields:
           doc_type: "doc_type = ?"
           has_summary: "summary IS NOT NULL"
+
+        # stats_groups (list[str], required for "stats" action)
+        # Columns to GROUP BY in the stats query.
         stats_groups: ["doc_type"]
+
+        # stats_aggregates (list[str], required for "stats" action)
+        # SQL aggregate expressions. Each becomes a column in stats output.
+        # Example: "COUNT(*) AS doc_count" -> {doc_type: "invoice", doc_count: 42}
         stats_aggregates: ["COUNT(*) AS doc_count"]
 
+# resources (dict, optional)
+# Workspace files exposed as MCP resources (workspace:/// URIs).
+# MCP clients can browse and read these files.
+# Source: src/loom/mcp/resources.py (WorkspaceResources)
 resources:
+  # workspace_dir (str, required)
+  # Base directory for resource files. Must be an absolute path.
   workspace_dir: "/tmp/docman-workspace"
+
+  # patterns (list[str], required)
+  # Glob patterns for files to expose as resources.
+  # Only files matching these patterns are visible to MCP clients.
+  # Use specific patterns to avoid exposing sensitive files.
   patterns: ["*.pdf", "*.docx", "*.json"]

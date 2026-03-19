@@ -15,6 +15,7 @@ Limitations (by design — keeps the dependency tree minimal):
 If you need full Draft 2020-12 validation, add `jsonschema` to dependencies
 and swap this module. The validate_input/validate_output API stays the same.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -53,9 +54,11 @@ def _validate(data: Any, schema: dict, context: str) -> list[str]:
 
     if expected_type == "object":
         # Check required fields
-        for field in schema.get("required", []):
-            if field not in data:
-                errors.append(f"{context}: missing required field '{field}'")
+        errors.extend(
+            f"{context}: missing required field '{field}'"
+            for field in schema.get("required", [])
+            if field not in data
+        )
 
         # Check property types (shallow — does not recurse into nested objects).
         # Type checking order matters: bool must be checked BEFORE int/number

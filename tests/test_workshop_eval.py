@@ -1,8 +1,8 @@
 """Tests for EvalRunner (workshop/eval_runner.py)."""
+
 from __future__ import annotations
 
 import json
-from typing import Any
 
 import pytest
 
@@ -10,7 +10,6 @@ from loom.worker.backends import LLMBackend
 from loom.workshop.db import WorkshopDB
 from loom.workshop.eval_runner import EvalRunner, _score_exact_match, _score_field_match
 from loom.workshop.test_runner import WorkerTestRunner
-
 
 # ---------------------------------------------------------------------------
 # Mock backend
@@ -20,8 +19,9 @@ from loom.workshop.test_runner import WorkerTestRunner
 class MockEvalBackend(LLMBackend):
     """Returns output based on input payload content."""
 
-    async def complete(self, system_prompt, user_message, max_tokens=2000,
-                       temperature=0.0, **kwargs):
+    async def complete(
+        self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs
+    ):
         # Parse the input to generate predictable output
         try:
             payload = json.loads(user_message)
@@ -138,8 +138,16 @@ class TestEvalRunner:
         eval_runner, db = runner_and_db
 
         suite = [
-            {"name": "case_1", "input": {"text": "hello"}, "expected_output": {"summary": "Summary of: hello"}},
-            {"name": "case_2", "input": {"text": "world"}, "expected_output": {"summary": "Summary of: world"}},
+            {
+                "name": "case_1",
+                "input": {"text": "hello"},
+                "expected_output": {"summary": "Summary of: hello"},
+            },
+            {
+                "name": "case_2",
+                "input": {"text": "world"},
+                "expected_output": {"summary": "Summary of: world"},
+            },
         ]
 
         run_id = await eval_runner.run_suite(EVAL_CONFIG, suite)
@@ -157,8 +165,16 @@ class TestEvalRunner:
         eval_runner, db = runner_and_db
 
         suite = [
-            {"name": "match", "input": {"text": "test"}, "expected_output": {"summary": "Summary of: test"}},
-            {"name": "mismatch", "input": {"text": "test"}, "expected_output": {"summary": "wrong"}},
+            {
+                "name": "match",
+                "input": {"text": "test"},
+                "expected_output": {"summary": "Summary of: test"},
+            },
+            {
+                "name": "mismatch",
+                "input": {"text": "test"},
+                "expected_output": {"summary": "wrong"},
+            },
         ]
 
         run_id = await eval_runner.run_suite(EVAL_CONFIG, suite, scoring="field_match")
@@ -197,8 +213,11 @@ class TestEvalRunner:
         eval_runner, db = runner_and_db
 
         suite = [
-            {"name": "exact", "input": {"text": "test"},
-             "expected_output": {"summary": "Summary of: test"}},
+            {
+                "name": "exact",
+                "input": {"text": "test"},
+                "expected_output": {"summary": "Summary of: test"},
+            },
         ]
         run_id = await eval_runner.run_suite(EVAL_CONFIG, suite, scoring="exact_match")
 
@@ -209,11 +228,8 @@ class TestEvalRunner:
     async def test_run_summary_aggregates(self, runner_and_db):
         eval_runner, db = runner_and_db
 
-        suite = [
-            {"name": f"case_{i}", "input": {"text": f"text_{i}"}}
-            for i in range(5)
-        ]
-        run_id = await eval_runner.run_suite(EVAL_CONFIG, suite)
+        suite = [{"name": f"case_{i}", "input": {"text": f"text_{i}"}} for i in range(5)]
+        await eval_runner.run_suite(EVAL_CONFIG, suite)
 
         runs = db.get_eval_runs("eval_worker")
         run = runs[0]
