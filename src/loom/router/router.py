@@ -47,11 +47,13 @@ import structlog
 import yaml
 
 from loom.core.messages import ModelTier, TaskMessage
+from loom.tracing import extract_trace_context, get_tracer, inject_trace_context
 
 if TYPE_CHECKING:
     from loom.bus.base import MessageBus
 
 logger = structlog.get_logger()
+_tracer = get_tracer("loom.router")
 
 # NATS subject where unroutable or rate-limited tasks are sent for observability.
 DEAD_LETTER_SUBJECT = "loom.tasks.dead_letter"
@@ -259,52 +261,60 @@ class TaskRouter:
         Any failure at steps 1-3 sends the task to the dead-letter subject
         instead of silently dropping it.
         """
-        # Step 1: Deserialize and validate the incoming message.
-        try:
-            task = TaskMessage(**data)
-        except Exception as exc:
-            # Malformed message -- cannot even parse it. Dead-letter with
-            # whatever info we can extract from the raw dict.
-            await self._dead_letter(
-                data,
-                reason=f"invalid_task_message: {exc}",
-                task_id=data.get("task_id"),
-                worker_type=data.get("worker_type"),
-            )
-            return
+        ctx = extract_trace_context(data)
+        with _tracer.start_as_current_span("router.route", context=ctx) as span:
+            # Step 1: Deserialize and validate the incoming message.
+            try:
+                task = TaskMessage(**data)
+            except Exception as exc:
+                span.record_exception(exc)
+                await self._dead_letter(
+                    data,
+                    reason=f"invalid_task_message: {exc}",
+                    task_id=data.get("task_id"),
+                    worker_type=data.get("worker_type"),
+                )
+                return
 
-        # Step 2: Resolve the model tier.
-        try:
-            tier = self.resolve_tier(task)
-        except ValueError as exc:
-            # The tier_override in router_rules.yaml specifies an unknown tier.
-            await self._dead_letter(
-                data,
-                reason=f"unknown_tier: {exc}",
-                task_id=task.task_id,
-                worker_type=task.worker_type,
-            )
-            return
+            span.set_attribute("task.id", task.task_id)
+            span.set_attribute("task.worker_type", task.worker_type)
 
-        # Step 3: Check rate limit for the resolved tier.
-        if not self._rate_limiter.try_acquire(tier.value):
-            await self._dead_letter(
-                data,
-                reason=f"rate_limited: tier '{tier.value}' has no available capacity",
-                task_id=task.task_id,
-                worker_type=task.worker_type,
-            )
-            return
+            # Step 2: Resolve the model tier.
+            try:
+                tier = self.resolve_tier(task)
+            except ValueError as exc:
+                span.record_exception(exc)
+                await self._dead_letter(
+                    data,
+                    reason=f"unknown_tier: {exc}",
+                    task_id=task.task_id,
+                    worker_type=task.worker_type,
+                )
+                return
 
-        # Step 4: Publish to the resolved worker subject.
-        subject = f"loom.tasks.{task.worker_type}.{tier.value}"
-        route_log = logger.bind(task_id=task.task_id, worker_type=task.worker_type)
-        route_log.info(
-            "router.task_routed",
-            tier=tier.value,
-            subject=subject,
-        )
-        await self.bus.publish(subject, task.model_dump(mode="json"))
+            span.set_attribute("task.tier", tier.value)
+
+            # Step 3: Check rate limit for the resolved tier.
+            if not self._rate_limiter.try_acquire(tier.value):
+                await self._dead_letter(
+                    data,
+                    reason=f"rate_limited: tier '{tier.value}' has no available capacity",
+                    task_id=task.task_id,
+                    worker_type=task.worker_type,
+                )
+                return
+
+            # Step 4: Publish to the resolved worker subject.
+            subject = f"loom.tasks.{task.worker_type}.{tier.value}"
+            route_log = logger.bind(task_id=task.task_id, worker_type=task.worker_type)
+            route_log.info(
+                "router.task_routed",
+                tier=tier.value,
+                subject=subject,
+            )
+            outgoing = task.model_dump(mode="json")
+            inject_trace_context(outgoing)
+            await self.bus.publish(subject, outgoing)
 
     async def run(self) -> None:
         """Connect to NATS and subscribe to the incoming task subject.

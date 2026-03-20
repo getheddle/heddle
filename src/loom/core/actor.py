@@ -24,10 +24,13 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from loom.tracing import extract_trace_context, get_tracer
+
 if TYPE_CHECKING:
     from loom.bus.base import MessageBus, Subscription
 
 logger = structlog.get_logger()
+_tracer = get_tracer("loom.actor")
 
 
 class BaseActor(ABC):
@@ -123,16 +126,24 @@ class BaseActor(ABC):
 
     async def _process_one(self, data: dict[str, Any]) -> None:
         """Process a single message with semaphore-bounded concurrency."""
+        ctx = extract_trace_context(data)
         async with self._semaphore:
-            try:
-                start = time.monotonic()
-                await self.handle_message(data)
-                elapsed = int((time.monotonic() - start) * 1000)
-                logger.info("actor.processed", actor_id=self.actor_id, ms=elapsed)
-            except Exception as e:
-                # Individual message failures don't kill the actor loop.
-                # The actor stays alive to process subsequent messages.
-                logger.error("actor.error", actor_id=self.actor_id, error=str(e))
+            with _tracer.start_as_current_span(
+                f"{type(self).__name__}.process",
+                context=ctx,
+                attributes={"actor.id": self.actor_id},
+            ) as span:
+                try:
+                    start = time.monotonic()
+                    await self.handle_message(data)
+                    elapsed = int((time.monotonic() - start) * 1000)
+                    span.set_attribute("processing.time_ms", elapsed)
+                    logger.info("actor.processed", actor_id=self.actor_id, ms=elapsed)
+                except Exception as e:
+                    # Individual message failures don't kill the actor loop.
+                    # The actor stays alive to process subsequent messages.
+                    span.record_exception(e)
+                    logger.error("actor.error", actor_id=self.actor_id, error=str(e))
 
     async def on_reload(self) -> None:  # noqa: B027
         """Config reload hook — called when a control reload message arrives.

@@ -46,6 +46,11 @@ workshop = [
 mdns = [
     "zeroconf>=0.131.0",       # mDNS/Bonjour service discovery on LAN
 ]
+otel = [
+    "opentelemetry-api>=1.20.0",           # Tracing API (spans, context)
+    "opentelemetry-sdk>=1.20.0",           # SDK (TracerProvider, export pipeline)
+    "opentelemetry-exporter-otlp>=1.20.0", # OTLP gRPC exporter
+]
 docs = [
     "sphinx>=7.0",             # Documentation generator
     "sphinx-rtd-theme>=2.0",   # Read the Docs theme

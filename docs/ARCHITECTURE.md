@@ -54,6 +54,10 @@ src/loom/
 │   ├── memory.py        # InMemoryBus for testing (no infrastructure needed)
 │   └── nats_adapter.py  # NATS pub/sub/request wrapper
 │
+├── tracing/
+│   ├── __init__.py       # Public API: get_tracer, init_tracing, inject/extract_trace_context
+│   └── otel.py           # Optional OTel integration (no-op when SDK not installed)
+│
 ├── mcp/
 │   ├── config.py        # MCP gateway YAML config loading + validation
 │   ├── discovery.py     # Tool definition generators (worker/pipeline/query → MCP tools)
@@ -65,6 +69,7 @@ src/loom/
 │   ├── test_runner.py   # WorkerTestRunner — execute worker configs against LLM backends directly
 │   ├── db.py            # WorkshopDB — DuckDB storage for eval results, versions, metrics, baselines
 │   ├── eval_runner.py   # EvalRunner — test suite execution with field_match/exact_match/llm_judge scoring
+│   ├── config_impact.py  # Config impact analysis (worker→pipeline reverse mapping)
 │   ├── config_manager.py # ConfigManager — CRUD for worker/pipeline YAML configs
 │   ├── pipeline_editor.py # PipelineEditor — insert/swap/branch/remove stages
 │   ├── app.py           # FastAPI + HTMX + Jinja2 web application

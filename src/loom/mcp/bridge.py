@@ -32,6 +32,7 @@ from loom.core.messages import (
     TaskResult,
     TaskStatus,
 )
+from loom.tracing import get_tracer, inject_trace_context
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
     from loom.bus.base import MessageBus
 
 logger = structlog.get_logger()
+_tracer = get_tracer("loom.mcp.bridge")
 
 
 class BridgeError(Exception):
@@ -288,6 +290,7 @@ class MCPBridge:
         consume_task = asyncio.create_task(_consume())
 
         # Publish after subscribing to avoid missing the response.
+        inject_trace_context(message)
         await self.bus.publish(publish_subject, message)
         logger.info("bridge.dispatched", subject=publish_subject, task_id=match_task_id)
 

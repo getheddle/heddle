@@ -73,8 +73,10 @@ from loom.core.messages import (
     TaskResult,
     TaskStatus,
 )
+from loom.tracing import get_tracer, inject_trace_context
 
 logger = structlog.get_logger()
+_tracer = get_tracer("loom.pipeline")
 
 LOOM_TRACE = bool(os.environ.get("LOOM_TRACE"))
 
@@ -314,7 +316,9 @@ class PipelineOrchestrator(BaseActor):
             )
 
             stage_log.info("pipeline.stage_dispatching", worker_type=stage["worker_type"])
-            await self.publish("loom.tasks.incoming", task.model_dump(mode="json"))
+            task_data = task.model_dump(mode="json")
+            inject_trace_context(task_data)
+            await self.publish("loom.tasks.incoming", task_data)
 
             # Wait for result.
             stage_timeout = stage.get("timeout_seconds", timeout)

@@ -23,6 +23,7 @@ from loom.bus.memory import InMemoryBus
 from loom.router.dead_letter import DeadLetterConsumer
 from loom.worker.backends import build_backends_from_env
 from loom.workshop.app_manager import AppManager
+from loom.workshop.config_impact import get_impact
 from loom.workshop.config_manager import ConfigManager
 from loom.workshop.db import WorkshopDB
 from loom.workshop.eval_runner import EvalRunner
@@ -197,6 +198,11 @@ def create_app(  # noqa: PLR0915
             "partials/validation_errors.html",
             {"request": request, "errors": errors},
         )
+
+    @app.get("/workers/{name}/impact", response_class=JSONResponse)
+    async def worker_impact(name: str):
+        """Return config impact analysis for a worker."""
+        return JSONResponse(get_impact(name, config_mgr))
 
     @app.post("/workers/{name}", response_class=HTMLResponse)
     async def worker_save(request: Request, name: str):

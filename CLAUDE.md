@@ -12,7 +12,8 @@ The core idea: instead of one big LLM context, split work across narrowly-scoped
 src/loom/
   core/
     actor.py              # BaseActor — async actor with signal handling, configurable concurrency,
-                          #   control subscription (loom.control.reload), on_reload() hook
+                          #   control subscription (loom.control.reload), on_reload() hook,
+                          #   OTel span per message (_process_one)
     config.py             # load_config(), ConfigValidationError, worker/pipeline/orchestrator/router validation
                           #   Input mapping path validation, processing_backend format validation,
                           #   condition operator strict validation
@@ -73,6 +74,11 @@ src/loom/
     server.py             # create_server(), MCPGateway, run_stdio(), run_streamable_http()
                           #   MCP progress notifications wired to pipeline stage callbacks
 
+  tracing/
+    __init__.py           # Public API: get_tracer, init_tracing, inject/extract_trace_context
+    otel.py               # OpenTelemetry integration — optional, graceful no-op when SDK not installed
+                          #   W3C traceparent propagation via _trace_context key in NATS messages
+
   discovery/
     mdns.py               # LoomServiceAdvertiser — mDNS/Bonjour LAN service advertisement
 
@@ -83,6 +89,7 @@ src/loom/
     preflight.py          # Pre-flight checks: NATS connectivity, env vars, config readability
 
   workshop/               # LLM Worker Workshop — web-based worker builder, test bench, eval tool
+    config_impact.py      # Config impact analysis — reverse-map worker→pipelines, downstream stages, risk
     app.py                # FastAPI + HTMX + Jinja2 web application (22+ routes, mDNS lifespan)
                           #   Dead-letter inspection UI, backend detection, worker validation endpoint
     app_manager.py        # AppManager — deploy/list/remove app bundles (ZIP upload, reload notify)
@@ -165,7 +172,7 @@ deploy/
   macos/                  # launchd plist files + install/uninstall scripts
   windows/                # NSSM-based Windows service install/uninstall scripts
 
-tests/                    # 64 test files, 1184 unit tests + 1 integration test (85% coverage)
+tests/                    # 66 test files, 1223 unit tests + 1 integration test (85% coverage)
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -188,6 +195,7 @@ tests/                    # 64 test files, 1184 unit tests + 1 integration test 
   test_reload.py          test_mdns.py            # Config reload, mDNS discovery
   test_scheduler_expansion.py                     # Scheduler expand_from
   test_serialize_writes.py                        # SyncProcessingBackend write lock
+  test_tracing.py         test_config_impact.py    # OTel tracing, config impact analysis
   test_dead_letter.py     test_preflight.py       # Dead-letter consumer, CLI pre-flight checks
   test_integration.py                             # @pytest.mark.integration (needs NATS)
   contrib/rag/            # 6 RAG test files (backends, chunker, ingestion, mux, schemas, tools)
@@ -276,6 +284,7 @@ uv sync --extra scheduler     # Cron expression parsing (croniter)
 uv sync --extra mcp           # MCP gateway (Model Context Protocol SDK)
 uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
 uv sync --extra mdns          # mDNS/Bonjour service discovery on LAN (zeroconf)
+uv sync --extra otel          # OpenTelemetry distributed tracing (spans, OTLP export)
 uv sync --extra docs           # Sphinx API documentation generation
 uv sync --all-extras          # All dependencies including dev/test
 ```
@@ -405,6 +414,8 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 - **Atomic ZIP deployment** — extracts to temp dir then renames; rejects symlinks and path traversal in config paths
 
 **P2 — Observability:**
+- **OpenTelemetry distributed tracing** — optional OTel integration (`uv sync --extra otel`); spans on actor message processing, router dispatch, pipeline stage execution, MCP bridge calls; W3C traceparent propagation through NATS messages via `_trace_context` key; graceful no-op when OTel SDK not installed
+- **Config impact analysis** — `workshop/config_impact.py` reverse-maps worker→pipelines/stages, finds downstream dependencies, assesses breaking-change risk; exposed via `/workers/{name}/impact` JSON API
 - **request_id propagation** — `TaskMessage` and `OrchestratorGoal` carry `request_id` through goal→task→result chain; structured log bindings per goal
 - **I/O tracing** — `LOOM_TRACE=1` env var enables full input/output logging; `_summarize()` helper truncates by default
 - **Dead-letter consumer** — `DeadLetterConsumer` actor with bounded in-memory store (default 1000), list/count/clear/replay via CLI (`loom dead-letter monitor`) and Workshop UI (`/dead-letters`); replay audit trail (`ReplayRecord`, `replay_log()`, `replay_count()`) tracks all replayed entries with timestamps and original reason
@@ -447,11 +458,9 @@ Loom supports multiple users (e.g., two analysts on Claude Desktop) working simu
 ## What to implement next
 
 1. **Workshop MetricsCollector** — optional NATS subscriber for live worker metrics in Workshop dashboard
-2. **OpenTelemetry integration** — distributed tracing via OTel spans for multi-hop pipeline debugging
-3. **Config impact analysis** — tooling to show what breaks if a worker config changes (derived from input_mapping references)
-4. **Streaming result collection (Strategy A)** — process subtask results as they arrive
-5. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
-6. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
+2. **Streaming result collection (Strategy A)** — process subtask results as they arrive
+3. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
+4. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
 
 ## What NOT to do
 
