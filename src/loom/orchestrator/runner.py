@@ -54,7 +54,6 @@ See Also:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 from dataclasses import dataclass, field
@@ -72,13 +71,16 @@ from loom.core.messages import (
 )
 from loom.orchestrator.checkpoint import CheckpointManager
 from loom.orchestrator.decomposer import GoalDecomposer
+from loom.orchestrator.stream import ResultCallback, ResultStream
 from loom.orchestrator.synthesizer import ResultSynthesizer
+from loom.tracing import get_tracer
 
 if TYPE_CHECKING:
     from loom.orchestrator.store import CheckpointStore
     from loom.worker.backends import LLMBackend
 
 logger = structlog.get_logger()
+_tracer = get_tracer("loom.orchestrator")
 
 
 # ---------------------------------------------------------------------------
@@ -260,8 +262,11 @@ class OrchestratorActor(BaseActor):
     @staticmethod
     def _load_config(path: str) -> dict[str, Any]:
         """Load orchestrator YAML configuration."""
+        from loom.core.config import resolve_schema_refs
+
         with open(path) as f:
-            return yaml.safe_load(f)
+            config = yaml.safe_load(f)
+        return resolve_schema_refs(config)
 
     async def on_reload(self) -> None:
         """Re-read the orchestrator config from disk on reload signal.
@@ -314,7 +319,15 @@ class OrchestratorActor(BaseActor):
 
         try:
             # -- 2. Decompose --
-            subtasks = await self._decompose_goal(goal, log)
+            with _tracer.start_as_current_span(
+                "orchestrator.decompose",
+                attributes={"orchestrator.goal_id": goal.goal_id},
+            ) as decompose_span:
+                subtasks = await self._decompose_goal(goal, log)
+                decompose_span.set_attribute(
+                    "orchestrator.subtask_count", len(subtasks) if subtasks else 0,
+                )
+
             if not subtasks:
                 log.warning("orchestrator.no_subtasks")
                 await self._publish_final_result(
@@ -334,13 +347,43 @@ class OrchestratorActor(BaseActor):
                 subtasks = subtasks[: self._max_concurrent_tasks]
 
             # -- 3. Dispatch --
-            await self._dispatch_subtasks(goal_state, subtasks, log)
+            with _tracer.start_as_current_span(
+                "orchestrator.dispatch",
+                attributes={
+                    "orchestrator.goal_id": goal.goal_id,
+                    "orchestrator.subtask_count": len(subtasks),
+                },
+            ):
+                await self._dispatch_subtasks(goal_state, subtasks, log)
 
             # -- 4. Collect results --
-            results = await self._collect_results(goal_state, log)
+            with _tracer.start_as_current_span(
+                "orchestrator.collect",
+                attributes={
+                    "orchestrator.goal_id": goal.goal_id,
+                    "orchestrator.expected_count": len(goal_state.dispatched_tasks),
+                    "orchestrator.timeout_seconds": self._task_timeout,
+                },
+            ) as collect_span:
+                results = await self._collect_results(goal_state, log)
+                collect_span.set_attribute("orchestrator.collected_count", len(results))
+                collect_span.set_attribute(
+                    "orchestrator.success_count",
+                    sum(1 for r in results if r.status == TaskStatus.COMPLETED),
+                )
 
             # -- 5. Synthesize --
-            synthesis = await self._synthesize_results(goal, results, log)
+            with _tracer.start_as_current_span(
+                "orchestrator.synthesize",
+                attributes={
+                    "orchestrator.goal_id": goal.goal_id,
+                    "orchestrator.result_count": len(results),
+                },
+            ) as synth_span:
+                synthesis = await self._synthesize_results(goal, results, log)
+                synth_span.set_attribute(
+                    "orchestrator.confidence", synthesis.get("confidence", "unknown"),
+                )
 
             # -- 6. Publish final result --
             elapsed = int((time.monotonic() - goal_state.start_time) * 1000)
@@ -439,30 +482,40 @@ class OrchestratorActor(BaseActor):
         )
 
     # ------------------------------------------------------------------
-    # Step 4: Result collection
+    # Step 4: Result collection (Strategy A — streaming)
     # ------------------------------------------------------------------
-
-    # TODO(Strategy A): Refactor _collect_results to stream results to the
-    #   synthesizer as they arrive, rather than waiting for all subtasks.
-    #   This would reduce end-to-end latency for goals with many independent
-    #   subtasks (the synthesizer could start merging partial results).
 
     async def _collect_results(
         self,
         goal_state: GoalState,
         log: Any,
+        on_result: ResultCallback | None = None,
     ) -> list[TaskResult]:
         """Subscribe to ``loom.results.{goal_id}`` and collect worker results.
 
-        Creates a temporary bus subscription that listens for TaskResult
-        messages.  Each result is matched by ``task_id`` against the set of
-        dispatched tasks.  Collection completes when:
+        Uses :class:`ResultStream` to yield results as they arrive from the
+        bus, rather than blocking until all subtasks complete.  Each result
+        is matched by ``task_id`` against the set of dispatched tasks.
+
+        Collection completes when:
 
         - All dispatched tasks have returned results, OR
-        - The configurable timeout expires.
+        - The configurable timeout expires, OR
+        - The ``on_result`` callback signals early exit.
 
-        On timeout, whatever results have been collected so far are returned.
-        The synthesizer handles partial results gracefully.
+        On timeout or early exit, whatever results have been collected so far
+        are returned.  The synthesizer handles partial results gracefully.
+
+        Parameters
+        ----------
+        goal_state : GoalState
+            The active goal's state container.
+        log : Any
+            Bound structlog logger.
+        on_result : ResultCallback | None
+            Optional callback invoked as each result arrives.  Signature:
+            ``async (result, collected, expected) -> bool | None``.
+            Return ``True`` to stop collecting early.
 
         Returns:
         -------
@@ -470,84 +523,53 @@ class OrchestratorActor(BaseActor):
             Collected results (may be fewer than dispatched on timeout).
         """
         goal = goal_state.goal
-        expected_count = len(goal_state.dispatched_tasks)
         expected_task_ids = set(goal_state.dispatched_tasks.keys())
 
         log.info(
             "orchestrator.collecting",
-            expected=expected_count,
+            expected=len(expected_task_ids),
             timeout_seconds=self._task_timeout,
         )
 
-        # Asyncio event that fires when all results are in.
-        all_done = asyncio.Event()
         subject = f"loom.results.{goal.goal_id}"
 
-        sub = await self._bus.subscribe(subject)
+        stream = ResultStream(
+            bus=self._bus,
+            subject=subject,
+            expected_task_ids=expected_task_ids,
+            timeout=self._task_timeout,
+            on_result=on_result,
+        )
 
-        async def _consume() -> None:
-            """Iterate over subscription and store matching results."""
-            async for data in sub:
-                try:
-                    task_id = data.get("task_id")
+        # Stream results, updating goal_state as each arrives.
+        async for result in stream:
+            goal_state.collected_results[result.task_id] = result
+            log.info(
+                "orchestrator.result_received",
+                task_id=result.task_id,
+                worker_type=result.worker_type,
+                status=result.status.value,
+                collected=stream.collected_count,
+                expected=stream.expected_count,
+            )
 
-                    # Only accept results for tasks we actually dispatched.
-                    if task_id not in expected_task_ids:
-                        log.debug(
-                            "orchestrator.result_ignored",
-                            task_id=task_id,
-                            reason="not_dispatched_by_this_goal",
-                        )
-                        continue
-
-                    # Skip duplicates (at-least-once delivery).
-                    if task_id in goal_state.collected_results:
-                        log.debug(
-                            "orchestrator.result_duplicate",
-                            task_id=task_id,
-                        )
-                        continue
-
-                    result = TaskResult(**data)
-                    goal_state.collected_results[task_id] = result
-
-                    log.info(
-                        "orchestrator.result_received",
-                        task_id=task_id,
-                        worker_type=result.worker_type,
-                        status=result.status.value,
-                        collected=len(goal_state.collected_results),
-                        expected=expected_count,
-                    )
-
-                    if goal_state.all_collected:
-                        all_done.set()
-                        break
-
-                except Exception as e:
-                    log.error(
-                        "orchestrator.result_parse_error",
-                        error=str(e),
-                    )
-
-        consume_task = asyncio.create_task(_consume())
-
-        try:
-            await asyncio.wait_for(all_done.wait(), timeout=self._task_timeout)
+        if stream.all_collected:
             log.info("orchestrator.all_results_collected")
-        except TimeoutError:
-            collected = len(goal_state.collected_results)
+        elif stream.timed_out:
             log.warning(
                 "orchestrator.collection_timeout",
-                collected=collected,
-                expected=expected_count,
+                collected=stream.collected_count,
+                expected=stream.expected_count,
                 timeout_seconds=self._task_timeout,
             )
-        finally:
-            consume_task.cancel()
-            await sub.unsubscribe()
+        elif stream.early_exited:
+            log.info(
+                "orchestrator.collection_early_exit",
+                collected=stream.collected_count,
+                expected=stream.expected_count,
+            )
 
-        return list(goal_state.collected_results.values())
+        return list(stream.collected.values())
 
     # ------------------------------------------------------------------
     # Step 5: Synthesis

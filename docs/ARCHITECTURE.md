@@ -35,6 +35,7 @@ src/loom/
 │
 ├── orchestrator/
 │   ├── runner.py        # Orchestrator actor: decompose → dispatch → collect → synthesize (concurrent goals)
+│   ├── stream.py        # ResultStream — async iterator for streaming result collection (Strategy A)
 │   ├── pipeline.py      # Pipeline orchestrator: dependency-aware parallel stage execution
 │   ├── checkpoint.py    # Self-summarization: compresses orchestrator context to Redis snapshots
 │   ├── store.py         # CheckpointStore ABC (pluggable persistence backend)
@@ -58,6 +59,13 @@ src/loom/
 │   ├── __init__.py       # Public API: get_tracer, init_tracing, inject/extract_trace_context
 │   └── otel.py           # Optional OTel integration (no-op when SDK not installed)
 │
+├── tui/
+│   ├── __init__.py       # Package init
+│   └── app.py            # LoomDashboard — Textual TUI, live NATS observer (loom.> wildcard)
+│
+├── discovery/
+│   └── mdns.py           # LoomServiceAdvertiser — mDNS/Bonjour LAN service advertisement
+│
 ├── mcp/
 │   ├── config.py        # MCP gateway YAML config loading + validation
 │   ├── discovery.py     # Tool definition generators (worker/pipeline/query → MCP tools)
@@ -77,7 +85,8 @@ src/loom/
 │   └── static/          # CSS styles
 │
 ├── cli/
-│   └── main.py          # Click CLI: worker, processor, pipeline, orchestrator, scheduler, router, submit, mcp, workshop
+│   ├── main.py          # Click CLI: worker, processor, pipeline, orchestrator, scheduler, router, submit, mcp, workshop, ui, mdns, dead-letter
+│   └── preflight.py     # Pre-flight checks: NATS connectivity, env vars, config readability
 │
 └── contrib/
     ├── duckdb/          # DuckDB tools and backends (optional: uv sync --extra duckdb)
@@ -195,23 +204,40 @@ thread pool). Provides `BackendError` hierarchy for structured error handling.
 Full decompose → dispatch → collect → synthesize loop:
 
 - **GoalDecomposer:** LLM-based task decomposition grounded in a worker manifest
+- **ResultStream:** Streaming result collection via async iteration — yields results
+  as they arrive rather than blocking for all subtasks (Strategy A)
 - **ResultSynthesizer:** Deterministic merge + optional LLM synthesis modes
 - **CheckpointManager:** Pluggable store (in-memory for testing, Redis for production), configurable TTL
-- **Concurrent goals:** Set `max_concurrent_goals: N` in config to process multiple goals simultaneously within one instance. An `asyncio.Lock` protects shared state.
+- **Concurrent goals:** Set `max_concurrent_goals: N` in config to process multiple
+  goals simultaneously. All mutable state is per-goal inside `GoalState` —
+  concurrent goals are fully isolated with no shared mutable data and no locks.
+- **OTel span coverage:** Each orchestrator phase (decompose, dispatch, collect,
+  synthesize) is instrumented with OpenTelemetry spans for distributed tracing.
 
 ### Pipeline Orchestrator (`orchestrator/pipeline.py`)
 
 Dependency-aware stage execution with automatic parallelism. Stage dependencies
 are inferred from `input_mapping` paths — if stage B references `"A.output.field"`,
-then B depends on A. Stages with no inter-stage dependencies run concurrently
-via `asyncio.gather`.
+then B depends on A. Stages with no inter-stage dependencies run concurrently.
 
 Execution proceeds in levels (Kahn's topological sort):
 - Level 0: stages with only `goal.*` dependencies (run first, concurrently)
 - Level 1+: stages whose dependencies are all in earlier levels
 
+Within each parallel level, stages are executed using
+`asyncio.wait(FIRST_COMPLETED)` rather than `asyncio.gather`, enabling
+incremental progress reporting as each stage completes.
+
 Explicit `depends_on` lists in stage config override automatic inference.
-Supports conditions, per-stage timeouts, and input mapping expressions.
+Supports conditions, per-stage timeouts, input mapping expressions, per-stage
+retry (`max_retries`), and inter-stage contract validation
+(`input_schema`/`output_schema` on stages).
+
+Typed error hierarchy: `PipelineStageError` → `PipelineTimeoutError`,
+`PipelineValidationError`, `PipelineWorkerError`, `PipelineMappingError`.
+
+Each pipeline output includes a `_timeline` with per-stage `started_at`,
+`ended_at`, and `wall_time_ms` for observability.
 
 Like `OrchestratorActor`, set `max_concurrent_goals: N` in pipeline config to
 process multiple goals concurrently within a single instance.
@@ -285,6 +311,45 @@ evaluation call LLM backends directly via `execute_with_tools()`.
 
 Optional dependency: `uv sync --extra workshop`.
 
+### Distributed Tracing (`tracing/`)
+
+Optional OpenTelemetry integration for end-to-end distributed tracing across
+the actor mesh. Install with `uv sync --extra otel`.
+
+- **Graceful no-op:** When OTel SDK is not installed, all tracing functions
+  become no-ops. No code changes needed for bare-metal deployments.
+- **W3C traceparent propagation:** Trace context is injected into NATS messages
+  via a `_trace_context` key and extracted on the receiving end. This links
+  spans across actor boundaries for full pipeline visibility.
+- **Span coverage:** `BaseActor._process_one()`, `TaskRouter.route()`,
+  `PipelineOrchestrator._execute_stage()`, `MCPBridge._dispatch_and_wait()`,
+  orchestrator phases (decompose, dispatch, collect, synthesize), LLM calls
+  and tool continuation rounds in `execute_with_tools()`.
+
+Use any OTel-compatible backend (Jaeger, Zipkin, Grafana Tempo) to visualize
+traces. Initialize with `init_tracing(service_name="loom")` at startup.
+
+### TUI Dashboard (`tui/`)
+
+Real-time terminal dashboard for observing the actor mesh. Connects to NATS
+and renders live updates in a Textual-based terminal UI.
+
+```bash
+loom ui --nats-url nats://localhost:4222
+```
+
+Four panels:
+- **Goals** — active goals with status, subtask count, elapsed time
+- **Tasks** — dispatched tasks with worker type, tier, model, elapsed
+- **Pipeline** — pipeline stage execution with wall time
+- **Events** — scrolling log of all `loom.>` NATS messages
+
+The dashboard is read-only — it subscribes to `loom.>` wildcard but never
+publishes. Safe to run alongside production actors. Keybindings: `q` quit,
+`c` clear log, `r` refresh tables.
+
+Optional dependency: `uv sync --extra tui`.
+
 ### Contrib Packages
 
 - **DuckDB** (`contrib/duckdb/`): `DuckDBViewTool` (view-based LLM tool),
@@ -344,14 +409,21 @@ by default. In Kubernetes, scale via replica count or HPA.
 - **Workers:** Workers are single-task actors (`max_concurrent=1`). Scale
   horizontally via replicas, not vertically.
 
-### Bottleneck strategies (future)
+### Implemented optimizations
 
-- **Streaming result collection:** Process subtask results as they arrive instead
-  of waiting for all, reducing end-to-end latency.
-- **Worker-side batching:** Batch similar tasks into single LLM calls, reducing
-  API overhead.
-- **Decomposition caching:** Cache goal decomposition plans for repeated patterns,
-  skipping the decomposition LLM call.
+- **Streaming result collection (Strategy A):** `ResultStream` in
+  `orchestrator/stream.py` yields results as they arrive via async iteration.
+  Supports `on_result` callbacks for progress notifications and early exit.
+- **Pipeline incremental progress (Strategy C enhancement):** Parallel levels
+  use `asyncio.wait(FIRST_COMPLETED)` for incremental stage completion
+  reporting instead of blocking on the entire level.
+
+### Future optimizations
+
+- **Worker-side batching (Strategy D):** Batch similar tasks into single LLM
+  calls, reducing API overhead.
+- **Decomposition caching (Strategy E):** Cache goal decomposition plans for
+  repeated patterns, skipping the decomposition LLM call.
 
 ---
 

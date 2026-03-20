@@ -51,6 +51,10 @@ otel = [
     "opentelemetry-sdk>=1.20.0",           # SDK (TracerProvider, export pipeline)
     "opentelemetry-exporter-otlp>=1.20.0", # OTLP gRPC exporter
 ]
+tui = [
+    "textual>=3.0.0",                     # Terminal UI framework (Textualize)
+    "nats-py>=2.7.0",                     # Direct NATS subscription for live view
+]
 docs = [
     "sphinx>=7.0",             # Documentation generator
     "sphinx-rtd-theme>=2.0",   # Read the Docs theme

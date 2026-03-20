@@ -24,6 +24,7 @@ See Also:
 
 from __future__ import annotations
 
+import importlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -47,8 +48,13 @@ class ConfigValidationError(Exception):
     """Raised when a config file fails structural validation."""
 
 
-def load_config(path: str | Path) -> dict[str, Any]:
+def load_config(path: str | Path, *, resolve_refs: bool = True) -> dict[str, Any]:
     """Load a YAML config file and return as a dict.
+
+    When *resolve_refs* is True (the default), ``input_schema_ref`` and
+    ``output_schema_ref`` fields are resolved to JSON Schema via Pydantic
+    model imports.  Pass ``resolve_refs=False`` when the referenced modules
+    may not be importable (e.g., during config-only validation).
 
     Raises:
         FileNotFoundError: If the config file doesn't exist.
@@ -61,7 +67,94 @@ def load_config(path: str | Path) -> dict[str, Any]:
         raise ConfigValidationError(
             f"Config at {path}: expected YAML mapping, got {type(data).__name__}"
         )
+    if resolve_refs:
+        resolve_schema_refs(data)
     return data
+
+
+def resolve_schema_refs(config: dict[str, Any]) -> dict[str, Any]:
+    """Resolve ``input_schema_ref`` / ``output_schema_ref`` to JSON Schema.
+
+    If a config dict contains ``input_schema_ref`` or ``output_schema_ref``
+    (a dotted Python path to a Pydantic model), import the model and call
+    ``.model_json_schema()`` to populate the corresponding ``input_schema``
+    / ``output_schema`` key.
+
+    An explicit ``input_schema`` / ``output_schema`` key always takes
+    precedence — the ref is only used when the inline schema is absent.
+
+    This function mutates and returns *config* for convenience.
+
+    Raises:
+        ConfigValidationError: If the referenced path cannot be imported
+            or the target is not a Pydantic BaseModel subclass.
+    """
+    for schema_key, ref_key in (
+        ("input_schema", "input_schema_ref"),
+        ("output_schema", "output_schema_ref"),
+    ):
+        ref = config.get(ref_key)
+        if ref is None:
+            continue
+        if schema_key in config:
+            # Explicit inline schema takes priority — skip resolution.
+            continue
+
+        config[schema_key] = _import_pydantic_schema(ref, ref_key)
+
+    # Also resolve schema_refs inside pipeline_stages.
+    for stage in config.get("pipeline_stages", []):
+        if isinstance(stage, dict):
+            for schema_key, ref_key in (
+                ("input_schema", "input_schema_ref"),
+                ("output_schema", "output_schema_ref"),
+            ):
+                ref = stage.get(ref_key)
+                if ref is None:
+                    continue
+                if schema_key in stage:
+                    continue
+                stage[schema_key] = _import_pydantic_schema(ref, ref_key)
+
+    return config
+
+
+def _import_pydantic_schema(dotted_path: str, ref_key: str) -> dict[str, Any]:
+    """Import a Pydantic model by dotted path and return its JSON Schema."""
+    parts = dotted_path.rsplit(".", 1)
+    if len(parts) != 2:
+        raise ConfigValidationError(
+            f"'{ref_key}' must be a fully qualified 'module.ClassName' path, "
+            f"got '{dotted_path}'"
+        )
+    module_path, class_name = parts
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as e:
+        raise ConfigValidationError(
+            f"'{ref_key}': cannot import module '{module_path}': {e}"
+        ) from e
+
+    cls = getattr(module, class_name, None)
+    if cls is None:
+        raise ConfigValidationError(
+            f"'{ref_key}': module '{module_path}' has no attribute '{class_name}'"
+        )
+
+    # Check it's a Pydantic BaseModel.
+    try:
+        from pydantic import BaseModel
+    except ImportError as e:  # pragma: no cover
+        raise ConfigValidationError(
+            f"'{ref_key}': pydantic is required for schema_ref resolution"
+        ) from e
+
+    if not (isinstance(cls, type) and issubclass(cls, BaseModel)):
+        raise ConfigValidationError(
+            f"'{ref_key}': '{dotted_path}' is not a Pydantic BaseModel subclass"
+        )
+
+    return cls.model_json_schema()
 
 
 # ---------------------------------------------------------------------------

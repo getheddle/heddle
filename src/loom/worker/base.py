@@ -16,6 +16,7 @@ import structlog
 import yaml
 
 from loom.core.actor import BaseActor
+from loom.core.config import resolve_schema_refs
 from loom.core.contracts import validate_input, validate_output
 from loom.core.messages import TaskMessage, TaskResult, TaskStatus
 
@@ -47,7 +48,8 @@ class TaskWorker(BaseActor):
 
     def _load_config(self, path: str) -> dict:
         with open(path) as f:
-            return yaml.safe_load(f)
+            config = yaml.safe_load(f)
+        return resolve_schema_refs(config)
 
     async def on_reload(self) -> None:
         """Re-read the worker config from disk on reload signal."""

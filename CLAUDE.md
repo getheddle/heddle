@@ -17,6 +17,8 @@ src/loom/
     config.py             # load_config(), ConfigValidationError, worker/pipeline/orchestrator/router validation
                           #   Input mapping path validation, processing_backend format validation,
                           #   condition operator strict validation
+                          #   resolve_schema_refs() — resolve input_schema_ref/output_schema_ref
+                          #   to JSON Schema via Pydantic model imports
     contracts.py          # I/O contract validation (bool/int distinction, schema enforcement)
     manifest.py           # AppManifest Pydantic model, validate_app_manifest(), load_manifest()
     messages.py           # Pydantic models: TaskMessage, TaskResult, OrchestratorGoal,
@@ -37,9 +39,12 @@ src/loom/
 
   orchestrator/
     runner.py             # OrchestratorActor — decompose/dispatch/collect/synthesize loop (concurrent goals via max_concurrent_goals)
+    stream.py             # ResultStream — async iterator for streaming result collection (Strategy A)
+                          #   on_result callback, early exit, timeout, duplicate filtering
     decomposer.py         # GoalDecomposer — LLM-based task decomposition, WorkerDescriptor
     synthesizer.py        # ResultSynthesizer — merge + LLM synthesis modes
     pipeline.py           # PipelineOrchestrator — dependency-aware parallel stage execution with input mapping
+                          #   Incremental parallel stage completion via asyncio.wait(FIRST_COMPLETED)
                           #   Typed error hierarchy: PipelineStageError → Timeout/Validation/Worker/Mapping
                           #   Per-stage retry (max_retries, transient errors only)
                           #   Inter-stage contract validation (input_schema/output_schema on stages)
@@ -79,12 +84,18 @@ src/loom/
     otel.py               # OpenTelemetry integration — optional, graceful no-op when SDK not installed
                           #   W3C traceparent propagation via _trace_context key in NATS messages
 
+  tui/
+    __init__.py           # Package init
+    app.py                # LoomDashboard — Textual TUI app, live NATS observer (loom.> wildcard)
+                          #   Goals/Tasks/Pipeline/Events panels, StatusBar, keybindings (q/c/r)
+                          #   DashboardState, TrackedGoal/Task/Stage domain models
+
   discovery/
     mdns.py               # LoomServiceAdvertiser — mDNS/Bonjour LAN service advertisement
 
   cli/
     main.py               # Click CLI: worker, processor, pipeline, orchestrator, scheduler,
-                          #   router, submit, mcp, workshop, mdns, dead-letter (11 commands)
+                          #   router, submit, mcp, workshop, ui, mdns, dead-letter (12 commands)
                           #   --skip-preflight flag on all actor commands
     preflight.py          # Pre-flight checks: NATS connectivity, env vars, config readability
 
@@ -155,6 +166,7 @@ docs/                     # Project documentation
   CONTRIBUTING.md         # Contribution guidelines
   CODING_GUIDE.md         # Coding, documentation, and commenting standards
   TROUBLESHOOTING.md      # Common issues and solutions (NATS, workers, pipelines, services)
+  DESIGN_INVARIANTS.md    # Non-obvious design decisions and red lines (must-read before structural changes)
   building-workflows.md   # How to build custom workflows
   rag-howto.md            # RAG pipeline setup guide
   workshop.md             # Workshop web app design, architecture, enhancement guide
@@ -172,7 +184,7 @@ deploy/
   macos/                  # launchd plist files + install/uninstall scripts
   windows/                # NSSM-based Windows service install/uninstall scripts
 
-tests/                    # 66 test files, 1223 unit tests + 1 integration test (85% coverage)
+tests/                    # 69 test files, 1281 unit tests + 1 integration test (85% coverage)
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -196,6 +208,9 @@ tests/                    # 66 test files, 1223 unit tests + 1 integration test 
   test_scheduler_expansion.py                     # Scheduler expand_from
   test_serialize_writes.py                        # SyncProcessingBackend write lock
   test_tracing.py         test_config_impact.py    # OTel tracing, config impact analysis
+  test_schema_ref.py                              # Pydantic schema_ref resolution
+  test_result_stream.py                           # ResultStream streaming collection (Strategy A)
+  test_tui.py                                     # TUI dashboard domain models and event handlers
   test_dead_letter.py     test_preflight.py       # Dead-letter consumer, CLI pre-flight checks
   test_integration.py                             # @pytest.mark.integration (needs NATS)
   contrib/rag/            # 6 RAG test files (backends, chunker, ingestion, mux, schemas, tools)
@@ -206,7 +221,7 @@ tests/                    # 66 test files, 1223 unit tests + 1 integration test 
 - **Workers are stateless.** They process one task and reset (via `reset()` hook). No state carries between tasks — this is enforced, not optional.
 - **All inter-actor communication uses typed Pydantic messages** (`TaskMessage`, `TaskResult`, `OrchestratorGoal`, `CheckpointState` in `core/messages.py`).
 - **The router is deterministic** — it does not use an LLM. It routes by `worker_type` and `model_tier` using rules in `configs/router_rules.yaml`. Unroutable tasks go to `loom.tasks.dead_letter`.
-- **Workers have strict I/O contracts** validated by `core/contracts.py`. Input and output schemas are defined per-worker in their YAML config. Boolean values are correctly distinguished from integers.
+- **Workers have strict I/O contracts** validated by `core/contracts.py`. Input and output schemas are defined per-worker via inline JSON Schema in YAML or via `input_schema_ref`/`output_schema_ref` pointing to Pydantic models (resolved at load time by `config.resolve_schema_refs()`). Boolean values are correctly distinguished from integers.
 - **Three model tiers exist:** `local` (Ollama), `standard` (Claude Sonnet), `frontier` (Claude Opus). The router and task metadata decide which tier handles each task.
 - **Three LLM backends:** `AnthropicBackend` (Claude API, version 2024-10-22), `OllamaBackend` (local models), `OpenAICompatibleBackend` (vLLM, llama.cpp, LiteLLM, etc.). All support tool-use.
 - **Rate limiting:** Token-bucket rate limiter enforces per-tier dispatch throttling based on `rate_limits` in `router_rules.yaml`.
@@ -386,7 +401,7 @@ In Kubernetes, scale replicas via `kubectl scale deployment/loom-worker --replic
 
 **Not yet implemented (future work):**
 
-- **A — Streaming result collection.** Process subtask results as they arrive rather than waiting for all. Would reduce end-to-end latency for goals with many independent subtasks. Requires changing the collect phase in `OrchestratorActor` to a streaming model.
+- **A — Streaming result collection.** ✅ **Implemented (v0.7.0).** `ResultStream` in `orchestrator/stream.py` yields results as they arrive via async iteration. `OrchestratorActor._collect_results()` now uses `ResultStream` with optional `on_result` callback for progress notifications and early exit. `PipelineOrchestrator` parallel levels now use `asyncio.wait(FIRST_COMPLETED)` for incremental stage progress reporting.
 - **D — Worker-side batching.** Batch multiple similar tasks into a single LLM call. Would reduce API call overhead for high-volume identical worker types. Requires a batching layer between the router and workers.
 - **E — Decomposition caching.** Cache goal decomposition plans for structurally similar goals. Would skip the decomposition LLM call for repeated goal patterns. Requires a cache keyed by goal structure fingerprints.
 
@@ -435,8 +450,14 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 
 **Distributed tracing:**
 - **OpenTelemetry integration** — optional `otel` extra (`uv sync --extra otel`); `loom.tracing` module with `get_tracer()`, `init_tracing()`, `inject_trace_context()`, `extract_trace_context()`; graceful no-op when OTel SDK not installed
-- **Span instrumentation** — spans on `BaseActor._process_one()`, `TaskRouter.route()`, `PipelineOrchestrator._execute_stage()`, `MCPBridge._dispatch_and_wait()`
+- **Span instrumentation** — spans on `BaseActor._process_one()`, `TaskRouter.route()`, `PipelineOrchestrator._execute_stage()`, `MCPBridge._dispatch_and_wait()`, `OrchestratorActor` phases (decompose/dispatch/collect/synthesize), `execute_with_tools()` LLM calls and tool continuations
 - **W3C traceparent propagation** — trace context propagated through NATS messages via `_trace_context` key; spans link across actor boundaries for end-to-end pipeline tracing
+
+**TUI dashboard:**
+- **Terminal dashboard** — `loom ui` command launches a Textual-based terminal UI for real-time NATS observation
+- **Four panels** — Goals (status, subtask count, elapsed), Tasks (worker type, tier, model, elapsed), Pipeline (stage execution with wall time), Events (scrolling log of all `loom.>` messages)
+- **Read-only observer** — subscribes to `loom.>` wildcard, never publishes; safe to run alongside production actors
+- **Keybindings** — `q` quit, `c` clear log, `r` refresh tables
 
 **Config tooling:**
 - **Config impact analysis** — `workshop/config_impact.py` reverse-maps worker→pipelines/stages, finds transitive downstream dependencies, assesses breaking-change risk based on output_schema presence
@@ -471,9 +492,8 @@ Loom supports multiple users (e.g., two analysts on Claude Desktop) working simu
 ## What to implement next
 
 1. **Workshop MetricsCollector** — optional NATS subscriber for live worker metrics in Workshop dashboard
-2. **Streaming result collection (Strategy A)** — process subtask results as they arrive
-3. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
-4. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
+2. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
+3. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
 
 ## What NOT to do
 

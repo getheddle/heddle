@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from loom.tracing import get_tracer
 from loom.worker.base import TaskWorker
 from loom.worker.tools import MAX_TOOL_ROUNDS, ToolProvider, load_tool_provider
 
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     from loom.worker.backends import LLMBackend
 
 logger = structlog.get_logger()
+_tracer = get_tracer("loom.worker")
 
 # Regex to strip markdown code fences that LLMs commonly wrap output in.
 # Matches ```json, ```yaml, or bare ``` blocks — anchored version for clean responses.
@@ -128,12 +130,19 @@ async def execute_with_tools(
         tool_calls, stop_reason.  Token counts are aggregated across all
         tool-use rounds.
     """
-    result = await backend.complete(
-        system_prompt=system_prompt,
-        user_message=user_message,
-        max_tokens=max_tokens,
-        tools=tool_defs,
-    )
+    with _tracer.start_as_current_span(
+        "llm.call",
+        attributes={"llm.max_tokens": max_tokens, "llm.has_tools": tool_defs is not None},
+    ) as llm_span:
+        result = await backend.complete(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            max_tokens=max_tokens,
+            tools=tool_defs,
+        )
+        llm_span.set_attribute("llm.model", result.get("model", "unknown"))
+        llm_span.set_attribute("llm.prompt_tokens", result.get("prompt_tokens", 0))
+        llm_span.set_attribute("llm.completion_tokens", result.get("completion_tokens", 0))
 
     total_prompt_tokens = result.get("prompt_tokens", 0)
     total_completion_tokens = result.get("completion_tokens", 0)
@@ -177,13 +186,19 @@ async def execute_with_tools(
             )
 
         # Call LLM again with updated message history
-        result = await backend.complete(
-            system_prompt=system_prompt,
-            user_message=user_message,
-            messages=messages,
-            max_tokens=max_tokens,
-            tools=tool_defs,
-        )
+        with _tracer.start_as_current_span(
+            "llm.tool_continuation",
+            attributes={"llm.tool_round": rounds},
+        ) as cont_span:
+            result = await backend.complete(
+                system_prompt=system_prompt,
+                user_message=user_message,
+                messages=messages,
+                max_tokens=max_tokens,
+                tools=tool_defs,
+            )
+            cont_span.set_attribute("llm.prompt_tokens", result.get("prompt_tokens", 0))
+            cont_span.set_attribute("llm.completion_tokens", result.get("completion_tokens", 0))
         total_prompt_tokens += result.get("prompt_tokens", 0)
         total_completion_tokens += result.get("completion_tokens", 0)
 

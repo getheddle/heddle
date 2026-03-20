@@ -74,7 +74,7 @@ type annotations on all public functions, ruff for formatting and linting.
 - New worker configurations for specific domains
 - New contrib packages (databases, search engines, monitoring integrations)
 - Config validation improvements and new config types
-- Dead-letter consumer implementation for monitoring/retry
+- Workshop MetricsCollector for live NATS metrics in the dashboard
 - MCP gateway examples and transport extensions
 - Documentation improvements and examples
 - Bug reports with reproducible steps

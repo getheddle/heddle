@@ -96,7 +96,7 @@ A FastAPI lifespan context manager starts/stops mDNS advertisement when the
 ```
 src/loom/workshop/
 ├── __init__.py           # Package docstring only
-├── app.py                # FastAPI app factory (create_app), 19 route handlers, mDNS lifespan
+├── app.py                # FastAPI app factory (create_app), 22+ route handlers, mDNS lifespan
 ├── app_manager.py        # AppManager — ZIP deploy, list, remove app bundles
 ├── test_runner.py        # WorkerTestRunner — single-payload LLM execution
 ├── eval_runner.py        # EvalRunner — batch test suite with scoring
@@ -247,6 +247,28 @@ references and explicit `depends_on` lists.  `add_parallel_branch()` rejects
 stages whose `input_mapping` references existing stage names (must reference only
 `goal.*`).
 
+### Config Impact Analysis (`config_impact.py`)
+
+Reverse-maps worker changes to their pipeline impact.  Used by the worker
+detail page to show affected pipelines and risk assessment.
+
+| Function | What it does |
+|----------|-------------|
+| `get_worker_impact(worker_name, configs_dir, extra_dirs)` | Find all pipelines referencing a worker, trace downstream stages, assess risk |
+
+**Impact result fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `affected_pipelines` | `list[str]` | Pipeline names that use this worker |
+| `direct_stages` | `list[dict]` | Stages that directly invoke the worker |
+| `downstream_stages` | `list[dict]` | Stages that depend on the worker's output (transitive) |
+| `risk_level` | `str` | `"low"`, `"medium"`, or `"high"` — based on whether the worker has an `output_schema` |
+
+**UI integration:** The worker detail page loads an impact panel asynchronously
+via HTMX (`/workers/{name}/impact-panel`).  A JSON API is also available at
+`/workers/{name}/impact`.
+
 ### WorkshopDB (`db.py`)
 
 DuckDB-backed persistence.  Default path: `~/.loom/workshop.duckdb`.
@@ -307,6 +329,9 @@ when a baseline exists.  `remove_baseline(worker_name)` clears the baseline.
 | GET | `/workers/{name}/eval/{run_id}` | `worker_eval_detail` | `workers/eval_detail.html` | Per-case results + baseline comparison |
 | POST | `/workers/{name}/eval/{run_id}/promote-baseline` | `worker_promote_baseline` | -- | Promote run as baseline (redirect 303) |
 | POST | `/workers/{name}/eval/remove-baseline` | `worker_remove_baseline` | -- | Remove worker baseline (redirect 303) |
+| GET | `/workers/{name}/validate` | `worker_validate` | — | JSON: config validation errors |
+| GET | `/workers/{name}/impact` | `worker_impact` | — | JSON: config impact analysis |
+| GET | `/workers/{name}/impact-panel` | `worker_impact_panel` | — | HTMX: impact analysis panel |
 | GET | `/pipelines` | `pipelines_list` | `pipelines/list.html` | Pipeline table |
 | GET | `/pipelines/{name}` | `pipeline_detail` | `pipelines/editor.html` | Dep graph + stage operations |
 | POST | `/pipelines/{name}/stage` | `pipeline_stage_edit` | — | Insert/remove/swap/branch (redirect 303) |
@@ -608,6 +633,8 @@ Workshop tests are in `tests/`:
 | `test_workshop_pipeline_editor.py` | `PipelineEditor` insert/remove/swap/branch/validate |
 | `test_app_manifest.py` | `AppManifest` validation, loading, error cases |
 | `test_app_manager.py` | `AppManager` ZIP deploy, list, remove, reload notification |
+| `test_workshop_app.py` | Workshop HTTP routes (baselines, dead-letter replay, basic routes) |
+| `test_config_impact.py` | Config impact analysis (worker→pipeline reverse mapping) |
 
 All tests use in-memory DuckDB (`:memory:`) and mock LLM backends.  No
 infrastructure needed.

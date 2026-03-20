@@ -307,3 +307,95 @@ choco install nssm
 - Check the original reason in the replay log — if "unroutable", ensure a worker for that `worker_type` + `tier` is running
 - If "rate_limited", wait for the rate limiter bucket to refill before replaying
 - If "malformed", the task data itself is invalid and needs to be fixed at the source
+
+---
+
+## TUI Dashboard
+
+### TUI won't start
+
+**Symptom:** `loom ui` fails with import errors.
+
+**Fix:**
+```bash
+# Install TUI dependencies
+uv sync --extra tui
+
+# Or all extras
+uv sync --all-extras
+```
+
+### TUI shows "NATS connection failed"
+
+**Symptom:** Dashboard starts but shows a red "disconnected" status and an error in the Events log.
+
+**Fix:**
+- Check that NATS is running: `nats-server --version` or `docker ps | grep nats`
+- Verify the URL: `loom ui --nats-url nats://localhost:4222` (default)
+- Check for firewall rules blocking port 4222
+- The TUI needs NATS running — it subscribes to `loom.>` to observe traffic
+
+### TUI shows no events
+
+**Symptom:** Dashboard is connected (green status) but no goals, tasks, or events appear.
+
+**Fix:**
+- The TUI is a passive observer — it only shows traffic that occurs while it's running
+- Submit a goal or run a pipeline to generate traffic
+- Check that actors (router, workers, orchestrator/pipeline) are running
+- The TUI subscribes to `loom.>` which catches all Loom NATS subjects
+
+### Pipeline stages not appearing
+
+**Symptom:** Goals and tasks appear but the Pipeline tab is empty.
+
+**Fix:**
+- Pipeline stage data comes from `_timeline` in result output — only pipeline orchestrators produce this
+- Dynamic orchestrators (OrchestratorActor) don't produce timeline data; use pipeline orchestrators for stage visibility
+- Check that the pipeline is producing results (look in the Events tab for `loom.results.*` messages)
+
+---
+
+## Distributed Tracing (OpenTelemetry)
+
+### Tracing not producing spans
+
+**Symptom:** No spans appear in your tracing backend (Jaeger, Zipkin, Tempo).
+
+**Fix:**
+```bash
+# Install OTel dependencies
+uv sync --extra otel
+
+# Verify installation
+python -c "from opentelemetry import trace; print('OTel available')"
+```
+
+Then initialize tracing at startup:
+```python
+from loom.tracing import init_tracing
+init_tracing(service_name="loom")
+```
+
+Or set the standard OTel environment variables:
+```bash
+export OTEL_SERVICE_NAME=loom
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+```
+
+### Spans not linking across actors
+
+**Symptom:** You see separate root spans for each actor instead of a connected trace.
+
+**Fix:**
+- Loom propagates trace context via a `_trace_context` key in NATS messages (W3C traceparent format)
+- Both the sender and receiver must have OTel installed for propagation to work
+- Check that `inject_trace_context()` and `extract_trace_context()` are being called (they are in `BaseActor._process_one()` and all publish methods)
+- If using custom actors, ensure you call `inject_trace_context(data)` before publishing and `extract_trace_context(data)` when receiving
+
+### OTel not installed but code imports it
+
+**Symptom:** Worried about import errors when OTel is not installed.
+
+**Fix:**
+- This is handled automatically. The `loom.tracing` module uses runtime feature detection — if OTel SDK is not installed, all functions become no-ops. No code changes needed. See Design Invariant #9.

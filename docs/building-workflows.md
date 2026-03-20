@@ -497,8 +497,10 @@ Full list of fields available in worker YAML configs:
 | `system_prompt` | yes (LLM) | — | The system prompt sent to the LLM |
 | `processing_backend` | yes (processor) | — | Fully qualified Python class path |
 | `backend_config` | no | `{}` | Dict passed to backend constructor |
-| `input_schema` | yes | — | JSON Schema for input validation |
-| `output_schema` | yes | — | JSON Schema for output validation |
+| `input_schema` | yes* | — | JSON Schema for input validation |
+| `output_schema` | yes* | — | JSON Schema for output validation |
+| `input_schema_ref` | no | — | Pydantic model import path for input schema (alternative to `input_schema`) |
+| `output_schema_ref` | no | — | Pydantic model import path for output schema (alternative to `output_schema`) |
 | `default_model_tier` | no | `"standard"` | `"local"`, `"standard"`, or `"frontier"` |
 | `max_input_tokens` | no | `4000` | Max input token budget |
 | `max_output_tokens` | no | `2000` | Max output token budget |
@@ -508,6 +510,35 @@ Full list of fields available in worker YAML configs:
 | `resolve_file_refs` | no | `[]` | Payload fields to resolve as workspace file refs |
 | `reset_after_task` | no | `true` | Always `true` for workers (statelessness is enforced) |
 | `timeout_seconds` | no | `60` | Per-task timeout |
+
+\* Either `input_schema`/`output_schema` (inline JSON Schema) or
+`input_schema_ref`/`output_schema_ref` (Pydantic model path) is required.
+When using `_ref` fields, the Pydantic model's `.model_json_schema()` is
+resolved at config load time via `config.resolve_schema_refs()`.
+
+### Schema refs (Pydantic-driven I/O contracts)
+
+Instead of writing JSON Schema inline, you can point to a Pydantic model:
+
+```yaml
+name: "my_worker"
+input_schema_ref: "myapp.contracts.MyWorkerInput"
+output_schema_ref: "myapp.contracts.MyWorkerOutput"
+system_prompt: |
+  ...
+```
+
+At load time, `resolve_schema_refs()` imports the model class and calls
+`.model_json_schema()` to generate the equivalent JSON Schema. This gives
+you:
+
+- **Type safety** — Pydantic models are validated by mypy/pyright
+- **Reusability** — share models between worker configs and application code
+- **Auto-documentation** — field descriptions flow into the schema
+
+The resolved schema replaces `input_schema`/`output_schema` at runtime, so
+the rest of the system (contract validation, Workshop, MCP discovery) works
+identically.
 
 ## NATS subject conventions
 

@@ -332,16 +332,13 @@ def pipeline(config: str, nats_url: str, skip_preflight: bool):
 
     See configs/orchestrators/ for example pipeline configs.
     """
-    import yaml
-
     if not skip_preflight:
         _run_preflight(nats_url, config=config)
 
-    from loom.core.config import validate_pipeline_config
+    from loom.core.config import load_config, validate_pipeline_config
     from loom.orchestrator.pipeline import PipelineOrchestrator
 
-    with open(config) as f:
-        cfg = yaml.safe_load(f)
+    cfg = load_config(config)
 
     # Validate pipeline config structure before starting the actor.
     errors = validate_pipeline_config(cfg, config)
@@ -395,16 +392,13 @@ def orchestrator(config: str, nats_url: str, redis_url: str, skip_preflight: boo
     Queue group: orchestrators
 
     """
-    import yaml
-
     if not skip_preflight:
         _run_preflight(nats_url, config=config)
 
-    from loom.core.config import validate_orchestrator_config
+    from loom.core.config import load_config, validate_orchestrator_config
     from loom.orchestrator.runner import OrchestratorActor
 
-    with open(config) as f:
-        cfg = yaml.safe_load(f)
+    cfg = load_config(config)
 
     # Validate orchestrator config structure.
     errors = validate_orchestrator_config(cfg, config)
@@ -743,6 +737,51 @@ def workshop(
     )
 
     uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+# ---------------------------------------------------------------------------
+# ui command (TUI dashboard)
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option("--nats-url", default="nats://localhost:4222", help="NATS server URL")
+def ui(nats_url: str) -> None:
+    r"""Launch the real-time terminal dashboard.
+
+    Connects to NATS and displays live goals, tasks, pipeline stages,
+    and a scrolling event log.  The dashboard is read-only — it observes
+    all ``loom.>`` traffic but never publishes.
+
+    \b
+    Panels:
+        - Goals:    active goals with status and elapsed time
+        - Tasks:    dispatched tasks with worker type, tier, status
+        - Pipeline: pipeline stage execution with wall time
+        - Events:   scrolling log of all NATS messages
+
+    \b
+    Keybindings:
+        q — quit
+        c — clear event log
+        r — refresh tables
+
+    Requires the 'tui' package extras:
+
+    \b
+        uv sync --extra tui
+    """
+    try:
+        from loom.tui.app import run_dashboard
+    except ImportError:
+        click.echo(
+            "TUI dependencies not installed. Run:\n\n"
+            "    uv sync --extra tui\n",
+            err=True,
+        )
+        raise SystemExit(1) from None
+
+    run_dashboard(nats_url=nats_url)
 
 
 # ---------------------------------------------------------------------------

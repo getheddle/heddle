@@ -138,8 +138,11 @@ class PipelineOrchestrator(BaseActor):
         super().__init__(actor_id, nats_url, max_concurrent=max_goals, bus=bus)
 
     def _load_config(self, path: str) -> dict:
+        from loom.core.config import resolve_schema_refs
+
         with open(path) as f:
-            return yaml.safe_load(f)
+            config = yaml.safe_load(f)
+        return resolve_schema_refs(config)
 
     async def on_reload(self) -> None:
         """Re-read the pipeline config from disk on reload signal."""
@@ -256,10 +259,34 @@ class PipelineOrchestrator(BaseActor):
         stage_name = stage["name"]
         stage_log = log.bind(stage=stage_name)
 
+        with _tracer.start_as_current_span(
+            f"pipeline.stage.{stage_name}",
+            attributes={
+                "pipeline.stage": stage_name,
+                "pipeline.worker_type": stage.get("worker_type", ""),
+                "pipeline.goal_id": goal.goal_id,
+            },
+        ) as stage_span:
+            return await self._execute_stage_inner(
+                stage, stage_name, context, goal, timeout, stage_log, stage_span,
+            )
+
+    async def _execute_stage_inner(
+        self,
+        stage: dict[str, Any],
+        stage_name: str,
+        context: dict[str, Any],
+        goal: OrchestratorGoal,
+        timeout: float,
+        stage_log: Any,
+        stage_span: Any,
+    ) -> tuple[str, dict[str, Any]]:
+        """Inner stage execution (wrapped by _execute_stage span)."""
         # Check condition (if present) — skipped stages return empty output.
         condition = stage.get("condition")
         if condition and not self._evaluate_condition(condition, context):
             stage_log.info("pipeline.stage_skipped", reason="condition_false")
+            stage_span.set_attribute("pipeline.stage_skipped", True)
             return stage_name, {
                 "output": None,
                 "model_used": None,
@@ -352,6 +379,9 @@ class PipelineOrchestrator(BaseActor):
             stage_ended_at = datetime.now(UTC).isoformat()
             stage_elapsed_ms = int((time.monotonic() - stage_start_mono) * 1000)
             stage_log.info("pipeline.stage_completed", ms=result.processing_time_ms)
+            stage_span.set_attribute("pipeline.wall_time_ms", stage_elapsed_ms)
+            stage_span.set_attribute("pipeline.model_used", result.model_used or "")
+            stage_span.set_attribute("pipeline.processing_time_ms", result.processing_time_ms)
             return stage_name, {
                 "output": result.output,
                 "model_used": result.model_used,
@@ -367,6 +397,78 @@ class PipelineOrchestrator(BaseActor):
     # ------------------------------------------------------------------
     # Core message handler
     # ------------------------------------------------------------------
+
+    async def _execute_parallel_level(
+        self,
+        level: list[dict[str, Any]],
+        context: dict[str, Any],
+        goal: OrchestratorGoal,
+        timeout: float,
+        level_log: Any,
+        completed_stage_count: int,
+        total_stage_count: int,
+    ) -> int:
+        """Execute a parallel level: launch stages concurrently, collect incrementally.
+
+        Uses ``asyncio.wait(FIRST_COMPLETED)`` to report progress as each
+        stage finishes, rather than waiting for the entire level via
+        ``asyncio.gather``.  Context is updated incrementally as stages
+        complete, enabling earlier observability.
+
+        Returns the updated ``completed_stage_count``.
+
+        Raises ``PipelineStageError`` (or subclass) if any stage fails.
+        """
+        level_log.info(
+            "pipeline.level_parallel",
+            stages=[s["name"] for s in level],
+        )
+
+        # Launch all stage coroutines as tasks.
+        task_to_stage: dict[asyncio.Task, dict[str, Any]] = {}
+        for stage in level:
+            coro = self._execute_stage(
+                stage, context, goal, timeout, level_log,
+            )
+            task = asyncio.create_task(coro)
+            task_to_stage[task] = stage
+
+        pending = set(task_to_stage.keys())
+        first_error: Exception | None = None
+
+        # Collect results incrementally via FIRST_COMPLETED.
+        while pending:
+            done, pending = await asyncio.wait(
+                pending,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in done:
+                exc = task.exception()
+                if exc is not None:
+                    # Record first error but let remaining stages finish
+                    # (they're already running).
+                    if first_error is None:
+                        first_error = exc
+                    continue
+
+                name, result_dict = task.result()
+                if not result_dict.get("_skipped"):
+                    context[name] = result_dict
+                completed_stage_count += 1
+                level_log.info(
+                    "pipeline.stage_progress",
+                    stage=name,
+                    completed=completed_stage_count,
+                    total=total_stage_count,
+                )
+
+        # After all tasks in the level are done, propagate the first error.
+        if first_error is not None:
+            if isinstance(first_error, PipelineStageError):
+                raise first_error
+            raise first_error
+
+        return completed_stage_count
 
     async def handle_message(self, data: dict[str, Any]) -> None:
         """Execute the pipeline for an incoming orchestrator goal."""
@@ -402,51 +504,31 @@ class PipelineOrchestrator(BaseActor):
         }
 
         start = time.monotonic()
+        completed_stage_count = 0
+        total_stage_count = len(stages)
 
         try:
             for level_idx, level in enumerate(levels):
                 level_log = log.bind(level=level_idx)
 
                 if len(level) == 1:
-                    # Single stage — no gather overhead.
+                    # Single stage — no concurrency overhead.
                     stage = level[0]
                     name, result_dict = await self._execute_stage(
-                        stage,
-                        context,
-                        goal,
-                        timeout,
-                        level_log,
+                        stage, context, goal, timeout, level_log,
                     )
                     if not result_dict.get("_skipped"):
                         context[name] = result_dict
-                else:
-                    # Multiple stages — run concurrently.
+                    completed_stage_count += 1
                     level_log.info(
-                        "pipeline.level_parallel",
-                        stages=[s["name"] for s in level],
+                        "pipeline.stage_progress",
+                        completed=completed_stage_count,
+                        total=total_stage_count,
                     )
-                    coros = [
-                        self._execute_stage(s, context, goal, timeout, level_log) for s in level
-                    ]
-                    results = await asyncio.gather(
-                        *coros,
-                        return_exceptions=True,
-                    )
-
-                    # Check for failures.
-                    for r in results:
-                        if isinstance(r, PipelineStageError):
-                            raise r
-                        if isinstance(r, Exception):
-                            raise r
-
-                    # Store all results in context.
-                    context.update(
-                        {
-                            name: result_dict
-                            for name, result_dict in results
-                            if not result_dict.get("_skipped")
-                        }
+                else:
+                    completed_stage_count = await self._execute_parallel_level(
+                        level, context, goal, timeout, level_log,
+                        completed_stage_count, total_stage_count,
                     )
 
         except PipelineStageError as e:
@@ -574,6 +656,12 @@ class PipelineOrchestrator(BaseActor):
         try:
             value = PipelineOrchestrator._resolve_path(path, context)
         except (KeyError, ValueError):
+            logger.warning(
+                "pipeline.condition_missing_path",
+                condition=condition,
+                path=path,
+                hint="Path not found in context; condition evaluates to false (stage skipped)",
+            )
             return False
 
         # Normalize expected value

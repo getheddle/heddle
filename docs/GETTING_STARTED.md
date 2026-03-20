@@ -30,6 +30,10 @@ uv sync --extra rag           # RAG pipeline (DuckDB + Ollama)
 uv sync --extra scheduler     # Cron expression parsing (croniter)
 uv sync --extra mcp           # MCP gateway (Model Context Protocol SDK)
 uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
+uv sync --extra otel          # OpenTelemetry distributed tracing
+uv sync --extra tui           # Terminal dashboard (Textual)
+uv sync --extra mdns          # mDNS/Bonjour service discovery on LAN
+uv sync --extra docs          # Sphinx API documentation generation
 ```
 
 ---
@@ -118,10 +122,18 @@ uv run loom submit "Summarize the main points of the UN Charter preamble" --nats
 Monitor what's happening:
 
 ```bash
-# Install NATS CLI to watch all messages
+# Option 1: Use the built-in TUI dashboard (recommended)
+uv sync --extra tui
+uv run loom ui --nats-url nats://localhost:4222
+
+# Option 2: Use the NATS CLI to watch raw messages
 brew tap nats-io/nats-tools && brew install nats-io/nats-tools/nats
 nats sub "loom.>" --server=nats://localhost:4222
 ```
+
+The TUI dashboard shows live goals, tasks, pipeline stages, and a scrolling
+event log in your terminal. See [Architecture — TUI Dashboard](ARCHITECTURE.md#tui-dashboard-tui)
+for details.
 
 ---
 
@@ -175,6 +187,15 @@ uv run loom mcp --config configs/mcp/docman.yaml --transport streamable-http --p
 
 # Run the Worker Workshop web UI
 uv run loom workshop --port 8080
+
+# Launch the real-time TUI dashboard
+uv run loom ui --nats-url nats://localhost:4222
+
+# Monitor the dead-letter queue
+uv run loom dead-letter monitor --nats-url nats://localhost:4222
+
+# Advertise services on LAN via mDNS/Bonjour
+uv run loom mdns --workshop-port 8080 --nats-port 4222
 
 # Lint
 uv run ruff check src/
