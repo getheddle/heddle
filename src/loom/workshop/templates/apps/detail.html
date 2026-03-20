@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% set active_nav = 'apps' %}
+{% block title %}{{ manifest.name }} — Loom Workshop{% endblock %}
+{% block content %}
+<hgroup>
+    <h1>{{ manifest.name }} <code>v{{ manifest.version }}</code></h1>
+    <p>{{ manifest.description }}</p>
+</hgroup>
+
+<div class="grid">
+    <article>
+        <header>Manifest</header>
+        <dl>
+            <dt>Loom version</dt>
+            <dd><code>{{ manifest.loom_version }}</code></dd>
+            <dt>Required extras</dt>
+            <dd>
+                {% if manifest.required_extras %}
+                    {% for extra in manifest.required_extras %}
+                        <kbd>{{ extra }}</kbd>{% if not loop.last %} {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <em>None</em>
+                {% endif %}
+            </dd>
+            {% if manifest.python_package %}
+            <dt>Python package</dt>
+            <dd><code>{{ manifest.python_package.name }}</code> ({{ manifest.python_package.install_path }})</dd>
+            {% endif %}
+        </dl>
+    </article>
+
+    <article>
+        <header>Entry Configs</header>
+        {% if manifest.entry_configs.workers %}
+        <h6>Workers ({{ manifest.entry_configs.workers | length }})</h6>
+        <ul>
+            {% for ref in manifest.entry_configs.workers %}
+            <li><code>{{ ref.config }}</code>{% if ref.tier %} &middot; <kbd>{{ ref.tier }}</kbd>{% endif %}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if manifest.entry_configs.pipelines %}
+        <h6>Pipelines ({{ manifest.entry_configs.pipelines | length }})</h6>
+        <ul>
+            {% for ref in manifest.entry_configs.pipelines %}
+            <li><code>{{ ref.config }}</code></li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if manifest.entry_configs.schedulers %}
+        <h6>Schedulers ({{ manifest.entry_configs.schedulers | length }})</h6>
+        <ul>
+            {% for ref in manifest.entry_configs.schedulers %}
+            <li><code>{{ ref.config }}</code></li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if manifest.entry_configs.mcp %}
+        <h6>MCP ({{ manifest.entry_configs.mcp | length }})</h6>
+        <ul>
+            {% for ref in manifest.entry_configs.mcp %}
+            <li><code>{{ ref.config }}</code></li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </article>
+</div>
+
+{% if manifest.scripts %}
+<article>
+    <header>Scripts</header>
+    <div class="table-wrap">
+    <table>
+        <thead><tr><th scope="col">Path</th><th scope="col">Description</th></tr></thead>
+        <tbody>
+            {% for script in manifest.scripts %}
+            <tr><td><code>{{ script.path }}</code></td><td>{{ script.description }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</article>
+{% endif %}
+
+<form action="/apps/{{ manifest.name }}/remove" method="post"
+      onsubmit="return confirm('Remove {{ manifest.name }}? This will delete all deployed configs.');">
+    <button type="submit" class="secondary">Remove App</button>
+</form>
+
+<p><a href="/apps">&larr; Back to Apps</a></p>
+{% endblock %}

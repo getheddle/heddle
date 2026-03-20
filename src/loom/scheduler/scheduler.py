@@ -48,7 +48,15 @@ logger = structlog.get_logger()
 
 @dataclass
 class ScheduleEntry:
-    """Parsed schedule entry from YAML config."""
+    """Parsed schedule entry from YAML config.
+
+    If ``expand_from`` is set, the scheduler calls the referenced function
+    before each fire.  The function must return a list of context dicts.
+    One goal/task is dispatched per dict, with the context merged into
+    the payload (for tasks) or context (for goals).  This enables
+    per-session dispatch where the expansion function queries for active
+    sessions and returns ``[{"session_id": "s1"}, {"session_id": "s2"}]``.
+    """
 
     name: str
     cron: str | None
@@ -56,6 +64,7 @@ class ScheduleEntry:
     dispatch_type: str  # "goal" or "task"
     goal_config: dict[str, Any] | None = None
     task_config: dict[str, Any] | None = None
+    expand_from: str | None = None  # dotted path to expansion function
     next_fire: float = 0.0  # monotonic timestamp of next fire
 
 
@@ -102,6 +111,7 @@ class SchedulerActor(BaseActor):
                 dispatch_type=item["dispatch_type"],
                 goal_config=item.get("goal"),
                 task_config=item.get("task"),
+                expand_from=item.get("expand_from"),
             )
             for item in raw
         ]
@@ -218,6 +228,12 @@ class SchedulerActor(BaseActor):
     async def _fire_schedule(self, entry: ScheduleEntry) -> None:
         """Dispatch the configured goal or task for a schedule entry.
 
+        If ``expand_from`` is set, the expansion function is called first.
+        One dispatch is made per expansion result, with the expansion context
+        merged into the payload (tasks) or goal context (goals).
+
+        If no expansion is configured, a single dispatch is made as before.
+
         Exceptions from the underlying dispatch methods are caught and
         logged so that a single broken schedule never crashes the actor.
         """
@@ -225,10 +241,26 @@ class SchedulerActor(BaseActor):
             "scheduler.firing",
             schedule=entry.name,
             dispatch_type=entry.dispatch_type,
+            expand_from=entry.expand_from or "none",
         )
 
         try:
-            if entry.dispatch_type == "goal":
+            if entry.expand_from:
+                contexts = self._run_expansion(entry.expand_from, entry.name)
+                if not contexts:
+                    logger.info("scheduler.expansion_empty", schedule=entry.name)
+                    return
+                for ctx in contexts:
+                    if entry.dispatch_type == "goal":
+                        await self._dispatch_goal(entry, extra_context=ctx)
+                    elif entry.dispatch_type == "task":
+                        await self._dispatch_task(entry, extra_payload=ctx)
+                logger.info(
+                    "scheduler.expansion_dispatched",
+                    schedule=entry.name,
+                    count=len(contexts),
+                )
+            elif entry.dispatch_type == "goal":
                 await self._dispatch_goal(entry)
             elif entry.dispatch_type == "task":
                 await self._dispatch_task(entry)
@@ -245,13 +277,73 @@ class SchedulerActor(BaseActor):
                 dispatch_type=entry.dispatch_type,
             )
 
-    async def _dispatch_goal(self, entry: ScheduleEntry) -> None:
+    @staticmethod
+    def _run_expansion(dotted_path: str, schedule_name: str) -> list[dict[str, Any]]:
+        """Import and call an expansion function by dotted path.
+
+        The function must be callable with no arguments and return a list
+        of dicts.  Each dict is merged into the dispatch payload/context.
+
+        Example expand_from value:
+            ``myapp.sessions.get_active_sessions``
+
+        The referenced function should return something like:
+            ``[{"session_id": "s1"}, {"session_id": "s2"}]``
+        """
+        import importlib
+
+        if "." not in dotted_path:
+            logger.error(
+                "scheduler.invalid_expand_from",
+                schedule=schedule_name,
+                expand_from=dotted_path,
+                hint="Must be a fully qualified function path (e.g., myapp.sessions.get_active)",
+            )
+            return []
+
+        module_path, func_name = dotted_path.rsplit(".", 1)
+        try:
+            module = importlib.import_module(module_path)
+            func = getattr(module, func_name)
+        except (ImportError, AttributeError) as exc:
+            logger.error(
+                "scheduler.expand_from_import_failed",
+                schedule=schedule_name,
+                expand_from=dotted_path,
+                error=str(exc),
+            )
+            return []
+
+        try:
+            result = func()
+            if not isinstance(result, list):
+                logger.error(
+                    "scheduler.expand_from_bad_return",
+                    schedule=schedule_name,
+                    expand_from=dotted_path,
+                    got=type(result).__name__,
+                )
+                return []
+            return result
+        except Exception as exc:
+            logger.error(
+                "scheduler.expand_from_call_failed",
+                schedule=schedule_name,
+                expand_from=dotted_path,
+                error=str(exc),
+            )
+            return []
+
+    async def _dispatch_goal(
+        self, entry: ScheduleEntry, extra_context: dict[str, Any] | None = None,
+    ) -> None:
         """Publish an OrchestratorGoal to loom.goals.incoming."""
         cfg = entry.goal_config or {}
         priority_str = cfg.get("priority", "normal")
+        context = {**cfg.get("context", {}), **(extra_context or {})}
         goal = OrchestratorGoal(
             instruction=cfg.get("instruction", ""),
-            context=cfg.get("context", {}),
+            context=context,
             priority=TaskPriority(priority_str),
         )
         await self.publish(
@@ -264,12 +356,15 @@ class SchedulerActor(BaseActor):
             goal_id=str(goal.goal_id),
         )
 
-    async def _dispatch_task(self, entry: ScheduleEntry) -> None:
+    async def _dispatch_task(
+        self, entry: ScheduleEntry, extra_payload: dict[str, Any] | None = None,
+    ) -> None:
         """Publish a TaskMessage to loom.tasks.incoming."""
         cfg = entry.task_config or {}
+        payload = {**cfg.get("payload", {}), **(extra_payload or {})}
         task = TaskMessage(
             worker_type=cfg["worker_type"],
-            payload=cfg.get("payload", {}),
+            payload=payload,
             model_tier=ModelTier(cfg.get("model_tier", "local")),
             priority=TaskPriority(cfg.get("priority", "normal")),
             metadata={"scheduled_by": entry.name},

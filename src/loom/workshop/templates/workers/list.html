@@ -2,27 +2,37 @@
 {% set active_nav = "workers" %}
 {% block title %}Workers — Loom Workshop{% endblock %}
 {% block content %}
-<h1>Workers</h1>
+<hgroup>
+    <h1>Workers</h1>
+    <p>{{ workers | length }} worker config{{ 's' if workers | length != 1 else '' }} loaded.</p>
+</hgroup>
+
+<div class="table-wrap">
 <table>
     <thead>
         <tr>
-            <th>Name</th>
-            <th>Description</th>
-            <th>Kind</th>
-            <th>Tier</th>
-            <th>Actions</th>
+            <th scope="col">Name</th>
+            <th scope="col">Description</th>
+            <th scope="col">Kind</th>
+            <th scope="col">Tier</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
         {% for w in workers %}
         <tr>
-            <td><a href="/workers/{{ w.name }}">{{ w.name }}</a></td>
+            <td>
+                <a href="/workers/{{ w.name }}">{{ w.name }}</a>
+                {% if w.app_name %}<br><span class="app-source">{{ w.app_name }}</span>{% endif %}
+            </td>
             <td>{{ w.description or '—' }}</td>
             <td><kbd>{{ w.worker_kind }}</kbd></td>
             <td><kbd>{{ w.default_model_tier or '—' }}</kbd></td>
             <td>
-                <a href="/workers/{{ w.name }}/test" role="button" class="outline small">Test</a>
-                <a href="/workers/{{ w.name }}/eval" role="button" class="outline small">Eval</a>
+                <span class="btn-group">
+                    <a href="/workers/{{ w.name }}/test" role="button" class="outline small">Test</a>
+                    <a href="/workers/{{ w.name }}/eval" role="button" class="outline small">Eval</a>
+                </span>
             </td>
         </tr>
         {% else %}
@@ -30,4 +40,5 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% endblock %}

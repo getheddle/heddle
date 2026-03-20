@@ -7,9 +7,9 @@
 <article aria-label="Test Result">
     <header>
         {% if result.success %}
-        <mark>PASS</mark>
+        <mark data-status="pass">PASS</mark>
         {% else %}
-        <mark style="background:#d32f2f;color:#fff">FAIL</mark>
+        <mark data-status="fail">FAIL</mark>
         {% endif %}
         &nbsp; {{ result.model_used or 'unknown model' }} &middot; {{ result.latency_ms }}ms
         &middot; {{ result.token_usage.get('prompt_tokens', 0) }}+{{ result.token_usage.get('completion_tokens', 0) }} tokens

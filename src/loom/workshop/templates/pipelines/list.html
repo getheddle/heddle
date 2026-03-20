@@ -2,25 +2,33 @@
 {% set active_nav = "pipelines" %}
 {% block title %}Pipelines — Loom Workshop{% endblock %}
 {% block content %}
-<h1>Pipelines</h1>
+<hgroup>
+    <h1>Pipelines</h1>
+    <p>{{ pipelines | length }} pipeline config{{ 's' if pipelines | length != 1 else '' }} loaded.</p>
+</hgroup>
+
+<div class="table-wrap">
 <table>
     <thead>
         <tr>
-            <th>Name</th>
-            <th>Stages</th>
-            <th>Type</th>
+            <th scope="col">Name</th>
+            <th scope="col">Stages</th>
+            <th scope="col">Type</th>
         </tr>
     </thead>
     <tbody>
         {% for p in pipelines %}
         <tr>
-            <td><a href="/pipelines/{{ p.name }}">{{ p.name }}</a></td>
+            <td><a href="/pipelines/{{ p.name }}">{{ p.name }}</a>
+                {% if p.app_name %}<br><span class="app-source">{{ p.app_name }}</span>{% endif %}
+            </td>
             <td>{{ p.stage_count }}</td>
-            <td>{% if p.has_pipeline_stages %}Pipeline{% else %}Orchestrator{% endif %}</td>
+            <td><kbd>{{ 'Pipeline' if p.has_pipeline_stages else 'Orchestrator' }}</kbd></td>
         </tr>
         {% else %}
         <tr><td colspan="3">No pipeline configs found in <code>configs/orchestrators/</code></td></tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% endblock %}

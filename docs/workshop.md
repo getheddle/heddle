@@ -26,15 +26,17 @@ standalone development tool even when no infrastructure is running.
 ┌─────────────────────────────────────────────────────────────┐
 │                  FastAPI Application (app.py)               │
 │                                                             │
-│   Jinja2 Templates + HTMX           Static Files (Pico CSS) │
+│   Jinja2 Templates + HTMX           Static Files           │
 │   ┌─────────────────────┐            ┌────────────────────┐ │
 │   │ workers/list        │            │ workshop.css       │ │
-│   │ workers/detail      │            └────────────────────┘ │
-│   │ workers/test        │                                   │
-│   │ workers/eval        │                                   │
-│   │ workers/eval_detail │                                   │
-│   │ pipelines/list      │                                   │
+│   │ workers/detail      │            │ (Pico CSS v2 +     │ │
+│   │ workers/test        │            │  dark mode +       │ │
+│   │ workers/eval        │            │  responsive +      │ │
+│   │ workers/eval_detail │            │  accessibility)    │ │
+│   │ pipelines/list      │            └────────────────────┘ │
 │   │ pipelines/editor    │                                   │
+│   │ apps/list           │                                   │
+│   │ apps/detail         │                                   │
 │   │ partials/test_result│                                   │
 │   └────────────────────┘                                    │
 ├─────────────────────────────────────────────────────────────┤
@@ -50,20 +52,23 @@ standalone development tool even when no infrastructure is running.
 │          │                  │          │(pipeline_editor)│  │
 │          │                  │          └─────────────────┘  │
 │          │                  │                               │
-│  ┌───────▼──────────────────▼─────────┐                     │
-│  │           WorkshopDB (db.py)       │                     │
-│  │   worker_versions │ eval_runs      │                     │
-│  │   eval_results    │ worker_metrics │                     │
+│  ┌───────▼──────────────────▼─────────┐  ┌──────────────┐  │
+│  │           WorkshopDB (db.py)       │  │  AppManager  │  │
+│  │   worker_versions │ eval_runs      │  │(app_manager) │  │
+│  │   eval_results    │ worker_metrics │  └──────────────┘  │
 │  └────────────────────────────────────┘                     │
 ├─────────────────────────────────────────────────────────────┤
-│                    Loom Core (reused)                       │
+│               Loom Core (reused)          Optional          │
 │                                                             │
-│  LLMBackend (backends.py)        validate_input/output()    │
-│  execute_with_tools()            validate_worker_config()   │
-│  _extract_json()                 validate_pipeline_config() │
-│  _load_tool_providers()          load_config()              │
-│  build_backends_from_env()       PipelineOrchestrator.*     │
-│  load_knowledge_silos()          WorkspaceManager           │
+│  LLMBackend (backends.py)        LoomServiceAdvertiser      │
+│  execute_with_tools()            (discovery/mdns.py)        │
+│  _extract_json()                                            │
+│  _load_tool_providers()          validate_input/output()    │
+│  build_backends_from_env()       validate_worker_config()   │
+│  load_knowledge_silos()          validate_pipeline_config() │
+│  AppManifest (manifest.py)       load_config()              │
+│                                  PipelineOrchestrator.*     │
+│                                  WorkspaceManager           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -71,14 +76,18 @@ standalone development tool even when no infrastructure is running.
 
 ```
 app.py
- ├── WorkerTestRunner(backends)      # needs LLM backends
- ├── EvalRunner(test_runner, db)     # wraps runner + persistence
- ├── ConfigManager(configs_dir, db)  # filesystem + version tracking
- └── PipelineEditor                  # stateless, no constructor
+ ├── WorkerTestRunner(backends)            # needs LLM backends
+ ├── EvalRunner(test_runner, db)           # wraps runner + persistence
+ ├── AppManager(apps_dir)                  # ZIP deploy, list, remove
+ ├── ConfigManager(configs_dir, db, extra) # filesystem + version tracking + app dirs
+ ├── PipelineEditor                        # stateless, no constructor
+ └── LoomServiceAdvertiser                 # optional mDNS (if zeroconf installed)
 ```
 
 `create_app()` is the composition root.  It creates all components, wires them
 together, and defines all routes as closures that capture the shared instances.
+A FastAPI lifespan context manager starts/stops mDNS advertisement when the
+`zeroconf` package is installed.
 
 ---
 
@@ -87,27 +96,33 @@ together, and defines all routes as closures that capture the shared instances.
 ```
 src/loom/workshop/
 ├── __init__.py           # Package docstring only
-├── app.py                # FastAPI app factory (create_app), all route handlers
+├── app.py                # FastAPI app factory (create_app), 19 route handlers, mDNS lifespan
+├── app_manager.py        # AppManager — ZIP deploy, list, remove app bundles
 ├── test_runner.py        # WorkerTestRunner — single-payload LLM execution
 ├── eval_runner.py        # EvalRunner — batch test suite with scoring
-├── config_manager.py     # ConfigManager — CRUD for YAML configs
+├── config_manager.py     # ConfigManager — CRUD for YAML configs + multi-dir scanning
 ├── pipeline_editor.py    # PipelineEditor — stateless pipeline manipulation
 ├── db.py                 # WorkshopDB — DuckDB storage
 ├── templates/
-│   ├── base.html         # Layout: nav, Pico CSS, HTMX script
+│   ├── base.html         # Layout: sticky nav, theme toggle, skip link, Pico CSS, HTMX
 │   ├── workers/
-│   │   ├── list.html     # Worker table with Test/Eval action buttons
+│   │   ├── list.html     # Worker table with Test/Eval actions, app source labels
 │   │   ├── detail.html   # YAML editor, clone form, version history
 │   │   ├── test.html     # Interactive test bench (HTMX form)
 │   │   ├── eval.html     # Eval suite form + past runs table
 │   │   └── eval_detail.html  # Per-case results with expandable details
 │   ├── pipelines/
-│   │   ├── list.html     # Pipeline table
+│   │   ├── list.html     # Pipeline table with app source labels
 │   │   └── editor.html   # Dependency graph + stage operation forms
+│   ├── apps/
+│   │   ├── list.html     # Deployed apps table + ZIP upload form
+│   │   └── detail.html   # App manifest viewer + entry configs + remove
 │   └── partials/
 │       └── test_result.html  # HTMX fragment: test bench result card
 └── static/
-    └── workshop.css      # Pico CSS overrides + pipeline graph styles
+    └── workshop.css      # Pico CSS v2 overrides: dark mode, responsive,
+                          #   accessibility (skip link, focus-visible, reduced motion,
+                          #   high contrast), pipeline graph, print styles
 ```
 
 ---
@@ -263,7 +278,7 @@ config is a no-op.
 | Templates | Jinja2 | Server-rendered HTML pages |
 | Interactivity | HTMX 2.0 | Async form submissions (test bench), partial page updates |
 | Styling | Pico CSS 2.0 | Classless semantic HTML styling |
-| Custom CSS | `workshop.css` | Pipeline graph layout, loading indicators, small buttons |
+| Custom CSS | `workshop.css` | Dark/light mode, responsive layout, accessibility, pipeline graph |
 
 ### Route map
 
@@ -284,6 +299,10 @@ config is a no-op.
 | GET | `/pipelines/{name}` | `pipeline_detail` | `pipelines/editor.html` | Dep graph + stage operations |
 | POST | `/pipelines/{name}/stage` | `pipeline_stage_edit` | — | Insert/remove/swap/branch (redirect 303) |
 | GET | `/pipelines/{name}/graph` | `pipeline_graph` | — | JSON: dependency graph |
+| GET | `/apps` | `apps_list` | `apps/list.html` | Deployed apps + upload form |
+| GET | `/apps/{name}` | `app_detail` | `apps/detail.html` | App manifest viewer |
+| POST | `/apps/deploy` | `app_deploy` | — | Upload ZIP bundle (redirect 303) |
+| POST | `/apps/{name}/remove` | `app_remove` | — | Remove deployed app (redirect 303) |
 
 ### HTMX pattern
 
@@ -302,14 +321,16 @@ All other forms use standard POST → 303 redirect → GET (PRG pattern).
 ### Template hierarchy
 
 ```
-base.html                       # <html>, <nav>, <main>, <footer>
-├── workers/list.html           # Table of workers
+base.html                       # <html>, sticky nav, theme toggle, skip link, <main>, <footer>
+├── workers/list.html           # Table of workers (with app source labels)
 ├── workers/detail.html         # YAML editor + clone + version history
-├── workers/test.html           # Test bench form + #test-result target
+├── workers/test.html           # Test bench form + #test-result target (aria-live)
 ├── workers/eval.html           # Eval form + past runs table
 ├── workers/eval_detail.html    # Per-case results + expandable details
-├── pipelines/list.html         # Table of pipelines
-└── pipelines/editor.html       # Dep graph + 4 stage operation forms
+├── pipelines/list.html         # Table of pipelines (with app source labels)
+├── pipelines/editor.html       # Dep graph + 4 stage operation forms
+├── apps/list.html              # Deployed apps table + ZIP upload form
+└── apps/detail.html            # App manifest viewer + entry configs + remove
 
 partials/
 └── test_result.html            # HTMX fragment (no base.html extends)
@@ -333,6 +354,7 @@ uv run loom workshop [OPTIONS]
 | `--configs-dir` | `configs/` | Root directory for worker/pipeline YAML |
 | `--db-path` | `~/.loom/workshop.duckdb` | DuckDB database path |
 | `--nats-url` | None | NATS URL for live metrics (optional) |
+| `--apps-dir` | `~/.loom/apps` | Root directory for deployed app bundles |
 
 The CLI command creates the app via `create_app()` and runs it under Uvicorn.
 
@@ -392,6 +414,47 @@ p95_latency_ms
 avg_prompt_tokens
 avg_completion_tokens
 ```
+
+### AppManager (`app_manager.py`)
+
+Manages deployed Loom app bundles (ZIP archives) in `~/.loom/apps/`.
+
+| Method | What it does |
+|--------|-------------|
+| `list_apps()` | Scan apps dir, load manifest from each subdirectory |
+| `get_app(name)` | Load a single app's `AppManifest` |
+| `get_app_configs_dir(name)` | Return `~/.loom/apps/{name}/configs/` path |
+| `deploy_app(zip_path)` | Validate ZIP structure + manifest, extract to apps dir |
+| `remove_app(name)` | Delete app directory |
+| `notify_reload()` | Publish `{"action": "reload"}` to `loom.control.reload` |
+
+**ZIP deployment flow:**
+
+1. Validate ZIP contains `manifest.yaml` at root
+2. Parse + validate manifest via `AppManifest` Pydantic model
+3. Security check: reject paths with `..` or absolute paths
+4. Verify all referenced config files exist in the ZIP
+5. Extract to `~/.loom/apps/{app_name}/`
+6. Warn about Python packages needing manual install
+7. Publish reload notification to NATS control channel
+
+After deployment, `ConfigManager.extra_config_dirs` is refreshed so app
+workers/pipelines appear alongside base configs in the Workers/Pipelines lists.
+
+### mDNS Service Discovery
+
+When the optional `zeroconf` package is installed (`pip install loom[mdns]`),
+the Workshop automatically advertises itself on the local network via mDNS/Bonjour.
+
+The integration uses a FastAPI lifespan context manager:
+
+- **On startup:** Creates `LoomServiceAdvertiser`, registers Workshop HTTP service
+- **On shutdown:** Unregisters all services, closes zeroconf
+
+If `zeroconf` is not installed, the Workshop logs a hint and continues normally.
+
+The standalone `loom mdns` CLI command can advertise Workshop, NATS, and MCP
+services without running the Workshop itself.
 
 ### Unique constraints
 
@@ -478,10 +541,18 @@ Implementation plan:
 
 ### Extending the frontend
 
-The Workshop uses **Pico CSS** for classless styling — semantic HTML elements
-are styled automatically without CSS classes.  Custom CSS in `workshop.css` is
-minimal: pipeline graph flexbox layout, HTMX indicator toggle, small button
-variant.
+The Workshop uses **Pico CSS v2** for classless styling with extensive custom
+CSS in `workshop.css` for:
+
+- **Dark/light mode** — auto-detects `prefers-color-scheme`, with a manual
+  toggle button that persists to `localStorage`
+- **Responsive layout** — tables scroll horizontally on mobile, grids stack
+  vertically below 576px, nav compresses
+- **Accessibility** — skip-to-content link, `focus-visible` outlines,
+  `prefers-reduced-motion` disables animations, `prefers-contrast: more`
+  adds thicker borders, `aria-live` regions for HTMX results, proper
+  ARIA landmarks and labels throughout
+- **Print stylesheet** — hides nav/buttons/forms, expands all `<details>`
 
 For richer interactivity (e.g., drag-and-drop pipeline editor, live charts):
 
@@ -502,6 +573,8 @@ Workshop tests are in `tests/`:
 | `test_workshop_eval.py` | `EvalRunner` scoring, concurrency, DB persistence |
 | `test_workshop_config.py` | `ConfigManager` CRUD, validation, cloning |
 | `test_workshop_pipeline_editor.py` | `PipelineEditor` insert/remove/swap/branch/validate |
+| `test_app_manifest.py` | `AppManifest` validation, loading, error cases |
+| `test_app_manager.py` | `AppManager` ZIP deploy, list, remove, reload notification |
 
 All tests use in-memory DuckDB (`:memory:`) and mock LLM backends.  No
 infrastructure needed.

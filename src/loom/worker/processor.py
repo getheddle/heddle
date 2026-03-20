@@ -84,6 +84,10 @@ class SyncProcessingBackend(ProcessingBackend):
     via ``asyncio.run_in_executor`` so the async event loop stays
     responsive.
 
+    If ``serialize_writes=True``, an asyncio.Lock ensures only one
+    call to ``process_sync`` runs at a time.  Use this for backends
+    that write to single-writer stores like DuckDB.
+
     Use this for backends that wrap libraries like Docling, ffmpeg,
     scikit-learn, or any other tool that performs blocking I/O or
     CPU-intensive computation.
@@ -96,6 +100,9 @@ class SyncProcessingBackend(ProcessingBackend):
                 subprocess.run(["ffmpeg", ...])
                 return {"output": {...}, "model_used": "ffmpeg"}
     """
+
+    def __init__(self, *, serialize_writes: bool = False) -> None:
+        self._write_lock: asyncio.Lock | None = asyncio.Lock() if serialize_writes else None
 
     @abstractmethod
     def process_sync(self, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
@@ -114,8 +121,15 @@ class SyncProcessingBackend(ProcessingBackend):
         ...
 
     async def process(self, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-        """Offload process_sync() to a thread pool and return the result."""
+        """Offload process_sync() to a thread pool and return the result.
+
+        If ``serialize_writes`` was set, acquires the write lock first to
+        ensure single-writer semantics (e.g., for DuckDB).
+        """
         loop = asyncio.get_running_loop()
+        if self._write_lock is not None:
+            async with self._write_lock:
+                return await loop.run_in_executor(None, self.process_sync, payload, config)
         return await loop.run_in_executor(None, self.process_sync, payload, config)
 
 

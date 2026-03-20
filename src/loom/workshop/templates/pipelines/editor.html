@@ -8,7 +8,7 @@
 </hgroup>
 
 <h2>Execution Graph</h2>
-<div class="pipeline-graph">
+<div class="pipeline-graph" role="img" aria-label="Pipeline execution graph with {{ graph.levels | length }} levels">
     {% for level in graph.levels %}
     <div class="pipeline-level">
         <small class="level-label">Level {{ loop.index0 }}</small>
@@ -29,7 +29,7 @@
             {% endfor %}
         </div>
     </div>
-    {% if not loop.last %}<div class="level-arrow">&#8595;</div>{% endif %}
+    {% if not loop.last %}<div class="level-arrow" aria-hidden="true">&#8595;</div>{% endif %}
     {% else %}
     <p>No stages defined.</p>
     {% endfor %}
@@ -42,14 +42,14 @@
     <form method="post" action="/pipelines/{{ name }}/stage">
         <input type="hidden" name="action" value="insert">
         <label for="after_stage">After stage (empty = append)</label>
-        <select name="after_stage">
+        <select name="after_stage" id="after_stage">
             <option value="">End of pipeline</option>
             {% for s in config.pipeline_stages %}
             <option value="{{ s.name }}">{{ s.name }}</option>
             {% endfor %}
         </select>
-        <label for="stage_yaml">Stage definition (YAML)</label>
-        <textarea name="stage_yaml" rows="6" style="font-family:monospace;font-size:0.85rem" placeholder='name: new_stage
+        <label for="stage_yaml_insert">Stage definition (YAML)</label>
+        <textarea name="stage_yaml" id="stage_yaml_insert" rows="6" placeholder='name: new_stage
 worker_type: summarizer
 model_tier: local
 input_mapping:
@@ -64,20 +64,20 @@ input_mapping:
         <input type="hidden" name="action" value="swap">
         <div class="grid">
             <div>
-                <label>Stage</label>
-                <select name="stage_name">
+                <label for="swap_stage">Stage</label>
+                <select name="stage_name" id="swap_stage">
                     {% for s in config.pipeline_stages %}
                     <option value="{{ s.name }}">{{ s.name }} ({{ s.worker_type }})</option>
                     {% endfor %}
                 </select>
             </div>
             <div>
-                <label>New worker type</label>
-                <input type="text" name="new_worker_type" placeholder="new_worker_type" required>
+                <label for="new_worker_type">New worker type</label>
+                <input type="text" name="new_worker_type" id="new_worker_type" placeholder="new_worker_type" required>
             </div>
             <div>
-                <label>New tier (optional)</label>
-                <input type="text" name="new_tier" placeholder="">
+                <label for="new_tier">New tier (optional)</label>
+                <input type="text" name="new_tier" id="new_tier" placeholder="">
             </div>
         </div>
         <button type="submit">Swap</button>
@@ -88,8 +88,8 @@ input_mapping:
     <summary>Remove Stage</summary>
     <form method="post" action="/pipelines/{{ name }}/stage">
         <input type="hidden" name="action" value="remove">
-        <label>Stage to remove</label>
-        <select name="stage_name">
+        <label for="remove_stage">Stage to remove</label>
+        <select name="stage_name" id="remove_stage">
             {% for s in config.pipeline_stages %}
             <option value="{{ s.name }}">{{ s.name }}</option>
             {% endfor %}
@@ -102,8 +102,8 @@ input_mapping:
     <summary>Add Parallel Branch</summary>
     <form method="post" action="/pipelines/{{ name }}/stage">
         <input type="hidden" name="action" value="branch">
-        <label>Branch stage (YAML, must only reference goal.* paths)</label>
-        <textarea name="stage_yaml" rows="6" style="font-family:monospace;font-size:0.85rem" placeholder='name: parallel_task
+        <label for="stage_yaml_branch">Branch stage (YAML, must only reference goal.* paths)</label>
+        <textarea name="stage_yaml" id="stage_yaml_branch" rows="6" placeholder='name: parallel_task
 worker_type: image_extractor
 model_tier: local
 input_mapping:

@@ -33,17 +33,36 @@ class ConfigManager:
         self,
         configs_dir: str = "configs/",
         db: WorkshopDB | None = None,
+        extra_config_dirs: list[Path] | None = None,
     ) -> None:
         self.configs_dir = Path(configs_dir)
         self.db = db
+        self.extra_config_dirs: list[Path] = extra_config_dirs or []
 
     # ------------------------------------------------------------------
     # Workers
     # ------------------------------------------------------------------
 
     def list_workers(self) -> list[dict[str, Any]]:
-        """List all worker configs (excluding _template.yaml)."""
-        workers_dir = self.configs_dir / "workers"
+        """List all worker configs (excluding _template.yaml).
+
+        Scans the main ``configs_dir/workers/`` and all extra config dirs
+        from deployed apps. Each result includes an ``app_name`` field
+        (empty string for base configs, app name for deployed apps).
+        """
+        results = []
+        # Scan main configs dir
+        results.extend(self._scan_workers_dir(self.configs_dir / "workers"))
+        # Scan deployed app config dirs
+        for extra_dir in self.extra_config_dirs:
+            app_name = extra_dir.parent.name if extra_dir.name == "configs" else extra_dir.name
+            results.extend(self._scan_workers_dir(extra_dir / "workers", app_name=app_name))
+        return results
+
+    def _scan_workers_dir(
+        self, workers_dir: Path, app_name: str = ""
+    ) -> list[dict[str, Any]]:
+        """Scan a workers directory for YAML configs."""
         if not workers_dir.exists():
             return []
         results = []
@@ -59,6 +78,7 @@ class ConfigManager:
                         "path": str(path),
                         "default_model_tier": cfg.get("default_model_tier", ""),
                         "worker_kind": cfg.get("worker_kind", "llm"),
+                        "app_name": app_name,
                     }
                 )
             except Exception as e:
@@ -136,8 +156,22 @@ class ConfigManager:
     # ------------------------------------------------------------------
 
     def list_pipelines(self) -> list[dict[str, Any]]:
-        """List all pipeline configs."""
-        orch_dir = self.configs_dir / "orchestrators"
+        """List all pipeline configs.
+
+        Scans the main ``configs_dir/orchestrators/`` and all extra config dirs
+        from deployed apps.
+        """
+        results = []
+        results.extend(self._scan_pipelines_dir(self.configs_dir / "orchestrators"))
+        for extra_dir in self.extra_config_dirs:
+            app_name = extra_dir.parent.name if extra_dir.name == "configs" else extra_dir.name
+            results.extend(self._scan_pipelines_dir(extra_dir / "orchestrators", app_name=app_name))
+        return results
+
+    def _scan_pipelines_dir(
+        self, orch_dir: Path, app_name: str = ""
+    ) -> list[dict[str, Any]]:
+        """Scan an orchestrators directory for pipeline configs."""
         if not orch_dir.exists():
             return []
         results = []
@@ -151,6 +185,7 @@ class ConfigManager:
                         "path": str(path),
                         "stage_count": stage_count,
                         "has_pipeline_stages": stage_count > 0,
+                        "app_name": app_name,
                     }
                 )
             except Exception as e:

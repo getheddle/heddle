@@ -101,6 +101,7 @@ class PipelineOrchestrator(BaseActor):
         *,
         bus: Any | None = None,
     ) -> None:
+        self._config_path = config_path
         self.config = self._load_config(config_path)
         max_goals = self.config.get("max_concurrent_goals", 1)
         super().__init__(actor_id, nats_url, max_concurrent=max_goals, bus=bus)
@@ -108,6 +109,11 @@ class PipelineOrchestrator(BaseActor):
     def _load_config(self, path: str) -> dict:
         with open(path) as f:
             return yaml.safe_load(f)
+
+    async def on_reload(self) -> None:
+        """Re-read the pipeline config from disk on reload signal."""
+        self.config = self._load_config(self._config_path)
+        logger.info("pipeline.config_reloaded", config_path=self._config_path)
 
     # ------------------------------------------------------------------
     # Dependency inference and execution level construction

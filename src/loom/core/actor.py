@@ -62,6 +62,7 @@ class BaseActor(ABC):
         self.actor_id = actor_id
         self.max_concurrent = max_concurrent
         self._sub: Subscription | None = None
+        self._control_sub: Subscription | None = None
         self._running = False
         self._shutdown_event: asyncio.Event | None = None
         # Semaphore is created at run() time inside the event loop
@@ -82,6 +83,8 @@ class BaseActor(ABC):
 
     async def disconnect(self) -> None:
         """Unsubscribe and close the message bus connection."""
+        if self._control_sub:
+            await self._control_sub.unsubscribe()
         if self._sub:
             await self._sub.unsubscribe()
         await self._bus.close()
@@ -131,6 +134,38 @@ class BaseActor(ABC):
                 # The actor stays alive to process subsequent messages.
                 logger.error("actor.error", actor_id=self.actor_id, error=str(e))
 
+    async def on_reload(self) -> None:  # noqa: B027
+        """Config reload hook — called when a control reload message arrives.
+
+        Subclasses override this to re-read their config from disk.
+        The default implementation is a no-op.
+        """
+
+    async def _run_control_listener(self) -> None:
+        """Background task that listens for control messages.
+
+        Subscribes to ``loom.control.reload`` (broadcast to all actors).
+        When a ``{"action": "reload"}`` message arrives, calls ``on_reload()``.
+        """
+        try:
+            self._control_sub = await self._bus.subscribe("loom.control.reload")
+            logger.info("actor.control_subscribed", actor_id=self.actor_id)
+            async for data in self._control_sub:
+                if not self._running:
+                    break
+                action = data.get("action")
+                if action == "reload":
+                    logger.info("actor.reload_requested", actor_id=self.actor_id)
+                    try:
+                        await self.on_reload()
+                        logger.info("actor.reload_completed", actor_id=self.actor_id)
+                    except Exception as e:
+                        logger.error("actor.reload_failed", actor_id=self.actor_id, error=str(e))
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error("actor.control_listener_error", actor_id=self.actor_id, error=str(e))
+
     async def run(self, subject: str, queue_group: str | None = None) -> None:
         """Main actor loop — subscribe, process messages, and handle shutdown.
 
@@ -138,10 +173,14 @@ class BaseActor(ABC):
         or the bus connection drops. Messages are processed with bounded
         concurrency controlled by max_concurrent (default 1 = strict ordering).
 
+        A background control listener subscribes to ``loom.control.reload``
+        to support hot-reloading of actor configs without restart.
+
         Graceful shutdown sequence:
         1. Signal received -> _request_shutdown() sets the shutdown event
         2. Message loop breaks after finishing in-flight messages
-        3. Actor disconnects from the bus (drains pending publishes)
+        3. Control listener is cancelled
+        4. Actor disconnects from the bus (drains pending publishes)
         """
         self._shutdown_event = asyncio.Event()
         self._semaphore = asyncio.Semaphore(self.max_concurrent)
@@ -150,6 +189,9 @@ class BaseActor(ABC):
         await self.subscribe(subject, queue_group)
         self._running = True
         self._install_signal_handlers()
+
+        # Start the control listener as a background task.
+        control_task = asyncio.create_task(self._run_control_listener())
 
         logger.info(
             "actor.running",
@@ -174,6 +216,7 @@ class BaseActor(ABC):
             pass  # Clean shutdown via task cancellation
         finally:
             self._running = False
+            control_task.cancel()
             await self.disconnect()
 
     @abstractmethod

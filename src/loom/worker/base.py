@@ -42,11 +42,17 @@ class TaskWorker(BaseActor):
         nats_url: str = "nats://nats:4222",
     ) -> None:
         super().__init__(actor_id, nats_url)
+        self._config_path = config_path
         self.config = self._load_config(config_path)
 
     def _load_config(self, path: str) -> dict:
         with open(path) as f:
             return yaml.safe_load(f)
+
+    async def on_reload(self) -> None:
+        """Re-read the worker config from disk on reload signal."""
+        self.config = self._load_config(self._config_path)
+        logger.info("worker.config_reloaded", config_path=self._config_path)
 
     async def handle_message(self, data: dict[str, Any]) -> None:
         """Handle an incoming task message through the full worker lifecycle."""

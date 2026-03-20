@@ -3,7 +3,7 @@
 project = "Loom"
 copyright = "2024, Loom Contributors"
 author = "Loom Contributors"
-release = "0.3.0"
+release = "0.4.0"
 
 # -- Extensions ---------------------------------------------------------------
 

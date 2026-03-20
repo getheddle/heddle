@@ -10,17 +10,19 @@
        {{ run.passed_cases }}/{{ run.total_cases }} passed</p>
 </hgroup>
 
-<progress value="{{ run.passed_cases }}" max="{{ run.total_cases }}"></progress>
+<progress value="{{ run.passed_cases }}" max="{{ run.total_cases }}"
+          aria-label="{{ run.passed_cases }} of {{ run.total_cases }} cases passed"></progress>
 
+<div class="table-wrap">
 <table>
     <thead>
         <tr>
-            <th>Case</th>
-            <th>Result</th>
-            <th>Score</th>
-            <th>Latency</th>
-            <th>Tokens</th>
-            <th>Error</th>
+            <th scope="col">Case</th>
+            <th scope="col">Result</th>
+            <th scope="col">Score</th>
+            <th scope="col">Latency</th>
+            <th scope="col">Tokens</th>
+            <th scope="col">Error</th>
         </tr>
     </thead>
     <tbody>
@@ -29,9 +31,9 @@
             <td>{{ r.case_name }}</td>
             <td>
                 {% if r.passed %}
-                <mark>PASS</mark>
+                <mark data-status="pass">PASS</mark>
                 {% else %}
-                <mark style="background:#d32f2f;color:#fff">FAIL</mark>
+                <mark data-status="fail">FAIL</mark>
                 {% endif %}
             </td>
             <td>{{ '%.2f' | format(r.score or 0) }}</td>
@@ -42,6 +44,7 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 
 {% for r in results %}
 <details>

@@ -1,27 +1,359 @@
-/* Loom Workshop — custom styles on top of Pico CSS */
+/* ================================================================
+   Loom Workshop — custom styles on top of Pico CSS v2
+   Supports: light/dark mode, responsive layout, accessibility
+   ================================================================ */
 
-/* Pipeline graph */
+/* ── CSS Custom Properties ─────────────────────────────────────── */
+
+:root {
+    --ws-accent: #4a7c59;
+    --ws-accent-hover: #3d6a4b;
+    --ws-danger: #c62828;
+    --ws-danger-hover: #a41e1e;
+    --ws-pass: #2e7d32;
+    --ws-fail: #c62828;
+    --ws-brand-size: 1.05rem;
+    --ws-radius: 0.5rem;
+    --ws-radius-sm: 0.3rem;
+    --ws-transition: 0.2s ease;
+    --ws-sidebar-width: 14rem;
+    --ws-code-font: "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono", ui-monospace, monospace;
+}
+
+[data-theme="dark"] {
+    --ws-accent: #6abf7b;
+    --ws-accent-hover: #81d491;
+    --ws-danger: #ef5350;
+    --ws-danger-hover: #f77;
+    --ws-pass: #66bb6a;
+    --ws-fail: #ef5350;
+}
+
+/* ── Skip Link (accessibility) ─────────────────────────────────── */
+
+.skip-link {
+    position: absolute;
+    top: -100%;
+    left: 1rem;
+    padding: 0.5rem 1rem;
+    background: var(--pico-primary);
+    color: var(--pico-primary-inverse);
+    border-radius: var(--ws-radius-sm);
+    z-index: 1000;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.skip-link:focus {
+    top: 0.5rem;
+}
+
+/* ── Header & Navigation ──────────────────────────────────────── */
+
+.workshop-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--pico-background-color);
+    border-bottom: 1px solid var(--pico-muted-border-color);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.workshop-header nav {
+    padding-block: 0.5rem;
+}
+
+.brand {
+    text-decoration: none;
+    color: inherit;
+}
+
+.brand-text {
+    font-size: var(--ws-brand-size);
+    letter-spacing: -0.01em;
+}
+
+.nav-links {
+    gap: 0.25rem;
+}
+
+.nav-links a {
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--ws-radius-sm);
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background var(--ws-transition), color var(--ws-transition);
+}
+
+.nav-links a[aria-current="page"] {
+    background: color-mix(in srgb, var(--ws-accent) 15%, transparent);
+    color: var(--ws-accent);
+}
+
+.nav-links a:hover:not([aria-current="page"]) {
+    background: color-mix(in srgb, var(--pico-color) 8%, transparent);
+}
+
+/* Theme toggle button */
+.theme-toggle {
+    all: unset;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 0.3rem 0.5rem;
+    border-radius: var(--ws-radius-sm);
+    line-height: 1;
+    transition: background var(--ws-transition);
+}
+
+.theme-toggle:hover {
+    background: color-mix(in srgb, var(--pico-color) 10%, transparent);
+}
+
+.theme-toggle:focus-visible {
+    outline: 2px solid var(--ws-accent);
+    outline-offset: 2px;
+}
+
+/* ── Main Content ─────────────────────────────────────────────── */
+
+main.container {
+    padding-block: 2rem;
+    min-height: calc(100dvh - 8rem);
+}
+
+/* ── Footer ───────────────────────────────────────────────────── */
+
+.workshop-footer {
+    padding-block: 1.5rem;
+    border-top: 1px solid var(--pico-muted-border-color);
+    text-align: center;
+    color: var(--pico-muted-color);
+}
+
+/* ── Headings ─────────────────────────────────────────────────── */
+
+hgroup {
+    margin-bottom: 1.5rem;
+}
+
+hgroup h1 {
+    margin-bottom: 0.25rem;
+}
+
+hgroup p {
+    color: var(--pico-muted-color);
+    margin-bottom: 0;
+}
+
+h2 {
+    margin-top: 2rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--pico-muted-border-color);
+}
+
+/* ── Tables ───────────────────────────────────────────────────── */
+
+table {
+    font-size: 0.88rem;
+    border-collapse: collapse;
+}
+
+thead th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    color: var(--pico-muted-color);
+    white-space: nowrap;
+}
+
+tbody tr {
+    transition: background var(--ws-transition);
+}
+
+tbody tr:hover {
+    background: color-mix(in srgb, var(--pico-color) 4%, transparent);
+}
+
+/* Responsive table — horizontal scroll on small screens */
+.table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+    table {
+        font-size: 0.82rem;
+    }
+    thead th, tbody td {
+        padding: 0.4rem 0.5rem;
+    }
+}
+
+/* ── Cards & Articles ─────────────────────────────────────────── */
+
+article {
+    border-radius: var(--ws-radius);
+    overflow: hidden;
+}
+
+article > header {
+    font-weight: 600;
+}
+
+/* ── Badges / Tags ────────────────────────────────────────────── */
+
+kbd {
+    font-family: var(--ws-code-font);
+    font-size: 0.78rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: var(--ws-radius-sm);
+    white-space: nowrap;
+}
+
+mark {
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--ws-radius-sm);
+    font-weight: 600;
+    font-size: 0.82rem;
+}
+
+/* Pass / Fail badges */
+.badge-pass,
+mark[data-status="pass"] {
+    background: var(--ws-pass);
+    color: #fff;
+}
+
+.badge-fail,
+mark[data-status="fail"] {
+    background: var(--ws-fail);
+    color: #fff;
+}
+
+/* Inline FAIL mark (used in test_result.html and eval_detail.html) */
+mark[style*="d32f2f"] {
+    background: var(--ws-fail) !important;
+    color: #fff !important;
+}
+
+/* ── Code & Pre ───────────────────────────────────────────────── */
+
+pre {
+    border-radius: var(--ws-radius-sm);
+    font-size: 0.82rem;
+    max-height: 60vh;
+    overflow: auto;
+}
+
+pre code {
+    font-family: var(--ws-code-font);
+}
+
+code {
+    font-family: var(--ws-code-font);
+    font-size: 0.85em;
+}
+
+/* ── Textareas (YAML/JSON editors) ────────────────────────────── */
+
+textarea {
+    resize: vertical;
+    font-family: var(--ws-code-font);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    border-radius: var(--ws-radius-sm);
+    tab-size: 2;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────── */
+
+.small,
+button.small,
+[role="button"].small {
+    font-size: 0.78rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--ws-radius-sm);
+}
+
+button.secondary,
+[role="button"].secondary {
+    --pico-color: var(--ws-danger);
+    --pico-border-color: var(--ws-danger);
+}
+
+/* Button groups */
+.btn-group {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+/* ── Details / Accordions ─────────────────────────────────────── */
+
+details {
+    border-radius: var(--ws-radius);
+    margin-bottom: 1rem;
+}
+
+details > summary {
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0.6rem 0;
+    transition: color var(--ws-transition);
+}
+
+details > summary:hover {
+    color: var(--ws-accent);
+}
+
+details[open] > summary {
+    margin-bottom: 0.5rem;
+}
+
+/* ── Forms ────────────────────────────────────────────────────── */
+
+fieldset[role="group"] {
+    gap: 0.5rem;
+}
+
+label {
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+/* File upload area */
+input[type="file"] {
+    padding: 0.6rem;
+    border-radius: var(--ws-radius-sm);
+}
+
+/* ── Pipeline Graph ───────────────────────────────────────────── */
+
 .pipeline-graph {
     margin: 1rem 0;
 }
 
 .pipeline-level {
     border: 1px solid var(--pico-muted-border-color);
-    border-radius: 0.5rem;
+    border-radius: var(--ws-radius);
     padding: 0.75rem 1rem;
     margin: 0.5rem 0;
+    background: color-mix(in srgb, var(--pico-card-background-color) 60%, transparent);
 }
 
 .level-label {
     color: var(--pico-muted-color);
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
+    font-size: 0.7rem;
 }
 
 .level-stages {
     display: flex;
-    gap: 1rem;
+    gap: 0.75rem;
     flex-wrap: wrap;
     margin-top: 0.5rem;
 }
@@ -29,45 +361,188 @@
 .stage-card {
     background: var(--pico-card-background-color);
     border: 1px solid var(--pico-muted-border-color);
-    border-radius: 0.25rem;
-    padding: 0.5rem 0.75rem;
+    border-radius: var(--ws-radius-sm);
+    padding: 0.6rem 0.85rem;
     min-width: 150px;
+    transition: border-color var(--ws-transition), box-shadow var(--ws-transition);
+}
+
+.stage-card:hover {
+    border-color: var(--ws-accent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--ws-accent) 30%, transparent);
+}
+
+.stage-card strong {
+    display: block;
+    margin-bottom: 0.2rem;
 }
 
 .level-arrow {
     text-align: center;
-    font-size: 1.5rem;
+    font-size: 1.3rem;
     color: var(--pico-muted-color);
-    margin: 0.25rem 0;
+    margin: 0.15rem 0;
+    line-height: 1;
 }
 
-/* Small button variant */
-.small {
-    font-size: 0.8rem;
-    padding: 0.25rem 0.5rem;
+/* ── Progress bar ─────────────────────────────────────────────── */
+
+progress {
+    border-radius: var(--ws-radius-sm);
+    height: 0.6rem;
 }
 
-/* HTMX loading indicator */
+progress::-webkit-progress-value {
+    background: var(--ws-accent);
+    border-radius: var(--ws-radius-sm);
+}
+
+progress::-moz-progress-bar {
+    background: var(--ws-accent);
+    border-radius: var(--ws-radius-sm);
+}
+
+/* ── HTMX Loading ─────────────────────────────────────────────── */
+
 .htmx-indicator {
     display: none;
 }
+
 .htmx-request .htmx-indicator,
 .htmx-request.htmx-indicator {
     display: inline;
 }
 
-/* Compact tables */
-table {
-    font-size: 0.9rem;
+/* Subtle loading overlay for HTMX targets */
+.htmx-request {
+    opacity: 0.7;
+    transition: opacity 0.3s;
 }
 
-/* Textarea styling */
-textarea {
-    resize: vertical;
+/* ── Error banner (apps page) ─────────────────────────────────── */
+
+article[aria-label="Error"] {
+    border-left: 4px solid var(--ws-fail);
+    background: color-mix(in srgb, var(--ws-fail) 8%, var(--pico-card-background-color));
 }
 
-/* Mark styling */
-mark {
-    padding: 0.1rem 0.4rem;
-    border-radius: 0.2rem;
+/* ── App detail grid ──────────────────────────────────────────── */
+
+.grid > article {
+    height: fit-content;
+}
+
+/* ── Worker list: app source indicator ────────────────────────── */
+
+.app-source {
+    font-size: 0.72rem;
+    color: var(--pico-muted-color);
+    font-style: italic;
+}
+
+/* ── Responsive Layout ────────────────────────────────────────── */
+
+/* Stack grids vertically on small screens */
+@media (max-width: 576px) {
+    .grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    hgroup h1 {
+        font-size: 1.5rem;
+    }
+
+    h2 {
+        font-size: 1.2rem;
+    }
+
+    .nav-links {
+        gap: 0;
+    }
+
+    .nav-links a {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.82rem;
+    }
+
+    .brand-text {
+        font-size: 0.95rem;
+    }
+}
+
+/* Comfortable reading width on wide screens */
+@media (min-width: 1400px) {
+    main.container {
+        max-width: 1200px;
+    }
+}
+
+/* ── Print styles ─────────────────────────────────────────────── */
+
+@media print {
+    .workshop-header,
+    .workshop-footer,
+    .theme-toggle,
+    .skip-link,
+    button,
+    [role="button"],
+    form {
+        display: none !important;
+    }
+
+    main.container {
+        padding: 0;
+    }
+
+    details {
+        display: block;
+    }
+
+    details > summary {
+        display: none;
+    }
+}
+
+/* ── Focus styles (accessibility) ─────────────────────────────── */
+
+:focus-visible {
+    outline: 2px solid var(--ws-accent);
+    outline-offset: 2px;
+}
+
+a:focus-visible {
+    border-radius: var(--ws-radius-sm);
+}
+
+/* ── Reduced motion preference ────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ── High contrast mode ───────────────────────────────────────── */
+
+@media (prefers-contrast: more) {
+    .stage-card {
+        border-width: 2px;
+    }
+
+    .pipeline-level {
+        border-width: 2px;
+    }
+
+    kbd {
+        border: 1px solid currentColor;
+    }
+
+    .nav-links a[aria-current="page"] {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+    }
 }

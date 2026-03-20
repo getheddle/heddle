@@ -11,9 +11,11 @@ The core idea: instead of one big LLM context, split work across narrowly-scoped
 ```
 src/loom/
   core/
-    actor.py              # BaseActor — async actor with signal handling, configurable concurrency
+    actor.py              # BaseActor — async actor with signal handling, configurable concurrency,
+                          #   control subscription (loom.control.reload), on_reload() hook
     config.py             # load_config(), ConfigValidationError, worker/pipeline/orchestrator/router validation
     contracts.py          # I/O contract validation (bool/int distinction, schema enforcement)
+    manifest.py           # AppManifest Pydantic model, validate_app_manifest(), load_manifest()
     messages.py           # Pydantic models: TaskMessage, TaskResult, OrchestratorGoal,
                           #   CheckpointState, ModelTier, TaskStatus
     workspace.py          # WorkspaceManager — file-ref resolution, path traversal protection
@@ -24,7 +26,8 @@ src/loom/
                           #   execute_with_tools() — standalone tool-use loop (shared with Workshop)
     backends.py           # LLMBackend ABC + AnthropicBackend, OllamaBackend, OpenAICompatibleBackend
                           #   build_backends_from_env() — resolve backends from env vars
-    processor.py          # ProcessorWorker, SyncProcessingBackend ABC, BackendError hierarchy
+    processor.py          # ProcessorWorker, SyncProcessingBackend ABC (serialize_writes option),
+                          #   BackendError hierarchy
     tools.py              # ToolProvider ABC, SyncToolProvider, load_tool_provider(), MAX_TOOL_ROUNDS=10
     knowledge.py          # Knowledge silo loading and write-back (read-only, read-write, tool silos)
     embeddings.py         # EmbeddingProvider ABC, OllamaEmbeddingProvider (Ollama /api/embed)
@@ -39,6 +42,7 @@ src/loom/
 
   scheduler/
     scheduler.py          # SchedulerActor — cron + interval dispatch of goals/tasks
+                          #   expand_from: dotted path to expansion function for multi-session dispatch
     config.py             # Scheduler config validation
 
   router/
@@ -56,18 +60,22 @@ src/loom/
     resources.py          # WorkspaceResources — workspace files as MCP resources (workspace:/// URIs)
     server.py             # create_server(), MCPGateway, run_stdio(), run_streamable_http()
 
+  discovery/
+    mdns.py               # LoomServiceAdvertiser — mDNS/Bonjour LAN service advertisement
+
   cli/
     main.py               # Click CLI: worker, processor, pipeline, orchestrator, scheduler,
-                          #   router, submit, mcp, workshop (9 commands)
+                          #   router, submit, mcp, workshop, mdns (10 commands)
 
   workshop/               # LLM Worker Workshop — web-based worker builder, test bench, eval tool
+    app.py                # FastAPI + HTMX + Jinja2 web application (19 routes, mDNS lifespan)
+    app_manager.py        # AppManager — deploy/list/remove app bundles (ZIP upload, reload notify)
     test_runner.py        # WorkerTestRunner — execute worker configs directly against LLM backends
     db.py                 # WorkshopDB — DuckDB storage for eval results, worker versions, metrics
     eval_runner.py        # EvalRunner — systematic test suite execution with field_match/exact_match scoring
-    config_manager.py     # ConfigManager — CRUD for worker/pipeline YAML configs with versioning
+    config_manager.py     # ConfigManager — CRUD for worker/pipeline YAML configs with versioning + multi-dir
     pipeline_editor.py    # PipelineEditor — insert/swap/branch/remove pipeline stages with dep validation
-    app.py                # FastAPI + HTMX + Jinja2 web application (15 routes)
-    templates/            # Jinja2 templates: workers (list, detail, test, eval), pipelines (list, editor)
+    templates/            # Jinja2 templates: workers, pipelines, apps (list, detail, deploy)
     static/               # CSS (Pico CSS + custom styles)
 
   contrib/                # Optional integrations (Django-style contrib namespace)
@@ -131,10 +139,14 @@ docs/                     # Project documentation
 examples/
   rag_demo.py             # End-to-end RAG pipeline demo
 
-docker/                   # Dockerfiles (orchestrator, router, worker) + entrypoint.sh
-k8s/                      # Kubernetes manifests (namespace, NATS, Redis, workers, Kustomize)
+docker/                   # Dockerfiles (orchestrator, router, worker, workshop) + entrypoint.sh
+docker-compose.yml        # Local dev stack: NATS + Redis + Workshop + Router
+k8s/                      # Kubernetes manifests (namespace, NATS, Redis, workers, workshop, Kustomize)
+deploy/
+  macos/                  # launchd plist files + install/uninstall scripts
+  windows/                # NSSM-based Windows service install/uninstall scripts
 
-tests/                    # 55 test files, 991 unit tests + 1 integration test (87% coverage)
+tests/                    # 60 test files, 1049 unit tests + 1 integration test (85% coverage)
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -152,6 +164,10 @@ tests/                    # 55 test files, 991 unit tests + 1 integration test (
   test_e2e_advanced.py                            # E2E failure paths, timeouts, diamonds
   test_workshop_runner.py test_workshop_db.py     test_workshop_eval.py
   test_workshop_config.py test_workshop_pipeline_editor.py
+  test_app_manifest.py    test_app_manager.py     # App manifest + ZIP deployment
+  test_reload.py          test_mdns.py            # Config reload, mDNS discovery
+  test_scheduler_expansion.py                     # Scheduler expand_from
+  test_serialize_writes.py                        # SyncProcessingBackend write lock
   test_integration.py                             # @pytest.mark.integration (needs NATS)
   contrib/rag/            # 6 RAG test files (backends, chunker, ingestion, mux, schemas, tools)
 ```
@@ -217,6 +233,14 @@ uv run loom mcp --config configs/mcp/docman.yaml --transport streamable-http --p
 # Run the Workshop web UI (no NATS needed for testing/eval)
 uv run loom workshop --port 8080
 uv run loom workshop --port 8080 --nats-url nats://localhost:4222  # with live metrics
+uv run loom workshop --host 0.0.0.0 --port 8080  # LAN accessible
+
+# Advertise services on LAN via mDNS/Bonjour (requires loom[mdns])
+uv run loom mdns --workshop-port 8080 --nats-port 4222
+
+# Docker Compose local stack
+docker compose up -d                       # start NATS + Redis + Workshop + Router
+docker compose down                        # stop all services
 ```
 
 ## Optional dependencies
@@ -230,6 +254,7 @@ uv sync --extra rag           # RAG pipeline (DuckDB + requests for Ollama)
 uv sync --extra scheduler     # Cron expression parsing (croniter)
 uv sync --extra mcp           # MCP gateway (Model Context Protocol SDK)
 uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
+uv sync --extra mdns          # mDNS/Bonjour service discovery on LAN (zeroconf)
 uv sync --extra docs           # Sphinx API documentation generation
 uv sync --all-extras          # All dependencies including dev/test
 ```
@@ -347,6 +372,31 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 ## Known issues
 
 - None currently blocking.
+
+## App deployment
+
+Loom apps (like baft, docman) can be deployed as ZIP bundles via the Workshop UI.
+Each bundle contains a `manifest.yaml`, configs, and optional scripts/Python packages.
+
+**Deploy flow:**
+1. Build a ZIP: `bash scripts/build-app.sh` (in the app repo)
+2. Upload at Workshop `/apps` page
+3. App configs appear in Workers/Pipelines lists
+4. Running actors auto-reload via `loom.control.reload` NATS subject
+
+**Manifest schema:** See `loom.core.manifest.AppManifest` or `docs/APP_DEPLOYMENT.md`.
+
+**Apps directory:** `~/.loom/apps/{app_name}/` (configurable via `--apps-dir`)
+
+## Concurrent multi-user sessions
+
+Loom supports multiple users (e.g., two analysts on Claude Desktop) working simultaneously:
+
+- **Pipeline orchestrators** set `max_concurrent_goals: N` in config to process N goals in parallel. Goals are isolated (per-goal context dict, no shared state).
+- **Workers** scale via NATS queue groups — run multiple replicas for load balancing.
+- **MCP gateway** is fully async — multiple clients can call tools simultaneously.
+- **Scheduler expansion** (`expand_from` in schedule config) dispatches one task per active session. The expansion function returns a list of context dicts, each merged into the task payload.
+- **DuckDB write serialization** — `SyncProcessingBackend(serialize_writes=True)` wraps calls in an `asyncio.Lock` to prevent concurrent writes to single-writer stores. Run a single DE processor instance for safe serialized writes.
 
 ## What to implement next
 

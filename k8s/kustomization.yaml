@@ -23,6 +23,7 @@ resources:
   - router-deployment.yaml
   - worker-deployment.yaml
   - orchestrator-deployment.yaml
+  - workshop-deployment.yaml
   # - ollama-deployment.yaml     # Uncomment if running local models in-cluster
 
 commonLabels:

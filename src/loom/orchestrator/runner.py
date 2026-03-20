@@ -206,6 +206,7 @@ class OrchestratorActor(BaseActor):
     ) -> None:
         # Load config first so we can read max_concurrent_goals before
         # passing it to BaseActor.
+        self._config_path = config_path
         self.config = self._load_config(config_path)
         max_goals = self.config.get("max_concurrent_goals", 1)
         super().__init__(actor_id, nats_url, max_concurrent=max_goals, bus=bus)
@@ -261,6 +262,18 @@ class OrchestratorActor(BaseActor):
         """Load orchestrator YAML configuration."""
         with open(path) as f:
             return yaml.safe_load(f)
+
+    async def on_reload(self) -> None:
+        """Re-read the orchestrator config from disk on reload signal.
+
+        Updates config-derived settings (timeouts, concurrency limits).
+        Does not rebuild the decomposer or synthesizer — those are
+        constructed from the backend, which doesn't change at runtime.
+        """
+        self.config = self._load_config(self._config_path)
+        self._task_timeout = float(self.config.get("timeout_seconds", 300))
+        self._max_concurrent_tasks = self.config.get("max_concurrent_tasks", 5)
+        logger.info("orchestrator.config_reloaded", config_path=self._config_path)
 
     # ------------------------------------------------------------------
     # Core message handler

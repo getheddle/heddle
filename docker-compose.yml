@@ -1,0 +1,74 @@
+# Loom local development stack
+#
+# Start:   docker compose up
+# Stop:    docker compose down
+# Rebuild: docker compose up --build
+#
+# Services:
+#   - nats:     Message bus (port 4222, monitoring on 8222)
+#   - redis:    Checkpoint persistence (port 6379)
+#   - workshop: Workshop web UI (port 8080)
+#   - router:   Deterministic task router
+#
+# Workers are opt-in — add them via profiles or extend this file.
+# Ollama runs on the host: access via host.docker.internal:11434
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: "--http_port 8222"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  workshop:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.workshop
+    ports:
+      - "8080:8080"
+    environment:
+      - NATS_URL=nats://nats:4222
+    volumes:
+      - loom-apps:/root/.loom/apps
+      - ./configs:/app/configs:ro
+    depends_on:
+      - nats
+    restart: unless-stopped
+
+  router:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.router
+    environment:
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      - nats
+    restart: unless-stopped
+
+  # --- Optional worker (uncomment and customize) ---
+  # worker-summarizer:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile.worker
+  #   environment:
+  #     - WORKER_CONFIG=configs/workers/summarizer.yaml
+  #     - MODEL_TIER=local
+  #     - NATS_URL=nats://nats:4222
+  #     - OLLAMA_URL=http://host.docker.internal:11434
+  #   depends_on:
+  #     - nats
+  #     - router
+
+volumes:
+  redis-data:
+  loom-apps:

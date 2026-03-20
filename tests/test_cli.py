@@ -814,6 +814,7 @@ def test_workshop_starts_uvicorn(tmp_path):
         configs_dir="/tmp/configs",
         db_path="/tmp/test.duckdb",
         nats_url=None,
+        apps_dir="~/.loom/apps",
     )
     mock_uvicorn.assert_called_once_with(mock_app, host="0.0.0.0", port=9090, log_level="info")
 
@@ -841,4 +842,5 @@ def test_workshop_with_nats_url(tmp_path):
         configs_dir="configs/",
         db_path="~/.loom/workshop.duckdb",
         nats_url="nats://localhost:4222",
+        apps_dir="~/.loom/apps",
     )

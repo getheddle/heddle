@@ -16,24 +16,29 @@
     </div>
     <div>
         <form method="post" action="/workers/{{ name }}/clone" style="display:inline">
-            <input type="text" name="new_name" placeholder="clone_name" required style="display:inline;width:auto">
-            <button type="submit" class="outline">Clone</button>
+            <fieldset role="group">
+                <input type="text" name="new_name" placeholder="clone_name" required aria-label="Clone name">
+                <button type="submit" class="outline">Clone</button>
+            </fieldset>
         </form>
     </div>
 </div>
 
 <h2>Config (YAML)</h2>
 <form method="post" action="/workers/{{ name }}">
-    <textarea name="yaml_content" rows="25" style="font-family:monospace;font-size:0.85rem">{{ yaml_content }}</textarea>
-    <input type="text" name="description" placeholder="Version note (optional)">
+    <label for="yaml_content">Worker configuration</label>
+    <textarea name="yaml_content" id="yaml_content" rows="25">{{ yaml_content }}</textarea>
+    <label for="description">Version note</label>
+    <input type="text" name="description" id="description" placeholder="Optional version note">
     <button type="submit">Save</button>
 </form>
 
 {% if versions %}
 <h2>Version History</h2>
+<div class="table-wrap">
 <table>
     <thead>
-        <tr><th>Hash</th><th>Date</th><th>Note</th></tr>
+        <tr><th scope="col">Hash</th><th scope="col">Date</th><th scope="col">Note</th></tr>
     </thead>
     <tbody>
         {% for v in versions %}
@@ -45,5 +50,6 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% endif %}
 {% endblock %}

@@ -612,7 +612,10 @@ def mcp(config: str, transport: str, host: str, port: int):
 @click.option("--configs-dir", default="configs/", help="Path to configs directory")
 @click.option("--db-path", default="~/.loom/workshop.duckdb", help="DuckDB database path")
 @click.option("--nats-url", default=None, help="NATS URL for live metrics (optional)")
-def workshop(port: int, host: str, configs_dir: str, db_path: str, nats_url: str | None):
+@click.option("--apps-dir", default="~/.loom/apps", help="Root directory for deployed app bundles")
+def workshop(
+    port: int, host: str, configs_dir: str, db_path: str, nats_url: str | None, apps_dir: str,
+):
     r"""Start the LLM Worker Workshop web UI.
 
     A browser-based tool for defining, testing, evaluating, and deploying
@@ -647,6 +650,7 @@ def workshop(port: int, host: str, configs_dir: str, db_path: str, nats_url: str
         configs_dir=configs_dir,
         db_path=db_path,
         nats_url=nats_url,
+        apps_dir=apps_dir,
     )
 
     logger.info(
@@ -655,10 +659,75 @@ def workshop(port: int, host: str, configs_dir: str, db_path: str, nats_url: str
         port=port,
         configs_dir=configs_dir,
         db_path=db_path,
+        apps_dir=apps_dir,
         nats="enabled" if nats_url else "disabled",
     )
 
     uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+# ---------------------------------------------------------------------------
+# mdns command
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option("--workshop-port", default=8080, type=int, help="Workshop HTTP port to advertise")
+@click.option("--nats-port", default=4222, type=int, help="NATS port to advertise")
+@click.option("--mcp-port", default=0, type=int, help="MCP HTTP port to advertise (0 = skip)")
+@click.option("--host", default=None, help="Host address to advertise (auto-detect if omitted)")
+def mdns(workshop_port: int, nats_port: int, mcp_port: int, host: str | None):
+    r"""Advertise Loom services on the local network via mDNS/Bonjour.
+
+    Makes Loom services discoverable by other devices on the LAN without
+    manual URL configuration. Useful for headless deployments where the
+    Workshop is not running.
+
+    \b
+    Services advertised:
+        - Workshop web UI (_http._tcp)
+        - NATS message bus (_nats._tcp)
+        - MCP server (_http._tcp, optional)
+
+    Requires the 'mdns' package extras:
+
+    \b
+        uv sync --extra mdns
+
+    Runs until terminated with Ctrl+C.
+    """
+    try:
+        from loom.discovery.mdns import LoomServiceAdvertiser
+    except ImportError:
+        raise click.ClickException(
+            "mDNS requires the 'zeroconf' package. Install with: pip install loom[mdns]"
+        ) from None
+
+    async def _run():
+        advertiser = LoomServiceAdvertiser()
+        await advertiser.start()
+        advertiser.register_workshop(port=workshop_port, host=host)
+        advertiser.register_nats(port=nats_port, host=host)
+        if mcp_port > 0:
+            advertiser.register_mcp(port=mcp_port, host=host)
+        logger.info(
+            "mdns.advertising",
+            workshop_port=workshop_port,
+            nats_port=nats_port,
+            mcp_port=mcp_port if mcp_port > 0 else "disabled",
+        )
+        try:
+            # Block until SIGINT/SIGTERM
+            await asyncio.sleep(float("inf"))
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await advertiser.stop()
+
+    import contextlib
+
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(_run())
 
 
 if __name__ == "__main__":

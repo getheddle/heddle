@@ -16,7 +16,7 @@
 
 <form hx-post="/workers/{{ name }}/test/run" hx-target="#test-result" hx-swap="innerHTML" hx-indicator="#spinner">
     <label for="payload">Payload (JSON)</label>
-    <textarea name="payload" id="payload" rows="8" style="font-family:monospace;font-size:0.85rem" placeholder='{"text": "Hello world"}'>{}</textarea>
+    <textarea name="payload" id="payload" rows="8" placeholder='{"text": "Hello world"}'>{}</textarea>
 
     <label for="tier">Tier</label>
     <select name="tier" id="tier">
@@ -27,8 +27,8 @@
     </select>
 
     <button type="submit">Run Test</button>
-    <span id="spinner" class="htmx-indicator" aria-busy="true">Running...</span>
+    <span id="spinner" class="htmx-indicator" aria-busy="true" role="status">Running&hellip;</span>
 </form>
 
-<div id="test-result"></div>
+<div id="test-result" aria-live="polite"></div>
 {% endblock %}

@@ -30,6 +30,7 @@ without a registry:
 docker build -f docker/Dockerfile.worker -t loom-worker:latest .
 docker build -f docker/Dockerfile.router -t loom-router:latest .
 docker build -f docker/Dockerfile.orchestrator -t loom-orchestrator:latest .
+docker build -f docker/Dockerfile.workshop -t loom-workshop:latest .
 ```
 
 ### Create Namespace and Secrets
@@ -48,6 +49,18 @@ kubectl apply -k k8s/
 kubectl get pods -n loom -w
 ```
 
+### Access Workshop
+
+The Workshop is exposed via NodePort on port 30080:
+
+```bash
+# Minikube
+minikube service loom-workshop -n loom
+
+# Or access directly
+open http://$(minikube ip):30080
+```
+
 ---
 
 ## Manifest Structure
@@ -60,6 +73,7 @@ k8s/
 ├── router-deployment.yaml      # Loom router
 ├── orchestrator-deployment.yaml # Loom orchestrator
 ├── worker-deployment.yaml      # Loom worker(s)
+├── workshop-deployment.yaml    # Loom Workshop web UI (NodePort 30080)
 └── kustomization.yaml          # Kustomize overlay
 ```
 

@@ -1,0 +1,52 @@
+# Loom Workshop — web UI for worker testing, eval, and app deployment.
+# Access via NodePort: http://<node-ip>:30080
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loom-workshop
+  namespace: loom
+  labels:
+    app: loom-workshop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loom-workshop
+  template:
+    metadata:
+      labels:
+        app: loom-workshop
+    spec:
+      containers:
+        - name: workshop
+          image: loom-workshop:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: NATS_URL
+              value: "nats://nats:4222"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loom-workshop
+  namespace: loom
+  labels:
+    app: loom-workshop
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+      protocol: TCP
+  selector:
+    app: loom-workshop

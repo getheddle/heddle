@@ -8,15 +8,18 @@ Start via CLI: ``loom workshop --port 8080``
 from __future__ import annotations
 
 import json
+import tempfile
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from loom.worker.backends import build_backends_from_env
+from loom.workshop.app_manager import AppManager
 from loom.workshop.config_manager import ConfigManager
 from loom.workshop.db import WorkshopDB
 from loom.workshop.eval_runner import EvalRunner
@@ -31,10 +34,21 @@ _TEMPLATES_DIR = _THIS_DIR / "templates"
 _STATIC_DIR = _THIS_DIR / "static"
 
 
+def _build_extra_config_dirs(app_mgr: AppManager) -> list[Path]:
+    """Build the list of config dirs from all deployed apps."""
+    dirs = []
+    for manifest in app_mgr.list_apps():
+        configs_dir = app_mgr.get_app_configs_dir(manifest.name)
+        if configs_dir.exists():
+            dirs.append(configs_dir)
+    return dirs
+
+
 def create_app(  # noqa: PLR0915
     configs_dir: str = "configs/",
     db_path: str = "~/.loom/workshop.duckdb",
     nats_url: str | None = None,  # noqa: ARG001
+    apps_dir: str = "~/.loom/apps",
 ) -> FastAPI:
     """Create the Workshop FastAPI application.
 
@@ -42,8 +56,28 @@ def create_app(  # noqa: PLR0915
         configs_dir: Root directory containing ``workers/`` and ``orchestrators/``.
         db_path: DuckDB database path (``~`` is expanded).
         nats_url: Optional NATS URL for live metrics (reserved for future use).
+        apps_dir: Root directory for deployed app bundles.
     """
-    app = FastAPI(title="Loom Workshop", docs_url=None, redoc_url=None)
+    # mDNS service discovery (optional — only if zeroconf is installed)
+    _mdns_advertiser = None
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):  # noqa: ARG001
+        nonlocal _mdns_advertiser
+        try:
+            from loom.discovery.mdns import LoomServiceAdvertiser
+
+            _mdns_advertiser = LoomServiceAdvertiser()
+            await _mdns_advertiser.start()
+            _mdns_advertiser.register_workshop(port=8080)
+            logger.info("workshop.mdns_enabled")
+        except ImportError:
+            logger.info("workshop.mdns_disabled", hint="Install loom[mdns] for LAN discovery")
+        yield
+        if _mdns_advertiser is not None:
+            await _mdns_advertiser.stop()
+
+    app = FastAPI(title="Loom Workshop", docs_url=None, redoc_url=None, lifespan=lifespan)
 
     # Static files
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
@@ -56,13 +90,18 @@ def create_app(  # noqa: PLR0915
     backends = build_backends_from_env()
     test_runner = WorkerTestRunner(backends)
     eval_runner = EvalRunner(test_runner, db)
-    config_mgr = ConfigManager(configs_dir, db)
+    app_mgr = AppManager(apps_dir=apps_dir)
+    config_mgr = ConfigManager(
+        configs_dir, db, extra_config_dirs=_build_extra_config_dirs(app_mgr)
+    )
 
     logger.info(
         "workshop.initialized",
         configs_dir=configs_dir,
         db_path=db_path,
+        apps_dir=apps_dir,
         backends=list(backends.keys()),
+        deployed_apps=len(app_mgr.list_apps()),
     )
 
     # ------------------------------------------------------------------
@@ -308,5 +347,65 @@ def create_app(  # noqa: PLR0915
         except FileNotFoundError:
             return JSONResponse({"error": "Not found"}, status_code=404)
         return PipelineEditor.get_dependency_graph(config)
+
+    # --- Apps ---
+
+    @app.get("/apps", response_class=HTMLResponse)
+    async def apps_list(request: Request):
+        apps = app_mgr.list_apps()
+        error = request.query_params.get("error")
+        return templates.TemplateResponse(
+            "apps/list.html",
+            {"request": request, "apps": apps, "error": error},
+        )
+
+    @app.get("/apps/{name}", response_class=HTMLResponse)
+    async def app_detail(request: Request, name: str):
+        try:
+            manifest = app_mgr.get_app(name)
+        except (FileNotFoundError, ValueError):
+            return HTMLResponse("App not found", status_code=404)
+        return templates.TemplateResponse(
+            "apps/detail.html",
+            {"request": request, "manifest": manifest},
+        )
+
+    @app.post("/apps/deploy", response_class=RedirectResponse)
+    async def app_deploy(request: Request):
+        form = await request.form()
+        zip_file: UploadFile = form["zip_file"]
+
+        if not zip_file.filename or not zip_file.filename.endswith(".zip"):
+            return RedirectResponse(url="/apps?error=File+must+be+a+.zip+archive", status_code=303)
+
+        # Write uploaded file to a temp location for processing
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            content = await zip_file.read()
+            tmp.write(content)
+            tmp_path = Path(tmp.name)
+
+        try:
+            from loom.workshop.app_manager import AppDeployError
+
+            manifest = app_mgr.deploy_app(tmp_path)
+            # Refresh ConfigManager's extra config dirs
+            config_mgr.extra_config_dirs = _build_extra_config_dirs(app_mgr)
+            # Notify running actors to reload
+            await app_mgr.notify_reload()
+            return RedirectResponse(url=f"/apps/{manifest.name}", status_code=303)
+        except AppDeployError as e:
+            return RedirectResponse(url=f"/apps?error={e}", status_code=303)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+    @app.post("/apps/{name}/remove", response_class=RedirectResponse)
+    async def app_remove(name: str):
+        try:
+            app_mgr.remove_app(name)
+            config_mgr.extra_config_dirs = _build_extra_config_dirs(app_mgr)
+            await app_mgr.notify_reload()
+        except FileNotFoundError:
+            pass
+        return RedirectResponse(url="/apps", status_code=303)
 
     return app
