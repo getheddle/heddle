@@ -174,12 +174,14 @@ Runs a list of test cases against a worker config with scoring.
 - `config`: Worker config dict (same as YAML)
 - `test_suite`: List of `{"name": str, "input": dict, "expected_output": dict}`
 - `tier`: Model tier override
-- `scoring`: `"field_match"` or `"exact_match"`
+- `scoring`: `"field_match"`, `"exact_match"`, or `"llm_judge"`
 - `max_concurrency`: Semaphore bound (default 3)
+- `judge_backend`: LLM backend for `llm_judge` scoring (required when `scoring="llm_judge"`)
+- `judge_prompt`: Custom system prompt for the judge LLM (optional, uses `DEFAULT_JUDGE_PROMPT` if not provided)
 
 **Execution:**
 1. Save worker config version to DB (deduplicates by SHA-256 hash)
-2. Create eval run record in DB
+2. Create eval run record in DB (with `scoring_method` in metadata)
 3. Run all test cases concurrently (bounded by `asyncio.Semaphore`)
 4. For each case: call `WorkerTestRunner.run()`, score, persist result
 5. Update run summary with aggregated stats
@@ -188,8 +190,9 @@ Runs a list of test cases against a worker config with scoring.
 
 | Method | Logic | Pass threshold |
 |--------|-------|----------------|
-| `field_match` | Fraction of expected fields matching actual output. Strings compared case-insensitively. Lists scored by subset overlap. | score ≥ 0.5 |
-| `exact_match` | 1.0 if `expected == actual`, else 0.0 | score ≥ 0.5 |
+| `field_match` | Fraction of expected fields matching actual output. Strings compared case-insensitively. Lists scored by subset overlap. | score >= 0.5 |
+| `exact_match` | 1.0 if `expected == actual`, else 0.0 | score >= 0.5 |
+| `llm_judge` | Separate LLM call evaluates output on correctness, completeness, and format compliance. Returns 0-to-1 score with reasoning. Handles markdown-fenced JSON responses and clamps scores to [0, 1]. | score >= 0.5 |
 
 **Concurrency model:** `asyncio.gather()` with `asyncio.Semaphore(max_concurrency)`.
 Nonlocal counters (`passed`, `failed`, `total_latency`) are safe because the
@@ -256,6 +259,7 @@ Use `:memory:` for tests.
 | `worker_versions` | Config snapshot history | `worker_name`, `config_hash` (SHA-256 prefix), `config_yaml` |
 | `eval_runs` | Eval suite execution summary | `worker_name`, `tier`, `status`, `passed_cases`/`failed_cases`, `avg_latency_ms` |
 | `eval_results` | Per-case eval results | `run_id`, `case_name`, `input_payload`, `expected_output`, `actual_output`, `score`, `passed` |
+| `eval_baselines` | Golden dataset baselines | `worker_name` (UNIQUE), `run_id`, `promoted_at`, `description` |
 | `worker_metrics` | Aggregated live metrics | `worker_name`, `tier`, `request_count`, `success_count`, `avg_latency_ms`, `p95_latency_ms` |
 
 **Version deduplication:** `save_worker_version()` hashes the YAML content
@@ -265,6 +269,12 @@ config is a no-op.
 
 **Comparison:** `compare_eval_runs(run_id_a, run_id_b)` joins results by
 `case_name` and returns a side-by-side structure for A/B display.
+
+**Baselines:** `promote_baseline(worker_name, run_id)` marks an eval run as the
+golden dataset baseline for a worker (one per worker, upserted).
+`compare_against_baseline(worker_name, run_id)` compares a run against the
+stored baseline.  The eval detail page automatically shows regression/improvement
+when a baseline exists.  `remove_baseline(worker_name)` clears the baseline.
 
 ---
 
@@ -294,7 +304,9 @@ config is a no-op.
 | POST | `/workers/{name}/test/run` | `worker_test_run` | `partials/test_result.html` | HTMX: execute test, return result card |
 | GET | `/workers/{name}/eval` | `worker_eval` | `workers/eval.html` | Eval dashboard + run form |
 | POST | `/workers/{name}/eval/run` | `worker_eval_run` | — | Run eval suite (redirect 303) |
-| GET | `/workers/{name}/eval/{run_id}` | `worker_eval_detail` | `workers/eval_detail.html` | Per-case results table |
+| GET | `/workers/{name}/eval/{run_id}` | `worker_eval_detail` | `workers/eval_detail.html` | Per-case results + baseline comparison |
+| POST | `/workers/{name}/eval/{run_id}/promote-baseline` | `worker_promote_baseline` | -- | Promote run as baseline (redirect 303) |
+| POST | `/workers/{name}/eval/remove-baseline` | `worker_remove_baseline` | -- | Remove worker baseline (redirect 303) |
 | GET | `/pipelines` | `pipelines_list` | `pipelines/list.html` | Pipeline table |
 | GET | `/pipelines/{name}` | `pipeline_detail` | `pipelines/editor.html` | Dep graph + stage operations |
 | POST | `/pipelines/{name}/stage` | `pipeline_stage_edit` | — | Insert/remove/swap/branch (redirect 303) |
@@ -303,6 +315,9 @@ config is a no-op.
 | GET | `/apps/{name}` | `app_detail` | `apps/detail.html` | App manifest viewer |
 | POST | `/apps/deploy` | `app_deploy` | — | Upload ZIP bundle (redirect 303) |
 | POST | `/apps/{name}/remove` | `app_remove` | — | Remove deployed app (redirect 303) |
+| GET | `/dead-letters` | `dead_letters_list` | `dead_letters.html` | Dead-letter entries + replay audit log |
+| POST | `/dead-letters/{index}/replay` | `dead_letter_replay` | — | Replay entry to incoming (redirect 303) |
+| POST | `/dead-letters/clear` | `dead_letters_clear` | — | Clear all entries (redirect 303) |
 
 ### HTMX pattern
 
@@ -330,7 +345,8 @@ base.html                       # <html>, sticky nav, theme toggle, skip link, <
 ├── pipelines/list.html         # Table of pipelines (with app source labels)
 ├── pipelines/editor.html       # Dep graph + 4 stage operation forms
 ├── apps/list.html              # Deployed apps table + ZIP upload form
-└── apps/detail.html            # App manifest viewer + entry configs + remove
+├── apps/detail.html            # App manifest viewer + entry configs + remove
+└── dead_letters.html           # Dead-letter entries + replay audit log
 
 partials/
 └── test_result.html            # HTMX fragment (no base.html extends)
@@ -399,8 +415,16 @@ description          │    completed_at         │    actual_output
                      │                         │    passed
                      │                         │    error
                      │                         │
-worker_metrics       │                         │
+eval_baselines       │                         │
 ──────────────       │                         │
+id (PK)              │                         │
+worker_name (UNIQUE) │                         │
+run_id ──────────────┘                         │
+promoted_at                                    │
+description                                    │
+                                               │
+worker_metrics                                 │
+──────────────                                 │
 id (PK)              └── (joined via           └── (FK relationship)
 worker_name              worker_version_id)
 tier
@@ -497,6 +521,10 @@ keeps the test bench semantically identical to production worker execution.
    def _score_my_method(expected: dict, actual: dict) -> tuple[float, dict]:
        # Return (score_0_to_1, {"method": "my_method", ...details})
    ```
+   For async scoring methods (like `_score_llm_judge`), the signature becomes:
+   ```python
+   async def _score_my_method(expected, actual, *, backend, ...) -> tuple[float, dict]:
+   ```
 
 2. Add a branch in `EvalRunner.run_suite()`:
    ```python
@@ -531,13 +559,18 @@ Implementation plan:
 4. Add a `/metrics` page with time-series charts (latency, throughput,
    error rate) per worker.
 
-### Adding LLM-as-judge scoring
+### Customizing the LLM judge
 
-1. Add a scoring function that takes expected + actual and dispatches to an
-   LLM backend with a judging prompt.
-2. The judge backend should be configurable separately (e.g., always use
-   `frontier` tier for judging regardless of the worker tier under test).
-3. Cache judge results in `eval_results.score_details` JSON column.
+The `llm_judge` scoring method is built in.  To customize:
+
+1. Pass a custom `judge_prompt` to `EvalRunner.run_suite()` or set it in the
+   Workshop eval form.  The default prompt (`DEFAULT_JUDGE_PROMPT`) evaluates
+   correctness, completeness, and format compliance.
+2. The judge backend is selected automatically by the Workshop (prefers
+   `standard` tier, falls back to first available).  Programmatically, pass
+   any `LLMBackend` instance as `judge_backend`.
+3. Judge results (score, reasoning, per-criteria scores, token usage) are
+   stored in `eval_results.score_details` JSON column.
 
 ### Extending the frontend
 
@@ -570,7 +603,7 @@ Workshop tests are in `tests/`:
 |------|--------------|
 | `test_workshop_runner.py` | `WorkerTestRunner` with mock backends |
 | `test_workshop_db.py` | `WorkshopDB` schema, CRUD, dedup, comparison |
-| `test_workshop_eval.py` | `EvalRunner` scoring, concurrency, DB persistence |
+| `test_workshop_eval.py` | `EvalRunner` scoring (field_match, exact_match, llm_judge), concurrency, DB persistence |
 | `test_workshop_config.py` | `ConfigManager` CRUD, validation, cloning |
 | `test_workshop_pipeline_editor.py` | `PipelineEditor` insert/remove/swap/branch/validate |
 | `test_app_manifest.py` | `AppManifest` validation, loading, error cases |

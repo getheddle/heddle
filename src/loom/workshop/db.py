@@ -106,6 +106,15 @@ class WorkshopDB:
                 avg_completion_tokens DOUBLE
             )
         """)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS eval_baselines (
+                id              VARCHAR PRIMARY KEY,
+                worker_name     VARCHAR NOT NULL UNIQUE,
+                run_id          VARCHAR NOT NULL,
+                promoted_at     TIMESTAMP DEFAULT current_timestamp,
+                description     VARCHAR
+            )
+        """)
 
     def close(self) -> None:
         """Close the database connection."""
@@ -362,6 +371,79 @@ class WorkshopDB:
             "run_b": run_b,
             "cases": comparison,
         }
+
+    # ------------------------------------------------------------------
+    # Eval baselines
+    # ------------------------------------------------------------------
+
+    def promote_baseline(
+        self,
+        worker_name: str,
+        run_id: str,
+        description: str | None = None,
+    ) -> str:
+        """Promote an eval run as the baseline for a worker.
+
+        Replaces any existing baseline for the worker.  The baseline run
+        serves as the reference point for regression detection.
+
+        Returns the baseline record ID.
+        """
+        baseline_id = str(uuid.uuid4())
+        # Upsert: delete any existing baseline for this worker, then insert.
+        self._conn.execute(
+            "DELETE FROM eval_baselines WHERE worker_name = ?",
+            [worker_name],
+        )
+        self._conn.execute(
+            """INSERT INTO eval_baselines (id, worker_name, run_id, description)
+               VALUES (?, ?, ?, ?)""",
+            [baseline_id, worker_name, run_id, description],
+        )
+        return baseline_id
+
+    def get_baseline(self, worker_name: str) -> dict[str, Any] | None:
+        """Get the current baseline for a worker.
+
+        Returns a dict with baseline metadata, or None if no baseline is set.
+        """
+        row = self._conn.execute(
+            """SELECT id, worker_name, run_id, promoted_at, description
+               FROM eval_baselines WHERE worker_name = ?""",
+            [worker_name],
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "worker_name": row[1],
+            "run_id": row[2],
+            "promoted_at": row[3],
+            "description": row[4],
+        }
+
+    def remove_baseline(self, worker_name: str) -> bool:
+        """Remove the baseline for a worker.  Returns True if one was removed."""
+        result = self._conn.execute(
+            "DELETE FROM eval_baselines WHERE worker_name = ? RETURNING id",
+            [worker_name],
+        ).fetchone()
+        return result is not None
+
+    def compare_against_baseline(
+        self,
+        worker_name: str,
+        run_id: str,
+    ) -> dict[str, Any] | None:
+        """Compare an eval run against the worker's baseline.
+
+        Returns the comparison dict (same as ``compare_eval_runs``), or None
+        if no baseline is set for this worker.
+        """
+        baseline = self.get_baseline(worker_name)
+        if not baseline:
+            return None
+        return self.compare_eval_runs(baseline["run_id"], run_id)
 
     # ------------------------------------------------------------------
     # Worker metrics

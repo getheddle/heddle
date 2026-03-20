@@ -46,7 +46,8 @@ src/loom/
 │   └── config.py        # Scheduler config validation
 │
 ├── router/
-│   └── router.py        # Deterministic task routing with dead-letter handling and rate limiting
+│   ├── router.py        # Deterministic task routing with dead-letter handling and rate limiting
+│   └── dead_letter.py   # DeadLetterConsumer — bounded store, replay with audit trail
 │
 ├── bus/
 │   ├── base.py          # MessageBus ABC, Subscription ABC
@@ -62,8 +63,8 @@ src/loom/
 │
 ├── workshop/
 │   ├── test_runner.py   # WorkerTestRunner — execute worker configs against LLM backends directly
-│   ├── db.py            # WorkshopDB — DuckDB storage for eval results, versions, metrics
-│   ├── eval_runner.py   # EvalRunner — test suite execution with scoring
+│   ├── db.py            # WorkshopDB — DuckDB storage for eval results, versions, metrics, baselines
+│   ├── eval_runner.py   # EvalRunner — test suite execution with field_match/exact_match/llm_judge scoring
 │   ├── config_manager.py # ConfigManager — CRUD for worker/pipeline YAML configs
 │   ├── pipeline_editor.py # PipelineEditor — insert/swap/branch/remove stages
 │   ├── app.py           # FastAPI + HTMX + Jinja2 web application
@@ -263,16 +264,17 @@ evaluation call LLM backends directly via `execute_with_tools()`.
 - **WorkerTestRunner** (`test_runner.py`): Execute a worker config against a
   payload without the actor mesh. Builds the full prompt, calls the LLM, validates
   I/O contracts.
-- **EvalRunner** (`eval_runner.py`): Run test suites with `field_match` or
-  `exact_match` scoring. Concurrent test case execution with semaphore-bounded
-  parallelism.
+- **EvalRunner** (`eval_runner.py`): Run test suites with `field_match`,
+  `exact_match`, or `llm_judge` scoring (LLM evaluates output quality on
+  correctness/completeness/format). Concurrent test case execution with
+  semaphore-bounded parallelism. Golden dataset baselines for regression detection.
 - **ConfigManager** (`config_manager.py`): CRUD for worker/pipeline YAML configs
   with hash-based version tracking in DuckDB.
 - **PipelineEditor** (`pipeline_editor.py`): Insert, remove, swap, or branch
   pipeline stages with dependency validation. Reuses
   `PipelineOrchestrator._infer_dependencies()`.
 - **WorkshopDB** (`db.py`): DuckDB storage for eval runs, results, worker versions,
-  and metrics.
+  metrics, and eval baselines (golden dataset regression detection).
 - **Web UI** (`app.py`): FastAPI + HTMX + Jinja2 + Pico CSS. Worker list/editor,
   test bench, eval dashboard, pipeline editor with dependency graph.
 

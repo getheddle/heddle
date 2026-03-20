@@ -3,21 +3,55 @@ EvalRunner — systematic test suite execution with scoring.
 
 Runs a list of test cases against a worker config, scores each result,
 and persists everything to WorkshopDB.
+
+Scoring methods:
+- ``exact_match``: Binary 1.0/0.0 based on output equality.
+- ``field_match``: Fractional score based on per-field comparison.
+- ``llm_judge``: Uses a separate LLM call to evaluate output quality
+  on a 0-to-1 scale with reasoning.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import structlog
 
 if TYPE_CHECKING:
+    from loom.worker.backends import LLMBackend
     from loom.workshop.db import WorkshopDB
     from loom.workshop.test_runner import WorkerTestRunner
 
 logger = structlog.get_logger()
+
+# Default system prompt for the LLM judge.  Can be overridden per-run via
+# ``judge_prompt`` on ``run_suite()``.
+DEFAULT_JUDGE_PROMPT = """\
+You are an evaluation judge. You will be given:
+- A worker's system prompt (what the worker was asked to do)
+- The input payload sent to the worker
+- The expected output (if provided)
+- The actual output produced by the worker
+
+Evaluate the actual output on these criteria:
+1. **Correctness**: Does the output match the expected output semantically?
+2. **Completeness**: Does the output contain all required information?
+3. **Format compliance**: Does the output follow the expected structure?
+
+Respond with ONLY a JSON object (no markdown fences):
+{
+    "score": <float 0.0 to 1.0>,
+    "reasoning": "<brief explanation of the score>",
+    "criteria": {
+        "correctness": <float 0.0 to 1.0>,
+        "completeness": <float 0.0 to 1.0>,
+        "format_compliance": <float 0.0 to 1.0>
+    }
+}
+"""
 
 
 def _score_exact_match(expected: dict, actual: dict) -> tuple[float, dict]:
@@ -57,6 +91,78 @@ def _score_field_match(expected: dict, actual: dict) -> tuple[float, dict]:
     return (avg_score, {"method": "field_match", "fields": field_scores})
 
 
+async def _score_llm_judge(
+    expected: dict | None,
+    actual: dict,
+    *,
+    backend: LLMBackend,
+    worker_system_prompt: str,
+    input_payload: dict,
+    judge_prompt: str = DEFAULT_JUDGE_PROMPT,
+) -> tuple[float, dict]:
+    """Use an LLM to evaluate output quality.
+
+    The judge receives the worker's system prompt, input, expected output,
+    and actual output, then returns a 0-to-1 score with reasoning.
+
+    Args:
+        expected: Expected output (may be None).
+        actual: Actual output from the worker.
+        backend: LLM backend to use for the judge call.
+        worker_system_prompt: The system prompt of the worker being evaluated.
+        input_payload: The input that was sent to the worker.
+        judge_prompt: System prompt for the judge LLM.
+
+    Returns:
+        Tuple of (score, details_dict).
+    """
+    user_message = json.dumps(
+        {
+            "worker_system_prompt": worker_system_prompt,
+            "input": input_payload,
+            "expected_output": expected,
+            "actual_output": actual,
+        },
+        indent=2,
+    )
+
+    try:
+        result = await backend.complete(
+            system_prompt=judge_prompt,
+            user_message=user_message,
+            max_tokens=500,
+            temperature=0.0,
+        )
+
+        content = result.get("content", "")
+        # Strip markdown fences if present
+        if "```" in content:
+            lines = content.split("\n")
+            lines = [line for line in lines if not line.strip().startswith("```")]
+            content = "\n".join(lines)
+
+        parsed = json.loads(content)
+        score = float(parsed.get("score", 0.0))
+        score = max(0.0, min(1.0, score))  # Clamp to [0, 1]
+
+        return (
+            score,
+            {
+                "method": "llm_judge",
+                "reasoning": parsed.get("reasoning", ""),
+                "criteria": parsed.get("criteria", {}),
+                "model": result.get("model"),
+                "judge_tokens": {
+                    "prompt": result.get("prompt_tokens", 0),
+                    "completion": result.get("completion_tokens", 0),
+                },
+            },
+        )
+    except (json.JSONDecodeError, ValueError, TypeError) as e:
+        logger.warning("eval.llm_judge_parse_error", error=str(e))
+        return (0.0, {"method": "llm_judge", "error": f"Judge parse error: {e}"})
+
+
 class EvalRunner:
     """Run a test suite against a worker config and store results.
 
@@ -69,13 +175,15 @@ class EvalRunner:
         self.test_runner = test_runner
         self.db = db
 
-    async def run_suite(
+    async def run_suite(  # noqa: PLR0915
         self,
         config: dict[str, Any],
         test_suite: list[dict[str, Any]],
         tier: str | None = None,
         scoring: str = "field_match",
         max_concurrency: int = 3,
+        judge_backend: LLMBackend | None = None,
+        judge_prompt: str | None = None,
     ) -> str:
         """Run all test cases and store results.
 
@@ -83,15 +191,25 @@ class EvalRunner:
             config: Worker config dict.
             test_suite: List of ``{"name": str, "input": dict, "expected_output": dict}``.
             tier: Model tier override.
-            scoring: Scoring method — ``"exact_match"`` or ``"field_match"``.
+            scoring: Scoring method — ``"exact_match"``, ``"field_match"``,
+                or ``"llm_judge"``.
             max_concurrency: Max concurrent test case executions.
+            judge_backend: LLM backend for ``llm_judge`` scoring.  Required
+                when ``scoring="llm_judge"``.
+            judge_prompt: Custom system prompt for the judge LLM.  Uses
+                ``DEFAULT_JUDGE_PROMPT`` if not provided.
 
         Returns:
             The eval run ID.
         """
         import yaml
 
+        if scoring == "llm_judge" and judge_backend is None:
+            msg = "judge_backend is required when scoring='llm_judge'"
+            raise ValueError(msg)
+
         worker_name = config.get("name", "unknown")
+        worker_system_prompt = config.get("system_prompt", "")
 
         # Save worker version
         config_yaml = yaml.dump(config, default_flow_style=False, sort_keys=False)
@@ -99,12 +217,13 @@ class EvalRunner:
 
         resolved_tier = tier or config.get("default_model_tier", "standard")
 
-        # Create eval run
+        # Create eval run with scoring method in metadata
         run_id = self.db.save_eval_run(
             worker_name=worker_name,
             tier=resolved_tier,
             total_cases=len(test_suite),
             worker_version_id=version_id,
+            metadata={"scoring_method": scoring},
         )
 
         logger.info(
@@ -116,7 +235,12 @@ class EvalRunner:
         )
 
         # Select scoring function
-        score_fn = _score_field_match if scoring == "field_match" else _score_exact_match
+        if scoring == "llm_judge":
+            score_fn = None  # Handled specially (async)
+        elif scoring == "field_match":
+            score_fn = _score_field_match
+        else:
+            score_fn = _score_exact_match
 
         # Run test cases with bounded concurrency
         semaphore = asyncio.Semaphore(max_concurrency)
@@ -137,15 +261,39 @@ class EvalRunner:
 
                 # Score
                 score = 0.0
-                score_details = {}
+                score_details: dict[str, Any] = {}
                 case_passed = result.success
 
                 if result.output and expected:
-                    score, score_details = score_fn(expected, result.output)
+                    if scoring == "llm_judge":
+                        assert judge_backend is not None  # Guaranteed by check above
+                        score, score_details = await _score_llm_judge(
+                            expected,
+                            result.output,
+                            backend=judge_backend,
+                            worker_system_prompt=worker_system_prompt,
+                            input_payload=input_payload,
+                            judge_prompt=judge_prompt or DEFAULT_JUDGE_PROMPT,
+                        )
+                    else:
+                        assert score_fn is not None
+                        score, score_details = score_fn(expected, result.output)
                     case_passed = case_passed and score >= 0.5
                 elif result.output and not expected:
-                    score = 1.0 if result.success else 0.0
-                    score_details = {"method": scoring, "note": "no expected output"}
+                    if scoring == "llm_judge":
+                        assert judge_backend is not None
+                        score, score_details = await _score_llm_judge(
+                            None,
+                            result.output,
+                            backend=judge_backend,
+                            worker_system_prompt=worker_system_prompt,
+                            input_payload=input_payload,
+                            judge_prompt=judge_prompt or DEFAULT_JUDGE_PROMPT,
+                        )
+                        case_passed = case_passed and score >= 0.5
+                    else:
+                        score = 1.0 if result.success else 0.0
+                        score_details = {"method": scoring, "note": "no expected output"}
 
                 if case_passed:
                     passed += 1

@@ -275,3 +275,35 @@ choco install nssm
 - DuckDB stores can grow large — monitor disk usage
 - Dead-letter consumer has a bounded store (default 1000 entries) — adjust `max_size` if needed
 - Redis checkpoint store: check TTL settings for expired entries
+
+---
+
+## Workshop Evaluation
+
+### LLM judge gives inconsistent scores
+
+**Symptom:** Same test case produces different scores across eval runs.
+
+**Fix:**
+- Set `temperature=0.0` for the judge backend (this is the default)
+- Use a more capable model for judging (the Workshop prefers the `standard` tier)
+- Provide a more specific `judge_prompt` tailored to your domain
+- Check `score_details.reasoning` in eval results to understand scoring rationale
+
+### Baseline comparison shows no data
+
+**Symptom:** Eval detail page shows no baseline comparison.
+
+**Fix:**
+- Promote a successful eval run as baseline first: click "Promote as Baseline" on the eval detail page
+- Each worker has at most one baseline; promoting a new one replaces the previous
+- Baseline comparison is only shown when viewing a run that is *not* the baseline itself
+
+### Dead-letter replay keeps failing
+
+**Symptom:** Replayed tasks end up back in the dead-letter queue.
+
+**Fix:**
+- Check the original reason in the replay log — if "unroutable", ensure a worker for that `worker_type` + `tier` is running
+- If "rate_limited", wait for the rate limiter bucket to refill before replaying
+- If "malformed", the task data itself is invalid and needs to be fixed at the source

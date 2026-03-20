@@ -19,7 +19,12 @@ import pytest
 
 from loom.bus.memory import InMemoryBus
 from loom.core.messages import ModelTier, TaskMessage
-from loom.router.dead_letter import INCOMING_SUBJECT, DeadLetterConsumer, DeadLetterEntry
+from loom.router.dead_letter import (
+    INCOMING_SUBJECT,
+    DeadLetterConsumer,
+    DeadLetterEntry,
+    ReplayRecord,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -357,6 +362,114 @@ class TestReplay:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# ReplayRecord tests
+# ---------------------------------------------------------------------------
+
+
+class TestReplayRecord:
+    def test_record_has_required_fields(self):
+        record = ReplayRecord(
+            entry_id="e-1",
+            task_id="t-1",
+            worker_type="summarizer",
+            original_reason="rate_limited",
+        )
+        assert record.entry_id == "e-1"
+        assert record.task_id == "t-1"
+        assert record.worker_type == "summarizer"
+        assert record.original_reason == "rate_limited"
+        assert record.replayed_at is not None
+
+    def test_to_dict(self):
+        record = ReplayRecord(entry_id="e-1", task_id="t-1")
+        d = record.to_dict()
+        assert d["entry_id"] == "e-1"
+        assert d["task_id"] == "t-1"
+        assert "replayed_at" in d
+
+    def test_defaults(self):
+        record = ReplayRecord(entry_id="e-1")
+        assert record.task_id is None
+        assert record.worker_type is None
+        assert record.original_reason == ""
+
+
+# ---------------------------------------------------------------------------
+# Replay audit log tests
+# ---------------------------------------------------------------------------
+
+
+class TestReplayLog:
+    @pytest.mark.asyncio
+    async def test_replay_records_in_log(self):
+        bus = InMemoryBus()
+        await bus.connect()
+        consumer = DeadLetterConsumer(bus=bus)
+
+        entry = consumer.store({"x": 1}, "rate_limited", task_id="t-1", worker_type="w1")
+        await consumer.replay(entry.id, bus)
+
+        assert consumer.replay_count() == 1
+        log = consumer.replay_log()
+        assert len(log) == 1
+        assert log[0]["entry_id"] == entry.id
+        assert log[0]["task_id"] == "t-1"
+        assert log[0]["worker_type"] == "w1"
+        assert log[0]["original_reason"] == "rate_limited"
+
+    @pytest.mark.asyncio
+    async def test_replay_log_most_recent_first(self):
+        bus = InMemoryBus()
+        await bus.connect()
+        consumer = DeadLetterConsumer(bus=bus)
+
+        e1 = consumer.store({"n": 1}, "r1", task_id="t-1")
+        e2 = consumer.store({"n": 2}, "r2", task_id="t-2")
+        await consumer.replay(e1.id, bus)
+        await consumer.replay(e2.id, bus)
+
+        log = consumer.replay_log()
+        assert len(log) == 2
+        # Most recent first
+        assert log[0]["task_id"] == "t-2"
+        assert log[1]["task_id"] == "t-1"
+
+    @pytest.mark.asyncio
+    async def test_replay_log_limit(self):
+        bus = InMemoryBus()
+        await bus.connect()
+        consumer = DeadLetterConsumer(bus=bus)
+
+        for i in range(5):
+            entry = consumer.store({"n": i}, f"r{i}", task_id=f"t-{i}")
+            await consumer.replay(entry.id, bus)
+
+        log = consumer.replay_log(limit=3)
+        assert len(log) == 3
+
+    @pytest.mark.asyncio
+    async def test_replay_log_empty_initially(self):
+        bus = InMemoryBus()
+        consumer = DeadLetterConsumer(bus=bus)
+        assert consumer.replay_log() == []
+        assert consumer.replay_count() == 0
+
+    @pytest.mark.asyncio
+    async def test_failed_replay_not_in_log(self):
+        bus = InMemoryBus()
+        await bus.connect()
+        consumer = DeadLetterConsumer(bus=bus)
+
+        await consumer.replay("nonexistent-id", bus)
+        assert consumer.replay_count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Integration: full flow via bus
+# ---------------------------------------------------------------------------
+
+
 class TestFullFlow:
     @pytest.mark.asyncio
     async def test_end_to_end_store_and_replay(self):
@@ -390,6 +503,12 @@ class TestFullFlow:
 
         replayed = await asyncio.wait_for(incoming_sub.__anext__(), timeout=2.0)
         assert replayed["worker_type"] == "worker_1"
+
+        # Verify replay was logged
+        assert consumer.replay_count() == 1
+        log = consumer.replay_log()
+        assert log[0]["entry_id"] == entry_id
+        assert log[0]["original_reason"] == "reason_1"
 
         # Clear remaining
         consumer.clear()

@@ -56,6 +56,7 @@ src/loom/
   router/
     router.py             # Deterministic task router + token-bucket rate limiter + dead-letter
     dead_letter.py        # DeadLetterConsumer — bounded in-memory store, list/count/clear/replay
+                          #   ReplayRecord audit trail (replay_log, replay_count)
 
   bus/
     base.py               # MessageBus ABC + Subscription ABC
@@ -87,8 +88,9 @@ src/loom/
     app_manager.py        # AppManager — deploy/list/remove app bundles (ZIP upload, reload notify)
                           #   Atomic deployment (temp dir + rename), symlink rejection, path traversal validation
     test_runner.py        # WorkerTestRunner — execute worker configs directly against LLM backends
-    db.py                 # WorkshopDB — DuckDB storage for eval results, worker versions, metrics
-    eval_runner.py        # EvalRunner — systematic test suite execution with field_match/exact_match scoring
+    db.py                 # WorkshopDB — DuckDB storage for eval results, worker versions, metrics,
+                          #   eval baselines (golden dataset regression detection)
+    eval_runner.py        # EvalRunner — systematic test suite execution with field_match/exact_match/llm_judge scoring
     config_manager.py     # ConfigManager — CRUD for worker/pipeline YAML configs with versioning + multi-dir
     pipeline_editor.py    # PipelineEditor — insert/swap/branch/remove pipeline stages with dep validation
     templates/            # Jinja2 templates: workers, pipelines, apps, dead_letters (list, detail, deploy)
@@ -163,7 +165,7 @@ deploy/
   macos/                  # launchd plist files + install/uninstall scripts
   windows/                # NSSM-based Windows service install/uninstall scripts
 
-tests/                    # 63 test files, 1147 unit tests + 1 integration test (85% coverage)
+tests/                    # 64 test files, 1184 unit tests + 1 integration test (85% coverage)
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -181,6 +183,7 @@ tests/                    # 63 test files, 1147 unit tests + 1 integration test 
   test_e2e_advanced.py                            # E2E failure paths, timeouts, diamonds
   test_workshop_runner.py test_workshop_db.py     test_workshop_eval.py
   test_workshop_config.py test_workshop_pipeline_editor.py
+  test_workshop_app.py                                    # Workshop HTTP routes (baselines, replay log)
   test_app_manifest.py    test_app_manager.py     # App manifest + ZIP deployment safety
   test_reload.py          test_mdns.py            # Config reload, mDNS discovery
   test_scheduler_expansion.py                     # Scheduler expand_from
@@ -326,10 +329,10 @@ OLLAMA_URL=http://localhost:11434 uv run loom workshop --port 8080
 
 **Components:**
 - **WorkerTestRunner** (`workshop/test_runner.py`): Execute a worker config against a payload without the actor mesh. Builds the full system prompt (with silo injection), calls the LLM backend directly via `execute_with_tools()`, validates I/O contracts, and returns structured results with timing and token usage.
-- **EvalRunner** (`workshop/eval_runner.py`): Run test suites (list of input/expected_output pairs) against a worker config. Supports `field_match` and `exact_match` scoring. Results persist to DuckDB for cross-version comparison.
+- **EvalRunner** (`workshop/eval_runner.py`): Run test suites (list of input/expected_output pairs) against a worker config. Supports `field_match`, `exact_match`, and `llm_judge` scoring (uses a separate LLM call to evaluate output quality on correctness/completeness/format criteria). Results persist to DuckDB for cross-version comparison and regression detection via golden dataset baselines.
 - **ConfigManager** (`workshop/config_manager.py`): CRUD for worker and pipeline YAML configs with hash-based version tracking in DuckDB.
 - **PipelineEditor** (`workshop/pipeline_editor.py`): Insert, remove, swap, or branch pipeline stages. Validates dependencies using `PipelineOrchestrator._infer_dependencies()` and Kahn's topological sort.
-- **WorkshopDB** (`workshop/db.py`): DuckDB storage for eval runs, eval results, worker versions, and metrics.
+- **WorkshopDB** (`workshop/db.py`): DuckDB storage for eval runs, eval results, worker versions, metrics, and eval baselines (golden dataset regression detection via `promote_baseline`/`compare_against_baseline`).
 - **Web UI** (`workshop/app.py`): FastAPI + HTMX + Jinja2 with Pico CSS. Worker list/editor, interactive test bench, eval dashboard with per-case results, pipeline editor with dependency graph visualization.
 
 **Test suite format** (YAML):
@@ -404,12 +407,14 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 **P2 — Observability:**
 - **request_id propagation** — `TaskMessage` and `OrchestratorGoal` carry `request_id` through goal→task→result chain; structured log bindings per goal
 - **I/O tracing** — `LOOM_TRACE=1` env var enables full input/output logging; `_summarize()` helper truncates by default
-- **Dead-letter consumer** — `DeadLetterConsumer` actor with bounded in-memory store (default 1000), list/count/clear/replay via CLI (`loom dead-letter monitor`) and Workshop UI (`/dead-letters`)
+- **Dead-letter consumer** — `DeadLetterConsumer` actor with bounded in-memory store (default 1000), list/count/clear/replay via CLI (`loom dead-letter monitor`) and Workshop UI (`/dead-letters`); replay audit trail (`ReplayRecord`, `replay_log()`, `replay_count()`) tracks all replayed entries with timestamps and original reason
 - **Pipeline execution timeline** — each pipeline output includes `_timeline` with per-stage `started_at`, `ended_at`, `wall_time_ms`
 
 **P3 — Developer experience:**
 - **CLI pre-flight checks** — `check_nats_connectivity()`, `check_env_vars()`, `check_config_readable()` run before actor startup; skip with `--skip-preflight`
-- **Workshop UI improvements** — worker search/filter, backend availability badges, inline config validation (`/workers/{name}/validate`), deploy spinner, dead-letter inspection page
+- **Workshop UI improvements** — worker search/filter, backend availability badges, inline config validation (`/workers/{name}/validate`), deploy spinner, dead-letter inspection page with replay history
+- **LLM-as-judge scoring** — `EvalRunner.run_suite(scoring="llm_judge")` uses a separate LLM call to evaluate worker output quality on correctness, completeness, and format compliance criteria (0-to-1 scale with reasoning); customizable via `judge_prompt` parameter
+- **Golden dataset regression baselines** — `WorkshopDB.promote_baseline()` marks an eval run as the reference for a worker; `compare_against_baseline()` auto-compares new runs against the baseline; Workshop UI shows regression/improvement per case on the eval detail page
 - **Config validation** — input_mapping path validation, processing_backend dotted-path format, condition operator strict allowlist
 - **Troubleshooting guide** — `docs/TROUBLESHOOTING.md` covering NATS, workers, pipelines, router, Workshop, Docker/K8s, macOS/Windows services
 - **Deploy script improvements** — macOS `install.sh` and Windows `install.ps1` with pre-flight checks, NATS connectivity test, post-install health check
@@ -442,10 +447,11 @@ Loom supports multiple users (e.g., two analysts on Claude Desktop) working simu
 ## What to implement next
 
 1. **Workshop MetricsCollector** — optional NATS subscriber for live worker metrics in Workshop dashboard
-2. **Workshop LLM-as-judge scoring** — use a separate LLM call to evaluate worker output quality
-3. **Streaming result collection (Strategy A)** — process subtask results as they arrive
-4. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
-5. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
+2. **OpenTelemetry integration** — distributed tracing via OTel spans for multi-hop pipeline debugging
+3. **Config impact analysis** — tooling to show what breaks if a worker config changes (derived from input_mapping references)
+4. **Streaming result collection (Strategy A)** — process subtask results as they arrive
+5. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
+6. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
 
 ## What NOT to do
 

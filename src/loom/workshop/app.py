@@ -116,6 +116,7 @@ def create_app(  # noqa: PLR0915
     # NATS subscription is handled externally if needed.
     dead_letter_consumer = DeadLetterConsumer(bus=InMemoryBus())
     app.state.dead_letter_consumer = dead_letter_consumer  # type: ignore[attr-defined]
+    app.state.db = db  # type: ignore[attr-defined]
 
     logger.info(
         "workshop.initialized",
@@ -301,7 +302,16 @@ def create_app(  # noqa: PLR0915
         except Exception as e:
             return HTMLResponse(f"Error: {e}", status_code=400)
 
-        run_id = await eval_runner.run_suite(config, suite, tier=tier, scoring=scoring)
+        # For LLM judge, pick a backend (prefer standard, fall back to first available)
+        judge_backend = None
+        if scoring == "llm_judge":
+            judge_backend = backends.get("standard") or next(iter(backends.values()), None)
+            if not judge_backend:
+                return HTMLResponse("No LLM backend available for judge scoring", status_code=400)
+
+        run_id = await eval_runner.run_suite(
+            config, suite, tier=tier, scoring=scoring, judge_backend=judge_backend
+        )
         return RedirectResponse(url=f"/workers/{name}/eval/{run_id}", status_code=303)
 
     @app.get("/workers/{name}/eval/{run_id}", response_class=HTMLResponse)
@@ -311,6 +321,10 @@ def create_app(  # noqa: PLR0915
         if not run:
             return HTMLResponse("Eval run not found", status_code=404)
         results = db.get_eval_results(run_id)
+        baseline = db.get_baseline(name)
+        baseline_comparison = None
+        if baseline and baseline["run_id"] != run_id:
+            baseline_comparison = db.compare_against_baseline(name, run_id)
         return templates.TemplateResponse(
             "workers/eval_detail.html",
             {
@@ -318,8 +332,22 @@ def create_app(  # noqa: PLR0915
                 "name": name,
                 "run": run,
                 "results": results,
+                "baseline": baseline,
+                "baseline_comparison": baseline_comparison,
             },
         )
+
+    @app.post("/workers/{name}/eval/{run_id}/promote-baseline", response_class=RedirectResponse)
+    async def worker_promote_baseline(request: Request, name: str, run_id: str):
+        form = await request.form()
+        description = form.get("description", "")
+        db.promote_baseline(name, run_id, description=description or None)
+        return RedirectResponse(url=f"/workers/{name}/eval/{run_id}", status_code=303)
+
+    @app.post("/workers/{name}/eval/remove-baseline", response_class=RedirectResponse)
+    async def worker_remove_baseline(name: str):
+        db.remove_baseline(name)
+        return RedirectResponse(url=f"/workers/{name}/eval", status_code=303)
 
     # --- Pipelines ---
 
@@ -464,12 +492,16 @@ def create_app(  # noqa: PLR0915
     async def dead_letters_list(request: Request):
         entries = dead_letter_consumer.list_entries(limit=100)
         total = dead_letter_consumer.count()
+        replay_log = dead_letter_consumer.replay_log(limit=50)
+        replay_count = dead_letter_consumer.replay_count()
         return templates.TemplateResponse(
             "dead_letters.html",
             {
                 "request": request,
                 "entries": entries,
                 "total": total,
+                "replay_log": replay_log,
+                "replay_count": replay_count,
             },
         )
 

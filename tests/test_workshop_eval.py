@@ -8,7 +8,12 @@ import pytest
 
 from loom.worker.backends import LLMBackend
 from loom.workshop.db import WorkshopDB
-from loom.workshop.eval_runner import EvalRunner, _score_exact_match, _score_field_match
+from loom.workshop.eval_runner import (
+    EvalRunner,
+    _score_exact_match,
+    _score_field_match,
+    _score_llm_judge,
+)
 from loom.workshop.test_runner import WorkerTestRunner
 
 # ---------------------------------------------------------------------------
@@ -236,3 +241,200 @@ class TestEvalRunner:
         assert run["total_cases"] == 5
         assert run["passed_cases"] + run["failed_cases"] == 5
         assert run["avg_latency_ms"] is not None
+
+
+# ---------------------------------------------------------------------------
+# LLM-as-judge scoring tests
+# ---------------------------------------------------------------------------
+
+
+class MockJudgeBackend(LLMBackend):
+    """Returns a judge evaluation JSON."""
+
+    def __init__(self, score: float = 0.85):
+        self.score = score
+
+    async def complete(
+        self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs
+    ):
+        return {
+            "content": json.dumps(
+                {
+                    "score": self.score,
+                    "reasoning": "Good output quality.",
+                    "criteria": {
+                        "correctness": self.score,
+                        "completeness": self.score,
+                        "format_compliance": 1.0,
+                    },
+                }
+            ),
+            "model": "mock-judge",
+            "prompt_tokens": 200,
+            "completion_tokens": 50,
+            "tool_calls": None,
+            "stop_reason": "end_turn",
+        }
+
+
+class MockJudgeBackendBadJSON(LLMBackend):
+    """Returns invalid JSON from judge."""
+
+    async def complete(
+        self, system_prompt, user_message, max_tokens=2000, temperature=0.0, **kwargs
+    ):
+        return {
+            "content": "This is not JSON at all",
+            "model": "mock-judge-bad",
+            "prompt_tokens": 200,
+            "completion_tokens": 50,
+            "tool_calls": None,
+            "stop_reason": "end_turn",
+        }
+
+
+class TestLLMJudgeScoring:
+    @pytest.mark.asyncio
+    async def test_llm_judge_basic(self):
+        backend = MockJudgeBackend(score=0.9)
+        score, details = await _score_llm_judge(
+            {"summary": "expected"},
+            {"summary": "actual"},
+            backend=backend,
+            worker_system_prompt="Summarize.",
+            input_payload={"text": "hello"},
+        )
+        assert score == 0.9
+        assert details["method"] == "llm_judge"
+        assert details["reasoning"] == "Good output quality."
+        assert "criteria" in details
+        assert details["model"] == "mock-judge"
+
+    @pytest.mark.asyncio
+    async def test_llm_judge_no_expected_output(self):
+        backend = MockJudgeBackend(score=0.7)
+        score, details = await _score_llm_judge(
+            None,
+            {"summary": "actual"},
+            backend=backend,
+            worker_system_prompt="Summarize.",
+            input_payload={"text": "hello"},
+        )
+        assert score == 0.7
+
+    @pytest.mark.asyncio
+    async def test_llm_judge_bad_json_returns_zero(self):
+        backend = MockJudgeBackendBadJSON()
+        score, details = await _score_llm_judge(
+            {"summary": "expected"},
+            {"summary": "actual"},
+            backend=backend,
+            worker_system_prompt="Summarize.",
+            input_payload={"text": "hello"},
+        )
+        assert score == 0.0
+        assert "error" in details
+
+    @pytest.mark.asyncio
+    async def test_llm_judge_score_clamped(self):
+        """Scores outside [0, 1] are clamped."""
+
+        class HighScoreBackend(LLMBackend):
+            async def complete(self, system_prompt, user_message, **kwargs):
+                return {
+                    "content": json.dumps({"score": 5.0, "reasoning": "over"}),
+                    "model": "mock",
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "tool_calls": None,
+                    "stop_reason": "end_turn",
+                }
+
+        score, _ = await _score_llm_judge(
+            {"a": 1},
+            {"a": 1},
+            backend=HighScoreBackend(),
+            worker_system_prompt="test",
+            input_payload={},
+        )
+        assert score == 1.0
+
+    @pytest.mark.asyncio
+    async def test_llm_judge_markdown_fences_stripped(self):
+        """Judge output wrapped in markdown fences is handled."""
+
+        class FencedBackend(LLMBackend):
+            async def complete(self, system_prompt, user_message, **kwargs):
+                return {
+                    "content": '```json\n{"score": 0.75, "reasoning": "ok"}\n```',
+                    "model": "mock",
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "tool_calls": None,
+                    "stop_reason": "end_turn",
+                }
+
+        score, details = await _score_llm_judge(
+            {"a": 1},
+            {"a": 1},
+            backend=FencedBackend(),
+            worker_system_prompt="test",
+            input_payload={},
+        )
+        assert score == 0.75
+
+
+class TestEvalRunnerWithLLMJudge:
+    @pytest.fixture
+    def runner_and_db(self):
+        db = WorkshopDB(":memory:")
+        backend = MockEvalBackend()
+        test_runner = WorkerTestRunner({"local": backend})
+        eval_runner = EvalRunner(test_runner, db)
+        yield eval_runner, db
+        db.close()
+
+    @pytest.mark.asyncio
+    async def test_run_suite_llm_judge(self, runner_and_db):
+        eval_runner, db = runner_and_db
+        judge = MockJudgeBackend(score=0.85)
+
+        suite = [
+            {
+                "name": "case_1",
+                "input": {"text": "hello"},
+                "expected_output": {"summary": "Summary of: hello"},
+            },
+        ]
+
+        run_id = await eval_runner.run_suite(
+            EVAL_CONFIG, suite, scoring="llm_judge", judge_backend=judge
+        )
+
+        results = db.get_eval_results(run_id)
+        assert len(results) == 1
+        assert results[0]["score"] == 0.85
+        score_details = json.loads(results[0]["score_details"])
+        assert score_details["method"] == "llm_judge"
+
+    @pytest.mark.asyncio
+    async def test_run_suite_llm_judge_requires_backend(self, runner_and_db):
+        eval_runner, _ = runner_and_db
+
+        suite = [{"name": "c1", "input": {"text": "x"}}]
+        with pytest.raises(ValueError, match="judge_backend is required"):
+            await eval_runner.run_suite(EVAL_CONFIG, suite, scoring="llm_judge")
+
+    @pytest.mark.asyncio
+    async def test_run_suite_llm_judge_no_expected(self, runner_and_db):
+        eval_runner, db = runner_and_db
+        judge = MockJudgeBackend(score=0.6)
+
+        suite = [{"name": "no_expected", "input": {"text": "test"}}]
+        run_id = await eval_runner.run_suite(
+            EVAL_CONFIG, suite, scoring="llm_judge", judge_backend=judge
+        )
+
+        results = db.get_eval_results(run_id)
+        assert len(results) == 1
+        assert results[0]["score"] == 0.6

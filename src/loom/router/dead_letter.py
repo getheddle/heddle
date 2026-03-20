@@ -31,6 +31,35 @@ logger = structlog.get_logger()
 INCOMING_SUBJECT = "loom.tasks.incoming"
 
 
+class ReplayRecord:
+    """Record of a replayed dead-letter entry."""
+
+    __slots__ = ("entry_id", "original_reason", "replayed_at", "task_id", "worker_type")
+
+    def __init__(
+        self,
+        entry_id: str,
+        task_id: str | None = None,
+        worker_type: str | None = None,
+        original_reason: str = "",
+    ) -> None:
+        self.entry_id = entry_id
+        self.task_id = task_id
+        self.worker_type = worker_type
+        self.original_reason = original_reason
+        self.replayed_at = datetime.now(UTC).isoformat()
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to a dict for API/template consumption."""
+        return {
+            "entry_id": self.entry_id,
+            "task_id": self.task_id,
+            "worker_type": self.worker_type,
+            "original_reason": self.original_reason,
+            "replayed_at": self.replayed_at,
+        }
+
+
 class DeadLetterEntry:
     """A single dead-letter entry with metadata."""
 
@@ -90,6 +119,7 @@ class DeadLetterConsumer(BaseActor):
         super().__init__(actor_id=actor_id, nats_url=nats_url, bus=bus)
         self.max_size = max_size
         self._entries: list[DeadLetterEntry] = []
+        self._replay_log: list[ReplayRecord] = []
 
     async def handle_message(self, data: dict[str, Any]) -> None:
         """Process a dead-letter message from the bus.
@@ -170,7 +200,8 @@ class DeadLetterConsumer(BaseActor):
         """Re-publish a dead-letter task back to ``loom.tasks.incoming``.
 
         Finds the entry by ID, publishes its ``original_task`` to the
-        incoming subject, and removes it from the stored list.
+        incoming subject, removes it from the stored list, and records
+        the replay in the audit log.
 
         Args:
             entry_id: The UUID of the entry to replay.
@@ -183,6 +214,16 @@ class DeadLetterConsumer(BaseActor):
             if entry.id == entry_id:
                 await bus.publish(INCOMING_SUBJECT, entry.original_task)
                 self._entries.pop(i)
+
+                # Record in audit log
+                record = ReplayRecord(
+                    entry_id=entry_id,
+                    task_id=entry.task_id,
+                    worker_type=entry.worker_type,
+                    original_reason=entry.reason,
+                )
+                self._replay_log.append(record)
+
                 logger.info(
                     "dead_letter.replayed",
                     entry_id=entry_id,
@@ -191,3 +232,19 @@ class DeadLetterConsumer(BaseActor):
                 )
                 return True
         return False
+
+    def replay_log(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Return the replay audit log (most recent first).
+
+        Args:
+            limit: Maximum number of records to return.
+
+        Returns:
+            List of replay record dicts.
+        """
+        # Most recent last in list, so reverse for display
+        return [r.to_dict() for r in reversed(self._replay_log[-limit:])]
+
+    def replay_count(self) -> int:
+        """Return the total number of replayed entries."""
+        return len(self._replay_log)

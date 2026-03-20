@@ -219,6 +219,74 @@ class TestWorkerMetrics:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Eval baselines
+# ---------------------------------------------------------------------------
+
+
+class TestEvalBaselines:
+    def test_promote_baseline(self, db):
+        run_id = db.save_eval_run("summarizer", "local", total_cases=3)
+        db.promote_baseline("summarizer", run_id, description="Initial baseline")
+        baseline = db.get_baseline("summarizer")
+        assert baseline is not None
+        assert baseline["run_id"] == run_id
+        assert baseline["description"] == "Initial baseline"
+
+    def test_promote_replaces_existing(self, db):
+        run_a = db.save_eval_run("summarizer", "local", total_cases=1)
+        run_b = db.save_eval_run("summarizer", "local", total_cases=2)
+        db.promote_baseline("summarizer", run_a)
+        db.promote_baseline("summarizer", run_b)
+        baseline = db.get_baseline("summarizer")
+        assert baseline["run_id"] == run_b
+
+    def test_get_baseline_returns_none_when_unset(self, db):
+        assert db.get_baseline("nonexistent") is None
+
+    def test_remove_baseline(self, db):
+        run_id = db.save_eval_run("summarizer", "local", total_cases=1)
+        db.promote_baseline("summarizer", run_id)
+        assert db.remove_baseline("summarizer") is True
+        assert db.get_baseline("summarizer") is None
+
+    def test_remove_baseline_returns_false_when_unset(self, db):
+        assert db.remove_baseline("nonexistent") is False
+
+    def test_different_workers_have_separate_baselines(self, db):
+        run_a = db.save_eval_run("worker_a", "local", total_cases=1)
+        run_b = db.save_eval_run("worker_b", "local", total_cases=1)
+        db.promote_baseline("worker_a", run_a)
+        db.promote_baseline("worker_b", run_b)
+        assert db.get_baseline("worker_a")["run_id"] == run_a
+        assert db.get_baseline("worker_b")["run_id"] == run_b
+
+    def test_compare_against_baseline(self, db):
+        run_baseline = db.save_eval_run("w", "local", total_cases=2)
+        run_new = db.save_eval_run("w", "local", total_cases=2)
+
+        db.save_eval_result(run_baseline, "case_1", {"text": "a"}, True, score=0.8)
+        db.save_eval_result(run_baseline, "case_2", {"text": "b"}, True, score=0.6)
+        db.save_eval_result(run_new, "case_1", {"text": "a"}, True, score=0.9)
+        db.save_eval_result(run_new, "case_2", {"text": "b"}, False, score=0.4)
+
+        db.promote_baseline("w", run_baseline)
+        comparison = db.compare_against_baseline("w", run_new)
+        assert comparison is not None
+        assert len(comparison["cases"]) == 2
+        assert comparison["run_a"]["id"] == run_baseline
+        assert comparison["run_b"]["id"] == run_new
+
+    def test_compare_against_baseline_returns_none_when_unset(self, db):
+        run_id = db.save_eval_run("w", "local", total_cases=1)
+        assert db.compare_against_baseline("w", run_id) is None
+
+
+# ---------------------------------------------------------------------------
+# Schema creation
+# ---------------------------------------------------------------------------
+
+
 class TestSchema:
     def test_schema_idempotent(self):
         """Creating WorkshopDB twice on same path doesn't fail."""
