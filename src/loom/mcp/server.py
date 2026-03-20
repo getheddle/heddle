@@ -3,7 +3,8 @@ MCP server assembly — wires config, discovery, bridge, and resources.
 
 Creates a fully configured ``mcp.server.lowlevel.Server`` from a LOOM
 MCP gateway config YAML.  The server exposes LOOM workers, pipelines,
-and query backends as MCP tools, and workspace files as MCP resources.
+query backends, and Workshop operations as MCP tools, and workspace
+files as MCP resources.
 
 Usage::
 
@@ -13,10 +14,12 @@ Usage::
     run_stdio(server)
 
 See Also:
-    loom.mcp.config    — config loading and validation
-    loom.mcp.discovery — tool definition generation
-    loom.mcp.bridge    — NATS call dispatch
-    loom.mcp.resources — workspace resource exposure
+    loom.mcp.config              — config loading and validation
+    loom.mcp.discovery           — tool definition generation
+    loom.mcp.bridge              — NATS call dispatch
+    loom.mcp.resources           — workspace resource exposure
+    loom.mcp.workshop_discovery  — Workshop tool definitions
+    loom.mcp.workshop_bridge     — Workshop direct dispatch
 """
 
 from __future__ import annotations
@@ -40,6 +43,8 @@ from loom.mcp.discovery import (
     discover_worker_tools,
 )
 from loom.mcp.resources import WorkspaceResources
+from loom.mcp.workshop_bridge import WorkshopBridge, WorkshopBridgeError
+from loom.mcp.workshop_discovery import discover_workshop_tools
 
 logger = structlog.get_logger()
 
@@ -49,7 +54,7 @@ class ToolEntry:
     """Registry entry linking an MCP tool name to its dispatch info."""
 
     name: str
-    kind: str  # "worker", "pipeline", "query"
+    kind: str  # "worker", "pipeline", "query", "workshop"
     tool_def: dict[str, Any]  # MCP Tool shape
     loom_meta: dict[str, Any]  # _loom metadata from discovery
 
@@ -63,6 +68,7 @@ class MCPGateway:
     tool_registry: dict[str, ToolEntry] = field(default_factory=dict)
     tool_defs: list[dict[str, Any]] = field(default_factory=list)
     resources: WorkspaceResources | None = None
+    workshop_bridge: WorkshopBridge | None = None
 
 
 def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
@@ -84,6 +90,13 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
     all_tools.extend(discover_worker_tools(tools_config.get("workers", [])))
     all_tools.extend(discover_pipeline_tools(tools_config.get("pipelines", [])))
     all_tools.extend(discover_query_tools(tools_config.get("queries", [])))
+
+    # Workshop tools (optional — only if tools.workshop is present).
+    workshop_config = tools_config.get("workshop")
+    workshop_bridge: WorkshopBridge | None = None
+    if workshop_config is not None:
+        all_tools.extend(discover_workshop_tools(workshop_config))
+        workshop_bridge = _build_workshop_bridge(workshop_config)
 
     # Build registry.
     registry: dict[str, ToolEntry] = {}
@@ -126,6 +139,7 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
         tool_registry=registry,
         tool_defs=mcp_tool_defs,
         resources=workspace_resources,
+        workshop_bridge=workshop_bridge,
     )
 
     # --- Build MCP Server ---
@@ -134,14 +148,21 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
     @server.list_tools()
     async def handle_list_tools() -> list[types.Tool]:
         """Return all registered MCP tool definitions."""
-        return [
-            types.Tool(
-                name=t["name"],
-                description=t.get("description"),
-                inputSchema=t["inputSchema"],
-            )
-            for t in gateway.tool_defs
-        ]
+        tools = []
+        for t in gateway.tool_defs:
+            tool_kwargs: dict[str, Any] = {
+                "name": t["name"],
+                "description": t.get("description"),
+                "inputSchema": t["inputSchema"],
+            }
+            # Attach annotations from registry metadata.
+            entry = gateway.tool_registry.get(t["name"])
+            if entry:
+                annotations = _build_annotations(entry.loom_meta)
+                if annotations:
+                    tool_kwargs["annotations"] = annotations
+            tools.append(types.Tool(**tool_kwargs))
+        return tools
 
     @server.call_tool()
     async def handle_call_tool(
@@ -184,6 +205,13 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
                 arguments,
                 progress_callback=progress_callback,
             )
+        except WorkshopBridgeError as exc:
+            return [
+                types.TextContent(
+                    type="text",
+                    text=json.dumps({"error": str(exc)}),
+                )
+            ]
         except BridgeTimeoutError as exc:
             return [
                 types.TextContent(
@@ -286,7 +314,118 @@ async def _dispatch_tool(
             timeout=meta.get("timeout", 30),
         )
 
+    if entry.kind == "workshop":
+        if gateway.workshop_bridge is None:
+            raise BridgeError("Workshop tools are not configured")
+        return await gateway.workshop_bridge.dispatch(
+            action=meta["action"],
+            arguments=arguments,
+        )
+
     raise BridgeError(f"Unknown tool kind: {entry.kind}")
+
+
+# ---------------------------------------------------------------------------
+# Tool annotations
+# ---------------------------------------------------------------------------
+
+
+def _build_annotations(loom_meta: dict[str, Any]) -> Any:
+    """Build MCP ToolAnnotations from _loom metadata flags.
+
+    Returns a ``types.ToolAnnotations`` instance if any flags are set,
+    or ``None`` if no annotations are needed.
+    """
+    from mcp import types
+
+    destructive = loom_meta.get("destructive", False)
+    read_only = loom_meta.get("read_only", False)
+    long_running = loom_meta.get("long_running", False)
+
+    if not (destructive or read_only or long_running):
+        return None
+
+    kwargs: dict[str, Any] = {}
+    if destructive:
+        kwargs["destructiveHint"] = True
+    if read_only:
+        kwargs["readOnlyHint"] = True
+    if long_running:
+        # Eval runs create new DB entries — not idempotent, closed world.
+        kwargs["idempotentHint"] = False
+        kwargs["openWorldHint"] = False
+    return types.ToolAnnotations(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Workshop bridge factory
+# ---------------------------------------------------------------------------
+
+
+def _build_workshop_bridge(workshop_config: dict[str, Any]) -> WorkshopBridge:
+    """Construct a WorkshopBridge from the MCP gateway workshop config.
+
+    Instantiates ConfigManager, and optionally WorkerTestRunner, EvalRunner,
+    and WorkshopDB based on available dependencies.
+    """
+    from pathlib import Path
+
+    from loom.workshop.config_manager import ConfigManager
+
+    configs_dir = workshop_config.get("configs_dir", "configs/")
+
+    # Build extra config dirs from apps_dir (deployed apps).
+    extra_config_dirs: list[Path] = []
+    apps_dir = workshop_config.get("apps_dir")
+    if apps_dir:
+        apps_path = Path(apps_dir)
+        if apps_path.is_dir():
+            for app_dir in sorted(apps_path.iterdir()):
+                if app_dir.is_dir():
+                    configs_subdir = app_dir / "configs"
+                    if configs_subdir.is_dir():
+                        extra_config_dirs.append(configs_subdir)
+
+    # Try to set up WorkshopDB.
+    db = None
+    try:
+        from loom.workshop.db import WorkshopDB
+
+        db = WorkshopDB()
+    except Exception as exc:
+        logger.debug("workshop_bridge.db_init_skipped", reason=str(exc))
+
+    config_manager = ConfigManager(
+        configs_dir=configs_dir,
+        db=db,
+        extra_config_dirs=extra_config_dirs,
+    )
+
+    # Try to set up test runner (needs LLM backends).
+    test_runner = None
+    try:
+        from loom.worker.backends import build_backends_from_env
+        from loom.workshop.test_runner import WorkerTestRunner
+
+        backends = build_backends_from_env()
+        if backends:
+            test_runner = WorkerTestRunner(backends)
+    except Exception as exc:
+        logger.debug("workshop_bridge.test_runner_skipped", reason=str(exc))
+
+    # Set up eval runner if we have both test runner and DB.
+    eval_runner = None
+    if test_runner and db:
+        from loom.workshop.eval_runner import EvalRunner
+
+        eval_runner = EvalRunner(test_runner, db)
+
+    return WorkshopBridge(
+        config_manager=config_manager,
+        test_runner=test_runner,
+        eval_runner=eval_runner,
+        db=db,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -78,6 +78,11 @@ src/loom/
     resources.py          # WorkspaceResources — workspace files as MCP resources (workspace:/// URIs)
     server.py             # create_server(), MCPGateway, run_stdio(), run_streamable_http()
                           #   MCP progress notifications wired to pipeline stage callbacks
+                          #   Workshop tool dispatch, ToolAnnotations (destructiveHint)
+    workshop_discovery.py # Workshop MCP tool definitions (workshop.* namespace)
+                          #   worker CRUD, test bench, eval, impact, dead-letter tools
+    workshop_bridge.py    # WorkshopBridge — direct Workshop component calls (no NATS)
+                          #   ConfigManager, WorkerTestRunner, EvalRunner, DeadLetterConsumer
 
   tracing/
     __init__.py           # Public API: get_tracer, init_tracing, inject/extract_trace_context
@@ -184,7 +189,7 @@ deploy/
   macos/                  # launchd plist files + install/uninstall scripts
   windows/                # NSSM-based Windows service install/uninstall scripts
 
-tests/                    # 69 test files, 1281 unit tests + 1 integration test (85% coverage)
+tests/                    # 71 test files, 1318 unit tests + 1 integration test (85% coverage)
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -198,6 +203,7 @@ tests/                    # 69 test files, 1281 unit tests + 1 integration test 
   test_contrib_duckdb_query.py  test_contrib_duckdb_vector.py  test_contrib_duckdb_view.py
   test_mcp_config.py      test_mcp_discovery.py   test_mcp_bridge.py
   test_mcp_resources.py   test_mcp_server.py
+  test_mcp_workshop_discovery.py  test_mcp_workshop_bridge.py  # Workshop MCP tools
   test_bus_memory.py      test_e2e_operations.py  # InMemoryBus E2E (happy path)
   test_e2e_advanced.py                            # E2E failure paths, timeouts, diamonds
   test_workshop_runner.py test_workshop_db.py     test_workshop_eval.py
@@ -333,6 +339,21 @@ resources:
 ```
 
 **Tool discovery flow:** Worker YAML `name` + `input_schema` + `description` → MCP tool definition. Pipeline `input_mapping` `goal.context.*` fields → tool input schema. Query backend `_get_handlers()` → per-action tools with auto-generated schemas.
+
+**Workshop tools** — expose Workshop capabilities (worker CRUD, test bench, eval, impact analysis, dead-letter inspection) as MCP tools under the `workshop.*` namespace. These call Workshop components directly (no NATS required):
+```yaml
+tools:
+  workshop:                       # Optional workshop tools section
+    configs_dir: "configs/"       # Worker/pipeline config directory
+    apps_dir: "~/.loom/apps/"     # Deployed app bundles (optional)
+    enable:                       # Tool groups to enable (default: all)
+      - worker                    # workshop.worker.{list,get,update}
+      - test                      # workshop.worker.test
+      - eval                      # workshop.eval.{run,compare}
+      - impact                    # workshop.impact.analyze
+      - deadletter                # workshop.deadletter.{list,replay}
+```
+Workshop tools support MCP `ToolAnnotations` — `workshop.deadletter.replay` is marked `destructiveHint: true`.
 
 **Public API:**
 ```python

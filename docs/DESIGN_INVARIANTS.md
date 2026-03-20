@@ -86,6 +86,12 @@ deep validation is the LLM's job via system prompt instructions.
 subschemas), the validator silently accepts invalid data. The contract is: keep
 schemas shallow, and this validator is sufficient.
 
+**Note on `schema_ref`:** The `input_schema_ref`/`output_schema_ref` feature
+(v0.7.0) resolves Pydantic models to JSON Schema at config load time. It does
+not change the validation depth — the resolved schema is still validated
+shallowly by `contracts.py`. `schema_ref` is about *where schemas are defined*
+(Python models vs. inline YAML), not *how deeply they are checked*.
+
 **Critical detail:** Boolean checks come before integer checks because Python's
 `bool` is a subclass of `int`. Without this ordering, `True` validates as an
 integer, and workers receive wrong types.
@@ -162,6 +168,8 @@ different defaults:
   defaults to **FALSE** (skip the stage) and logs a warning. This is the
   expected behavior for conditional stages like `extract.output.needs_ocr == true`
   — if the upstream stage didn't produce the field, the condition is not met.
+
+> **Summary: malformed condition → TRUE (run), missing path → FALSE (skip).**
 
 **Why the split:** A *structural* error in the condition expression is almost
 certainly a mistake that should not silently skip work. A *missing path*,

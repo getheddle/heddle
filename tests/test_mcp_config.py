@@ -170,3 +170,50 @@ class TestValidateResources:
         config = {"name": "test", "resources": "bad"}
         errors = validate_mcp_config(config)
         assert any("'resources' must be a dict" in e for e in errors)
+
+
+class TestValidateWorkshopConfig:
+    def test_valid_workshop(self):
+        config = {
+            "name": "test",
+            "tools": {
+                "workshop": {
+                    "configs_dir": "configs/",
+                    "enable": ["worker", "test", "eval"],
+                },
+            },
+        }
+        assert validate_mcp_config(config) == []
+
+    def test_workshop_empty_dict(self):
+        config = {"name": "test", "tools": {"workshop": {}}}
+        assert validate_mcp_config(config) == []
+
+    def test_workshop_not_dict(self):
+        config = {"name": "test", "tools": {"workshop": "bad"}}
+        errors = validate_mcp_config(config)
+        assert any("must be a dict" in e for e in errors)
+
+    def test_workshop_configs_dir_wrong_type(self):
+        config = {"name": "test", "tools": {"workshop": {"configs_dir": 123}}}
+        errors = validate_mcp_config(config)
+        assert any("'configs_dir' must be a string" in e for e in errors)
+
+    def test_workshop_enable_wrong_type(self):
+        config = {"name": "test", "tools": {"workshop": {"enable": "worker"}}}
+        errors = validate_mcp_config(config)
+        assert any("'enable' must be a list" in e for e in errors)
+
+    def test_workshop_enable_unknown_group(self):
+        config = {"name": "test", "tools": {"workshop": {"enable": ["worker", "bogus"]}}}
+        errors = validate_mcp_config(config)
+        assert any("unknown group 'bogus'" in e for e in errors)
+
+    def test_workshop_apps_dir_wrong_type(self):
+        config = {"name": "test", "tools": {"workshop": {"apps_dir": 123}}}
+        errors = validate_mcp_config(config)
+        assert any("'apps_dir' must be a string" in e for e in errors)
+
+    def test_workshop_absent_is_valid(self):
+        config = {"name": "test", "tools": {}}
+        assert validate_mcp_config(config) == []

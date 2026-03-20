@@ -12,7 +12,14 @@ import yaml
 from loom.bus.memory import InMemoryBus
 from loom.core.messages import TaskResult, TaskStatus
 from loom.mcp.bridge import BridgeError, BridgeTimeoutError, MCPBridge
-from loom.mcp.server import MCPGateway, ToolEntry, _dispatch_tool, create_server
+from loom.mcp.server import (
+    MCPGateway,
+    ToolEntry,
+    _build_annotations,
+    _dispatch_tool,
+    create_server,
+)
+from loom.mcp.workshop_bridge import WorkshopBridge, WorkshopBridgeError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1071,3 +1078,169 @@ class TestRunStreamableHTTP:
             run_streamable_http(server, gateway)
 
         gateway.bridge.close.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# _build_annotations (lines 333-357)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildAnnotations:
+    """Test the _build_annotations helper."""
+
+    def test_no_flags_returns_none(self):
+        assert _build_annotations({}) is None
+        assert _build_annotations({"kind": "worker"}) is None
+
+    def test_destructive_flag(self):
+        ann = _build_annotations({"destructive": True})
+        assert ann is not None
+        assert ann.destructiveHint is True
+
+    def test_read_only_flag(self):
+        ann = _build_annotations({"read_only": True})
+        assert ann is not None
+        assert ann.readOnlyHint is True
+
+    def test_long_running_flag(self):
+        ann = _build_annotations({"long_running": True})
+        assert ann is not None
+        assert ann.idempotentHint is False
+        assert ann.openWorldHint is False
+
+    def test_multiple_flags(self):
+        ann = _build_annotations({"destructive": True, "read_only": True})
+        assert ann.destructiveHint is True
+        assert ann.readOnlyHint is True
+
+    def test_false_flags_return_none(self):
+        """Explicitly False flags should not produce annotations."""
+        assert _build_annotations({"destructive": False, "read_only": False}) is None
+
+
+# ---------------------------------------------------------------------------
+# Workshop dispatch integration
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchToolWorkshop:
+    """Test _dispatch_tool for workshop kind."""
+
+    @pytest.fixture
+    async def bus_and_bridge(self):
+        bus = InMemoryBus()
+        await bus.connect()
+        bridge = MCPBridge(bus)
+        yield bus, bridge
+        await bus.close()
+
+    async def test_dispatch_workshop_tool(self, bus_and_bridge):
+        """Workshop tools dispatch through WorkshopBridge."""
+        _, bridge = bus_and_bridge
+        mock_wb = AsyncMock(spec=WorkshopBridge)
+        mock_wb.dispatch.return_value = {"workers": [], "count": 0}
+
+        gateway = MCPGateway(
+            config={"name": "test"},
+            bridge=bridge,
+            tool_registry={},
+            tool_defs=[],
+            workshop_bridge=mock_wb,
+        )
+
+        entry = ToolEntry(
+            name="workshop.worker.list",
+            kind="workshop",
+            tool_def={},
+            loom_meta={"kind": "workshop", "action": "worker.list"},
+        )
+
+        result = await _dispatch_tool(gateway, entry, {})
+        assert result == {"workers": [], "count": 0}
+        mock_wb.dispatch.assert_awaited_once_with(
+            action="worker.list", arguments={},
+        )
+
+    async def test_dispatch_workshop_no_bridge_raises(self, bus_and_bridge):
+        """Workshop dispatch with no workshop_bridge raises BridgeError."""
+        _, bridge = bus_and_bridge
+        gateway = MCPGateway(
+            config={"name": "test"},
+            bridge=bridge,
+            tool_registry={},
+            tool_defs=[],
+            workshop_bridge=None,
+        )
+
+        entry = ToolEntry(
+            name="workshop.worker.list",
+            kind="workshop",
+            tool_def={},
+            loom_meta={"kind": "workshop", "action": "worker.list"},
+        )
+
+        with pytest.raises(BridgeError, match="Workshop tools are not configured"):
+            await _dispatch_tool(gateway, entry, {})
+
+
+class TestHandleCallToolWorkshopError:
+    """Test that WorkshopBridgeError is caught by handle_call_tool."""
+
+    def _call(self, server, name, arguments=None):
+        from mcp import types
+
+        handler = server.request_handlers[types.CallToolRequest]
+        params = types.CallToolRequestParams(name=name, arguments=arguments)
+        request = types.CallToolRequest(method="tools/call", params=params)
+        return _unwrap(asyncio.run(handler(request)))
+
+    def test_workshop_bridge_error_returns_json(self, tmp_path):
+        config_path = _make_gateway_config(
+            tmp_path, worker_cfgs=_single_worker_cfgs("ws_tool"),
+        )
+        server, gateway = create_server(config_path)
+
+        with patch("loom.mcp.server._dispatch_tool", new_callable=AsyncMock) as m:
+            m.side_effect = WorkshopBridgeError("ConfigManager not configured")
+            result = self._call(server, "ws_tool", {})
+            data = json.loads(result.content[0].text)
+            assert "ConfigManager not configured" in data["error"]
+
+
+class TestHandleListToolsAnnotations:
+    """Test that handle_list_tools attaches annotations from registry metadata."""
+
+    def test_annotations_attached_to_tools(self, tmp_path):
+        config_path = _make_gateway_config(
+            tmp_path, worker_cfgs=_single_worker_cfgs("annotated"),
+        )
+        server, gateway = create_server(config_path)
+
+        # Inject read_only flag into the registry entry.
+        entry = gateway.tool_registry["annotated"]
+        entry.loom_meta["read_only"] = True
+
+        from mcp import types
+
+        handler = server.request_handlers[types.ListToolsRequest]
+        request = types.ListToolsRequest(method="tools/list")
+        result = _unwrap(asyncio.run(handler(request)))
+
+        tool = result.tools[0]
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is True
+
+    def test_no_annotations_when_no_flags(self, tmp_path):
+        config_path = _make_gateway_config(
+            tmp_path, worker_cfgs=_single_worker_cfgs("plain"),
+        )
+        server, gateway = create_server(config_path)
+
+        from mcp import types
+
+        handler = server.request_handlers[types.ListToolsRequest]
+        request = types.ListToolsRequest(method="tools/list")
+        result = _unwrap(asyncio.run(handler(request)))
+
+        tool = result.tools[0]
+        assert tool.annotations is None

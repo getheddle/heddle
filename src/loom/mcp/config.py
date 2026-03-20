@@ -2,8 +2,8 @@
 MCP gateway configuration loading and validation.
 
 Defines the YAML config structure for exposing LOOM workers, pipelines,
-and query backends as MCP tools. Follows the same validation pattern as
-``loom.core.config``.
+query backends, and Workshop operations as MCP tools. Follows the same
+validation pattern as ``loom.core.config``.
 
 Example config::
 
@@ -98,6 +98,7 @@ def validate_mcp_config(  # noqa: PLR0912
         errors.extend(_validate_worker_entries(tools.get("workers", [])))
         errors.extend(_validate_pipeline_entries(tools.get("pipelines", [])))
         errors.extend(_validate_query_entries(tools.get("queries", [])))
+        errors.extend(_validate_workshop_config(tools.get("workshop")))
 
     # Resources section.
     resources = config.get("resources")
@@ -163,6 +164,31 @@ def _validate_pipeline_entries(entries: Any) -> list[str]:
         if "description" in entry and not isinstance(entry["description"], str):
             errors.append(f"{prefix}: 'description' must be a string")
 
+    return errors
+
+
+def _validate_workshop_config(workshop: Any) -> list[str]:
+    """Validate the tools.workshop section."""
+    if workshop is None:
+        return []
+    errors: list[str] = []
+    if not isinstance(workshop, dict):
+        return ["tools.workshop must be a dict"]
+    if "configs_dir" in workshop and not isinstance(workshop["configs_dir"], str):
+        errors.append("tools.workshop: 'configs_dir' must be a string")
+    if "apps_dir" in workshop and not isinstance(workshop["apps_dir"], str):
+        errors.append("tools.workshop: 'apps_dir' must be a string")
+    if "enable" in workshop:
+        if not isinstance(workshop["enable"], list):
+            errors.append("tools.workshop: 'enable' must be a list")
+        else:
+            valid_groups = {"worker", "test", "eval", "impact", "deadletter"}
+            errors.extend(
+                f"tools.workshop: unknown group '{item}' in 'enable' "
+                f"(valid: {', '.join(sorted(valid_groups))})"
+                for item in workshop["enable"]
+                if item not in valid_groups
+            )
     return errors
 
 
