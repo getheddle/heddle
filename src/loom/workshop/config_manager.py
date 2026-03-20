@@ -59,9 +59,7 @@ class ConfigManager:
             results.extend(self._scan_workers_dir(extra_dir / "workers", app_name=app_name))
         return results
 
-    def _scan_workers_dir(
-        self, workers_dir: Path, app_name: str = ""
-    ) -> list[dict[str, Any]]:
+    def _scan_workers_dir(self, workers_dir: Path, app_name: str = "") -> list[dict[str, Any]]:
         """Scan a workers directory for YAML configs."""
         if not workers_dir.exists():
             return []
@@ -168,9 +166,7 @@ class ConfigManager:
             results.extend(self._scan_pipelines_dir(extra_dir / "orchestrators", app_name=app_name))
         return results
 
-    def _scan_pipelines_dir(
-        self, orch_dir: Path, app_name: str = ""
-    ) -> list[dict[str, Any]]:
+    def _scan_pipelines_dir(self, orch_dir: Path, app_name: str = "") -> list[dict[str, Any]]:
         """Scan an orchestrators directory for pipeline configs."""
         if not orch_dir.exists():
             return []

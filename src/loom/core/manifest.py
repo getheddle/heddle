@@ -124,7 +124,9 @@ class AppManifest(BaseModel):
 
 
 def _check_yaml_extension(
-    refs: list[EntryConfigRef], kind: str, errors: list[str],
+    refs: list[EntryConfigRef],
+    kind: str,
+    errors: list[str],
 ) -> None:
     """Check that all config refs end with .yaml."""
     errors.extend(
@@ -140,9 +142,7 @@ def validate_app_manifest(data: dict[str, Any]) -> list[str]:
     Returns a list of error strings (empty = valid).
     """
     errors: list[str] = [
-        f"Missing required field: {f}"
-        for f in ("name", "version", "description")
-        if f not in data
+        f"Missing required field: {f}" for f in ("name", "version", "description") if f not in data
     ]
 
     if errors:

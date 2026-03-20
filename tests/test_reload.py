@@ -113,12 +113,16 @@ class TestTaskWorkerReload:
 
         # Create a worker config
         config_path = tmp_path / "worker.yaml"
-        config_path.write_text(yaml.dump({
-            "name": "test_worker",
-            "system_prompt": "Original prompt",
-            "input_schema": {"text": "string"},
-            "output_schema": {"result": "string"},
-        }))
+        config_path.write_text(
+            yaml.dump(
+                {
+                    "name": "test_worker",
+                    "system_prompt": "Original prompt",
+                    "input_schema": {"text": "string"},
+                    "output_schema": {"result": "string"},
+                }
+            )
+        )
 
         class TestWorker(TaskWorker):
             async def process(self, payload, metadata):
@@ -133,12 +137,16 @@ class TestTaskWorkerReload:
         assert worker.config["system_prompt"] == "Original prompt"
 
         # Update config on disk
-        config_path.write_text(yaml.dump({
-            "name": "test_worker",
-            "system_prompt": "Updated prompt",
-            "input_schema": {"text": "string"},
-            "output_schema": {"result": "string"},
-        }))
+        config_path.write_text(
+            yaml.dump(
+                {
+                    "name": "test_worker",
+                    "system_prompt": "Updated prompt",
+                    "input_schema": {"text": "string"},
+                    "output_schema": {"result": "string"},
+                }
+            )
+        )
 
         await worker.on_reload()
         assert worker.config["system_prompt"] == "Updated prompt"
@@ -151,17 +159,21 @@ class TestPipelineOrchestratorReload:
         from loom.orchestrator.pipeline import PipelineOrchestrator
 
         config_path = tmp_path / "pipeline.yaml"
-        config_path.write_text(yaml.dump({
-            "name": "test_pipeline",
-            "pipeline_stages": [
+        config_path.write_text(
+            yaml.dump(
                 {
-                    "name": "stage1",
-                    "worker_type": "summarizer",
-                    "model_tier": "local",
-                    "input_mapping": {"text": "goal.context.text"},
-                },
-            ],
-        }))
+                    "name": "test_pipeline",
+                    "pipeline_stages": [
+                        {
+                            "name": "stage1",
+                            "worker_type": "summarizer",
+                            "model_tier": "local",
+                            "input_mapping": {"text": "goal.context.text"},
+                        },
+                    ],
+                }
+            )
+        )
 
         orch = PipelineOrchestrator(
             actor_id="test-pipeline",
@@ -172,23 +184,27 @@ class TestPipelineOrchestratorReload:
         assert len(orch.config["pipeline_stages"]) == 1
 
         # Update config on disk
-        config_path.write_text(yaml.dump({
-            "name": "test_pipeline",
-            "pipeline_stages": [
+        config_path.write_text(
+            yaml.dump(
                 {
-                    "name": "stage1",
-                    "worker_type": "summarizer",
-                    "model_tier": "local",
-                    "input_mapping": {"text": "goal.context.text"},
-                },
-                {
-                    "name": "stage2",
-                    "worker_type": "classifier",
-                    "model_tier": "local",
-                    "input_mapping": {"text": "stage1.output.summary"},
-                },
-            ],
-        }))
+                    "name": "test_pipeline",
+                    "pipeline_stages": [
+                        {
+                            "name": "stage1",
+                            "worker_type": "summarizer",
+                            "model_tier": "local",
+                            "input_mapping": {"text": "goal.context.text"},
+                        },
+                        {
+                            "name": "stage2",
+                            "worker_type": "classifier",
+                            "model_tier": "local",
+                            "input_mapping": {"text": "stage1.output.summary"},
+                        },
+                    ],
+                }
+            )
+        )
 
         await orch.on_reload()
         assert len(orch.config["pipeline_stages"]) == 2

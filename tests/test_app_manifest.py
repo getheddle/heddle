@@ -1,6 +1,5 @@
 """Tests for loom.core.manifest — app manifest schema and validation."""
 
-
 import pytest
 import yaml
 
@@ -38,11 +37,13 @@ class TestValidateAppManifest:
         assert errors == []
 
     def test_minimal_manifest(self):
-        errors = validate_app_manifest({
-            "name": "minimal",
-            "version": "0.1.0",
-            "description": "Minimal app",
-        })
+        errors = validate_app_manifest(
+            {
+                "name": "minimal",
+                "version": "0.1.0",
+                "description": "Minimal app",
+            }
+        )
         assert errors == []
 
     def test_missing_name(self):

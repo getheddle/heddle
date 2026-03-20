@@ -335,7 +335,9 @@ class SchedulerActor(BaseActor):
             return []
 
     async def _dispatch_goal(
-        self, entry: ScheduleEntry, extra_context: dict[str, Any] | None = None,
+        self,
+        entry: ScheduleEntry,
+        extra_context: dict[str, Any] | None = None,
     ) -> None:
         """Publish an OrchestratorGoal to loom.goals.incoming."""
         cfg = entry.goal_config or {}
@@ -357,7 +359,9 @@ class SchedulerActor(BaseActor):
         )
 
     async def _dispatch_task(
-        self, entry: ScheduleEntry, extra_payload: dict[str, Any] | None = None,
+        self,
+        entry: ScheduleEntry,
+        extra_payload: dict[str, Any] | None = None,
     ) -> None:
         """Publish a TaskMessage to loom.tasks.incoming."""
         cfg = entry.task_config or {}

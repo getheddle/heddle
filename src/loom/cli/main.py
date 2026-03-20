@@ -614,7 +614,12 @@ def mcp(config: str, transport: str, host: str, port: int):
 @click.option("--nats-url", default=None, help="NATS URL for live metrics (optional)")
 @click.option("--apps-dir", default="~/.loom/apps", help="Root directory for deployed app bundles")
 def workshop(
-    port: int, host: str, configs_dir: str, db_path: str, nats_url: str | None, apps_dir: str,
+    port: int,
+    host: str,
+    configs_dir: str,
+    db_path: str,
+    nats_url: str | None,
+    apps_dir: str,
 ):
     r"""Start the LLM Worker Workshop web UI.
 

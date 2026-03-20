@@ -33,7 +33,9 @@ WORKER_CONFIG = {
 
 
 def _make_app_zip(
-    tmp_path: Path, manifest: dict | None = None, include_config: bool = True,
+    tmp_path: Path,
+    manifest: dict | None = None,
+    include_config: bool = True,
 ) -> Path:
     """Create a test ZIP archive with manifest and optional config files."""
     zip_path = tmp_path / "test-app.zip"

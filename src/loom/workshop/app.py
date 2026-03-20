@@ -91,9 +91,7 @@ def create_app(  # noqa: PLR0915
     test_runner = WorkerTestRunner(backends)
     eval_runner = EvalRunner(test_runner, db)
     app_mgr = AppManager(apps_dir=apps_dir)
-    config_mgr = ConfigManager(
-        configs_dir, db, extra_config_dirs=_build_extra_config_dirs(app_mgr)
-    )
+    config_mgr = ConfigManager(configs_dir, db, extra_config_dirs=_build_extra_config_dirs(app_mgr))
 
     logger.info(
         "workshop.initialized",

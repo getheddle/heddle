@@ -166,22 +166,26 @@ class TestSchedulerExpansion:
 
 class TestScheduleEntryParsing:
     def test_expand_from_parsed(self):
-        raw = [{
-            "name": "test",
-            "interval_seconds": 60,
-            "dispatch_type": "task",
-            "task": {"worker_type": "test_worker"},
-            "expand_from": "myapp.sessions.get_active",
-        }]
+        raw = [
+            {
+                "name": "test",
+                "interval_seconds": 60,
+                "dispatch_type": "task",
+                "task": {"worker_type": "test_worker"},
+                "expand_from": "myapp.sessions.get_active",
+            }
+        ]
         entries = SchedulerActor._parse_schedules(raw)
         assert entries[0].expand_from == "myapp.sessions.get_active"
 
     def test_expand_from_defaults_none(self):
-        raw = [{
-            "name": "test",
-            "interval_seconds": 60,
-            "dispatch_type": "task",
-            "task": {"worker_type": "test_worker"},
-        }]
+        raw = [
+            {
+                "name": "test",
+                "interval_seconds": 60,
+                "dispatch_type": "task",
+                "task": {"worker_type": "test_worker"},
+            }
+        ]
         entries = SchedulerActor._parse_schedules(raw)
         assert entries[0].expand_from is None
