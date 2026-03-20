@@ -44,6 +44,52 @@ class TestLoomServiceAdvertiser:
         assert mock_zc_instance.close.call_count == 1
         assert advertiser._zeroconf is None
 
+    @pytest.mark.asyncio
+    async def test_start_initialises_zeroconf(self):
+        """start() imports Zeroconf and stores an instance."""
+        import sys
+
+        mock_zc_class = MagicMock()
+        mock_module = MagicMock()
+        mock_module.Zeroconf = mock_zc_class
+
+        original = sys.modules.get("zeroconf")
+        sys.modules["zeroconf"] = mock_module
+        try:
+            advertiser = LoomServiceAdvertiser()
+            await advertiser.start()
+            mock_zc_class.assert_called_once()
+            assert advertiser._zeroconf is mock_zc_class.return_value
+        finally:
+            if original is not None:
+                sys.modules["zeroconf"] = original
+            else:
+                del sys.modules["zeroconf"]
+
+    def test_register_resolves_default_host(self):
+        """When host is None, _register_service resolves via gethostbyname."""
+        import sys
+
+        mock_zc_instance = MagicMock()
+        mock_module = MagicMock()
+
+        advertiser = LoomServiceAdvertiser()
+        advertiser._zeroconf = mock_zc_instance
+
+        original = sys.modules.get("zeroconf")
+        sys.modules["zeroconf"] = mock_module
+        try:
+            # host=None triggers socket.gethostbyname path (line 108)
+            advertiser.register_workshop(port=8080, host=None)
+            assert len(advertiser._infos) == 1
+            # Verify ServiceInfo was created (host resolved internally)
+            mock_module.ServiceInfo.assert_called_once()
+        finally:
+            if original is not None:
+                sys.modules["zeroconf"] = original
+            else:
+                del sys.modules["zeroconf"]
+
     def test_register_without_start_logs_warning(self):
         """Registering before start() should not crash."""
         from loom.discovery.mdns import LoomServiceAdvertiser

@@ -1334,3 +1334,212 @@ class TestHandleListToolsAnnotations:
 
         tool = result.tools[0]
         assert tool.annotations is None
+
+
+# ---------------------------------------------------------------------------
+# handle_read_resource error path (lines 283-287)
+# ---------------------------------------------------------------------------
+
+
+class TestReadResourceHandler:
+    """Test the read_resource handler registered inside create_server."""
+
+    def test_read_resource_returns_read_resource_contents(self, tmp_path):
+        """Lines 283-287: handle_read_resource calls gateway.resources.read_resource
+        and wraps result in ReadResourceContents (MCP SDK may convert to TextResourceContents)."""
+        resources_dir = tmp_path / "workspace"
+        resources_dir.mkdir()
+        (resources_dir / "readme.txt").write_text("hello workspace")
+
+        config_path = _make_gateway_config(tmp_path, resources_dir=resources_dir)
+        server, gateway = create_server(config_path)
+
+        from mcp import types
+
+        # Snapshot first so the resource is known.
+        gateway.resources.snapshot()
+
+        mock_res = MagicMock()
+        mock_res.read_resource = MagicMock(return_value=("hello workspace", "text/plain"))
+        gateway.resources = mock_res
+
+        handler = server.request_handlers[types.ReadResourceRequest]
+        params = types.ReadResourceRequestParams(uri="workspace:///readme.txt")
+        request = types.ReadResourceRequest(method="resources/read", params=params)
+        result = _unwrap(asyncio.run(handler(request)))
+
+        # The handler calls read_resource and the MCP SDK converts the result.
+        mock_res.read_resource.assert_called_once()
+        assert len(result.contents) == 1
+        # MCP SDK converts ReadResourceContents to TextResourceContents for text/* MIME.
+        item = result.contents[0]
+        assert hasattr(item, "text") or hasattr(item, "content")
+        # Verify the text content is present.
+        text = getattr(item, "text", None) or getattr(item, "content", None)
+        assert text == "hello workspace"
+
+    def test_read_resource_uri_coerced_to_str(self, tmp_path):
+        """Line 285: uri is coerced to str (MCP SDK may pass AnyUrl)."""
+        resources_dir = tmp_path / "workspace"
+        resources_dir.mkdir()
+
+        config_path = _make_gateway_config(tmp_path, resources_dir=resources_dir)
+        server, gateway = create_server(config_path)
+
+        from mcp import types
+
+        captured_uris = []
+
+        def capturing_read(uri):
+            captured_uris.append(uri)
+            return ("content", "text/plain")
+
+        mock_res = MagicMock()
+        mock_res.read_resource = capturing_read
+        gateway.resources = mock_res
+
+        handler = server.request_handlers[types.ReadResourceRequest]
+        params = types.ReadResourceRequestParams(uri="workspace:///doc.txt")
+        request = types.ReadResourceRequest(method="resources/read", params=params)
+        _unwrap(asyncio.run(handler(request)))
+
+        # URI passed to read_resource should be a str.
+        assert len(captured_uris) == 1
+        assert isinstance(captured_uris[0], str)
+
+
+# ---------------------------------------------------------------------------
+# _build_workshop_bridge apps_dir edge cases (lines 395-401)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildWorkshopBridgeAppsDir:
+    """Test _build_workshop_bridge with apps_dir configuration."""
+
+    def test_apps_dir_nonexistent_is_skipped(self, tmp_path):
+        """Lines 393-401: non-existent apps_dir produces empty extra_config_dirs."""
+        from loom.mcp.server import _build_workshop_bridge
+
+        workshop_config = {
+            "configs_dir": str(tmp_path),
+            "apps_dir": str(tmp_path / "nonexistent_apps"),
+        }
+        bridge = _build_workshop_bridge(workshop_config)
+        # Should succeed without error even when apps_dir doesn't exist.
+        assert bridge is not None
+
+    def test_apps_dir_with_app_configs_subdir(self, tmp_path):
+        """Lines 395-401: app subdirs with configs/ are added to extra_config_dirs."""
+        from loom.mcp.server import _build_workshop_bridge
+
+        # Set up a fake apps directory with one deployed app.
+        apps_dir = tmp_path / "apps"
+        apps_dir.mkdir()
+        app_dir = apps_dir / "myapp"
+        app_dir.mkdir()
+        (app_dir / "configs").mkdir()
+        # Create a dummy worker config inside the app's configs dir.
+        (app_dir / "configs" / "worker.yaml").write_text(
+            "name: myapp_worker\nsystem_prompt: test\n"
+        )
+
+        workshop_config = {
+            "configs_dir": str(tmp_path),
+            "apps_dir": str(apps_dir),
+        }
+        bridge = _build_workshop_bridge(workshop_config)
+        assert bridge is not None
+
+    def test_apps_dir_app_without_configs_subdir_skipped(self, tmp_path):
+        """Lines 398-401: app subdirs without configs/ are not added."""
+        from loom.mcp.server import _build_workshop_bridge
+
+        apps_dir = tmp_path / "apps"
+        apps_dir.mkdir()
+        # App directory without a configs/ subdirectory.
+        (apps_dir / "bareapp").mkdir()
+
+        workshop_config = {
+            "configs_dir": str(tmp_path),
+            "apps_dir": str(apps_dir),
+        }
+        bridge = _build_workshop_bridge(workshop_config)
+        assert bridge is not None
+
+
+# ---------------------------------------------------------------------------
+# run_streamable_http inner functions (lines 521, 524, 528-529)
+# ---------------------------------------------------------------------------
+
+
+class TestRunStreamableHTTPInternals:
+    """Test the inner functions (mcp_asgi_handler, health, lifespan) that are
+    defined inside run_streamable_http but are only exercised when uvicorn
+    drives the Starlette app.  We extract them by capturing the Starlette app
+    at construction time."""
+
+    def _capture_starlette_app(self, tmp_path, *, requires_workers=False):
+        """Build a gateway and capture the Starlette app built inside run_streamable_http."""
+        if requires_workers:
+            config_path = _make_gateway_config(
+                tmp_path, worker_cfgs=_single_worker_cfgs("summarizer")
+            )
+        else:
+            config_path = _make_workshop_only_gateway_config(tmp_path)
+
+        server, gateway = create_server(config_path)
+
+        gateway.bridge = MagicMock()
+        gateway.bridge.connect = AsyncMock()
+        gateway.bridge.close = AsyncMock()
+
+        from loom.mcp.server import run_streamable_http
+
+        captured = {}
+
+        class CapturingServer:
+            def __init__(self, config):
+                captured["config"] = config
+
+            async def serve(self):
+                pass  # no-op — we just want the app
+
+        with (
+            patch("uvicorn.Config", side_effect=lambda app, **kw: captured.update({"app": app})),
+            patch("uvicorn.Server", side_effect=CapturingServer),
+        ):
+            run_streamable_http(server, gateway)
+
+        return captured.get("app"), gateway
+
+    def test_health_endpoint_returns_ok(self, tmp_path):
+        """Line 524: health() returns {"status": "ok", "name": ...}."""
+        app, gateway = self._capture_starlette_app(tmp_path)
+
+        # Find the health route handler.
+        health_route = None
+        for route in app.routes:
+            if hasattr(route, "path") and route.path == "/health":
+                health_route = route
+                break
+        assert health_route is not None, "No /health route found"
+
+        from starlette.testclient import TestClient
+
+        client = TestClient(app)
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert "name" in data
+
+    def test_mcp_asgi_handler_route_registered(self, tmp_path):
+        """Line 521: /mcp route with mcp_asgi_handler is registered."""
+        app, _gateway = self._capture_starlette_app(tmp_path)
+
+        mcp_route = None
+        for route in app.routes:
+            if hasattr(route, "path") and route.path == "/mcp":
+                mcp_route = route
+                break
+        assert mcp_route is not None, "No /mcp route found"

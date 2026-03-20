@@ -104,7 +104,7 @@ that separates concerns across specialized actors.
 | MCP gateway (config-driven tool server) | Complete |
 | Contrib: DuckDB, Redis, RAG | Complete |
 | Worker Workshop (web UI) | Complete |
-| Unit tests | 991 passing, 87% coverage |
+| Unit tests | 1472 passing, 90% coverage |
 
 ---
 

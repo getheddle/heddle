@@ -158,6 +158,81 @@ class TestInitTracing:
             # The import will raise ImportError inside init_tracing
             assert init_tracing() is False
 
+    def test_returns_true_when_sdk_fully_available(self):
+        """Lines 132-134, 141-153: init_tracing sets up provider and returns True."""
+        mock_resource_cls = MagicMock()
+        mock_resource_cls.create.return_value = MagicMock()
+
+        mock_provider = MagicMock()
+        mock_provider_cls = MagicMock(return_value=mock_provider)
+
+        mock_exporter = MagicMock()
+        mock_exporter_cls = MagicMock(return_value=mock_exporter)
+
+        mock_processor = MagicMock()
+        mock_processor_cls = MagicMock(return_value=mock_processor)
+
+        mock_trace = MagicMock()
+
+        with (
+            patch("loom.tracing.otel._HAS_OTEL", True),
+            patch("loom.tracing.otel._trace_mod", mock_trace),
+            patch.dict(
+                "sys.modules",
+                {
+                    "opentelemetry.sdk.resources": MagicMock(Resource=mock_resource_cls),
+                    "opentelemetry.sdk.trace": MagicMock(TracerProvider=mock_provider_cls),
+                    "opentelemetry.sdk.trace.export": MagicMock(
+                        BatchSpanProcessor=mock_processor_cls
+                    ),
+                    "opentelemetry.exporter.otlp.proto.grpc.trace_exporter": MagicMock(
+                        OTLPSpanExporter=mock_exporter_cls
+                    ),
+                },
+            ),
+        ):
+            result = init_tracing("my-service", endpoint="http://localhost:4317")
+
+        assert result is True
+        mock_trace.set_tracer_provider.assert_called_once()
+
+    def test_returns_true_without_explicit_endpoint(self):
+        """Lines 144-148: endpoint=None means no endpoint kwarg to OTLPSpanExporter."""
+        mock_resource_cls = MagicMock()
+        mock_resource_cls.create.return_value = MagicMock()
+
+        mock_provider = MagicMock()
+        mock_provider_cls = MagicMock(return_value=mock_provider)
+
+        mock_exporter_cls = MagicMock(return_value=MagicMock())
+        mock_processor_cls = MagicMock(return_value=MagicMock())
+
+        mock_trace = MagicMock()
+
+        with (
+            patch("loom.tracing.otel._HAS_OTEL", True),
+            patch("loom.tracing.otel._trace_mod", mock_trace),
+            patch.dict(
+                "sys.modules",
+                {
+                    "opentelemetry.sdk.resources": MagicMock(Resource=mock_resource_cls),
+                    "opentelemetry.sdk.trace": MagicMock(TracerProvider=mock_provider_cls),
+                    "opentelemetry.sdk.trace.export": MagicMock(
+                        BatchSpanProcessor=mock_processor_cls
+                    ),
+                    "opentelemetry.exporter.otlp.proto.grpc.trace_exporter": MagicMock(
+                        OTLPSpanExporter=mock_exporter_cls
+                    ),
+                },
+            ),
+        ):
+            result = init_tracing("my-service")
+
+        assert result is True
+        # When no endpoint is provided, OTLPSpanExporter should be called with no kwargs.
+        mock_exporter_cls.assert_called_once_with()
+        mock_trace.set_tracer_provider.assert_called_once()
+
 
 class TestTracingIntegrationWithActor:
     """Verify that tracing imports and no-op behavior work in the actor."""

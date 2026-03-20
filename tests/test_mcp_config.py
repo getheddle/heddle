@@ -1,5 +1,7 @@
 """Tests for loom.mcp.config — MCP gateway config loading and validation."""
 
+import pytest
+
 from loom.mcp.config import validate_mcp_config
 
 
@@ -217,3 +219,210 @@ class TestValidateWorkshopConfig:
     def test_workshop_absent_is_valid(self):
         config = {"name": "test", "tools": {}}
         assert validate_mcp_config(config) == []
+
+
+# ---------------------------------------------------------------------------
+# load_mcp_config — ConfigValidationError path (line 61)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadMCPConfig:
+    def test_raises_config_validation_error_on_invalid_config(self, tmp_path):
+        """Line 61: load_mcp_config raises ConfigValidationError for invalid configs."""
+        import yaml
+
+        from loom.core.config import ConfigValidationError
+        from loom.mcp.config import load_mcp_config
+
+        bad_config = {"description": "no name here"}
+        config_file = tmp_path / "bad.yaml"
+        config_file.write_text(yaml.dump(bad_config))
+
+        with pytest.raises(ConfigValidationError, match="error"):
+            load_mcp_config(str(config_file))
+
+    def test_raises_file_not_found_for_missing_file(self, tmp_path):
+        """load_mcp_config raises FileNotFoundError for missing file."""
+        from loom.mcp.config import load_mcp_config
+
+        with pytest.raises(FileNotFoundError):
+            load_mcp_config(str(tmp_path / "nonexistent.yaml"))
+
+    def test_valid_config_returns_dict(self, tmp_path):
+        """load_mcp_config returns the config dict for a valid file."""
+        import yaml
+
+        from loom.mcp.config import load_mcp_config
+
+        config = {"name": "test-gateway"}
+        config_file = tmp_path / "valid.yaml"
+        config_file.write_text(yaml.dump(config))
+
+        result = load_mcp_config(str(config_file))
+        assert result["name"] == "test-gateway"
+
+
+# ---------------------------------------------------------------------------
+# _validate_worker_entries — non-dict entry (lines 129-130)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateWorkerEntriesNonDict:
+    def test_worker_entry_not_dict(self):
+        """Lines 129-130: non-dict worker entry produces error and continues."""
+        from loom.mcp.config import validate_mcp_config
+
+        config = {"name": "test", "tools": {"workers": ["just-a-string"]}}
+        errors = validate_mcp_config(config)
+        assert any("expected dict" in e for e in errors)
+
+    def test_worker_entry_integer_is_not_dict(self):
+        """Non-dict (int) entry reports error and continues to next entry."""
+        from loom.mcp.config import validate_mcp_config
+
+        config = {
+            "name": "test",
+            "tools": {"workers": [42, {"config": "good.yaml"}]},
+        }
+        errors = validate_mcp_config(config)
+        # Should report error for the int, but not for the valid dict.
+        assert any("expected dict" in e for e in errors)
+        # Exactly one error (no cascade from the valid entry).
+        assert sum(1 for e in errors if "expected dict" in e) == 1
+
+
+# ---------------------------------------------------------------------------
+# _validate_pipeline_entries — non-dict entry and type errors (lines 149, 154-155, 159, 163, 165)
+# ---------------------------------------------------------------------------
+
+
+class TestValidatePipelineEntriesEdgeCases:
+    def test_pipeline_entry_not_dict(self):
+        """Line 149: non-dict pipeline entry produces error."""
+        from loom.mcp.config import validate_mcp_config
+
+        config = {"name": "test", "tools": {"pipelines": ["bad-entry"]}}
+        errors = validate_mcp_config(config)
+        assert any("expected dict" in e for e in errors)
+
+    def test_pipeline_config_wrong_type(self):
+        """Lines 154-155: 'config' present but not a string."""
+        from loom.mcp.config import validate_mcp_config
+
+        config = {
+            "name": "test",
+            "tools": {"pipelines": [{"config": 42, "name": "run_it"}]},
+        }
+        errors = validate_mcp_config(config)
+        assert any("'config' must be a string" in e for e in errors)
+
+    def test_pipeline_name_wrong_type(self):
+        """Line 163: 'name' present but not a string."""
+        from loom.mcp.config import validate_mcp_config
+
+        config = {
+            "name": "test",
+            "tools": {"pipelines": [{"config": "p.yaml", "name": 99}]},
+        }
+        errors = validate_mcp_config(config)
+        assert any("'name' must be a string" in e for e in errors)
+
+    def test_pipeline_description_wrong_type(self):
+        """Line 165: 'description' present but not a string."""
+        from loom.mcp.config import validate_mcp_config
+
+        config = {
+            "name": "test",
+            "tools": {"pipelines": [{"config": "p.yaml", "name": "run_it", "description": 123}]},
+        }
+        errors = validate_mcp_config(config)
+        assert any("'description' must be a string" in e for e in errors)
+
+    def test_pipelines_not_list(self):
+        """Line 149: pipelines value not a list returns early."""
+        from loom.mcp.config import validate_mcp_config
+
+        config = {"name": "test", "tools": {"pipelines": "bad"}}
+        errors = validate_mcp_config(config)
+        assert any("must be a list" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# _validate_query_entries — non-dict and type errors (lines 199, 204-205, 209, 217)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateQueryEntriesEdgeCases:
+    def test_query_entry_not_dict(self):
+        """Lines 204-205: non-dict query entry produces error."""
+        from loom.mcp.config import validate_mcp_config
+
+        config = {"name": "test", "tools": {"queries": ["not-a-dict"]}}
+        errors = validate_mcp_config(config)
+        assert any("expected dict" in e for e in errors)
+
+    def test_query_backend_wrong_type(self):
+        """Lines 204-205 (backend branch): backend present but not a string."""
+        from loom.mcp.config import validate_mcp_config
+
+        config = {
+            "name": "test",
+            "tools": {
+                "queries": [
+                    {
+                        "backend": 123,
+                        "actions": ["search"],
+                        "name_prefix": "q",
+                    }
+                ]
+            },
+        }
+        errors = validate_mcp_config(config)
+        assert any("'backend' must be a string" in e for e in errors)
+
+    def test_query_name_prefix_wrong_type(self):
+        """Line 209 (name_prefix branch): name_prefix present but not a string."""
+        from loom.mcp.config import validate_mcp_config
+
+        config = {
+            "name": "test",
+            "tools": {
+                "queries": [
+                    {
+                        "backend": "my.Backend",
+                        "actions": ["search"],
+                        "name_prefix": 99,
+                    }
+                ]
+            },
+        }
+        errors = validate_mcp_config(config)
+        assert any("'name_prefix' must be a string" in e for e in errors)
+
+    def test_query_backend_config_wrong_type(self):
+        """Line 217: backend_config present but not a dict."""
+        from loom.mcp.config import validate_mcp_config
+
+        config = {
+            "name": "test",
+            "tools": {
+                "queries": [
+                    {
+                        "backend": "my.Backend",
+                        "actions": ["search"],
+                        "name_prefix": "q",
+                        "backend_config": "should-be-dict",
+                    }
+                ]
+            },
+        }
+        errors = validate_mcp_config(config)
+        assert any("'backend_config' must be a dict" in e for e in errors)
+
+    def test_queries_not_list(self):
+        """Line 199: queries value not a list returns early."""
+        from loom.mcp.config import validate_mcp_config
+
+        config = {"name": "test", "tools": {"queries": "bad"}}
+        errors = validate_mcp_config(config)
+        assert any("must be a list" in e for e in errors)

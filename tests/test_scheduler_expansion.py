@@ -45,6 +45,10 @@ def mock_return_bad_type() -> str:
     return "not a list"
 
 
+def mock_raises_on_call() -> list[dict[str, Any]]:
+    raise RuntimeError("expansion function blew up")
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -83,6 +87,22 @@ class TestSchedulerExpansion:
     def test_run_expansion_no_dot(self):
         result = SchedulerActor._run_expansion(
             "no_dots_here",
+            "test_schedule",
+        )
+        assert result == []
+
+    def test_run_expansion_call_raises(self):
+        """Expansion function that raises is caught and returns empty list."""
+        result = SchedulerActor._run_expansion(
+            "tests.test_scheduler_expansion.mock_raises_on_call",
+            "test_schedule",
+        )
+        assert result == []
+
+    def test_run_expansion_attribute_error(self):
+        """Missing attribute on valid module returns empty list."""
+        result = SchedulerActor._run_expansion(
+            "tests.test_scheduler_expansion.nonexistent_func",
             "test_schedule",
         )
         assert result == []
@@ -126,6 +146,44 @@ class TestSchedulerExpansion:
         # Expansion context merged into payload
         assert msg1["payload"]["session_monitor_request"]["session_id"] == "s1"
         assert msg2["payload"]["session_monitor_request"]["session_id"] == "s2"
+
+        await bus.close()
+
+    @pytest.mark.asyncio
+    async def test_fire_schedule_with_expansion_goal(self):
+        """expand_from dispatches one goal per expansion result."""
+        bus = InMemoryBus()
+        await bus.connect()
+        sub = await bus.subscribe("loom.goals.incoming")
+
+        config_path = _make_scheduler_config()
+        actor = SchedulerActor(
+            actor_id="test-scheduler-goal",
+            config_path=config_path,
+            bus=bus,
+        )
+        actor._running = True
+
+        entry = ScheduleEntry(
+            name="goal_expand",
+            cron=None,
+            interval_seconds=60,
+            dispatch_type="goal",
+            goal_config={"instruction": "Analyze session", "context": {}},
+            expand_from="tests.test_scheduler_expansion.mock_get_two_sessions",
+        )
+
+        await actor._fire_schedule(entry)
+
+        # Should have dispatched 2 goals
+        msg1 = await asyncio.wait_for(sub._queue.get(), timeout=1.0)
+        msg2 = await asyncio.wait_for(sub._queue.get(), timeout=1.0)
+
+        assert msg1["instruction"] == "Analyze session"
+        assert msg2["instruction"] == "Analyze session"
+        # Expansion context merged into goal context
+        assert msg1["context"]["session_monitor_request"]["session_id"] == "s1"
+        assert msg2["context"]["session_monitor_request"]["session_id"] == "s2"
 
         await bus.close()
 

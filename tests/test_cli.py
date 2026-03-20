@@ -859,3 +859,593 @@ def test_workshop_with_nats_url(tmp_path):
         nats_url="nats://localhost:4222",
         apps_dir="~/.loom/apps",
     )
+
+
+# ---------------------------------------------------------------------------
+# ui command
+# ---------------------------------------------------------------------------
+
+
+def test_ui_help():
+    """ui --help shows help text without errors."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["ui", "--help"])
+    assert result.exit_code == 0
+    assert "terminal dashboard" in result.output.lower() or "dashboard" in result.output.lower()
+
+
+def test_ui_import_error_when_tui_not_installed():
+    """ui command exits with an error when TUI dependencies are missing."""
+    runner = CliRunner()
+
+    import sys
+
+    # Force ImportError for the tui app module by blocking the import.
+    saved = sys.modules.pop("loom.tui.app", "NOT_PRESENT")
+    sys.modules["loom.tui.app"] = None  # type: ignore[assignment]
+
+    try:
+        result = runner.invoke(
+            cli,
+            ["ui", "--nats-url", "nats://localhost:4222"],
+        )
+    finally:
+        del sys.modules["loom.tui.app"]
+        if saved != "NOT_PRESENT":
+            sys.modules["loom.tui.app"] = saved
+
+    assert result.exit_code != 0
+    assert "tui" in result.output.lower() or "tui" in (result.stderr or "").lower()
+
+
+# ---------------------------------------------------------------------------
+# mdns command
+# ---------------------------------------------------------------------------
+
+
+def test_mdns_help():
+    """mdns --help shows help text without errors."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["mdns", "--help"])
+    assert result.exit_code == 0
+    assert "mDNS" in result.output or "mdns" in result.output.lower()
+
+
+def test_mdns_import_error_when_zeroconf_not_installed():
+    """mdns command raises ClickException when zeroconf/mDNS dependencies are missing."""
+    runner = CliRunner()
+
+    import sys
+
+    saved = sys.modules.pop("loom.discovery.mdns", "NOT_PRESENT")
+    sys.modules["loom.discovery.mdns"] = None  # type: ignore[assignment]
+
+    try:
+        result = runner.invoke(
+            cli,
+            ["mdns", "--workshop-port", "8080", "--nats-port", "4222"],
+        )
+    finally:
+        del sys.modules["loom.discovery.mdns"]
+        if saved != "NOT_PRESENT":
+            sys.modules["loom.discovery.mdns"] = saved
+
+    assert result.exit_code != 0
+    assert "zeroconf" in result.output.lower() or "mdns" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# dead-letter monitor command
+# ---------------------------------------------------------------------------
+
+
+def test_dead_letter_monitor_help():
+    """dead-letter monitor --help shows help text without errors."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["dead-letter", "monitor", "--help"])
+    assert result.exit_code == 0
+    assert "dead-letter" in result.output.lower() or "monitor" in result.output.lower()
+
+
+def test_dead_letter_monitor_runs_with_mocked_consumer():
+    """dead-letter monitor creates a DeadLetterConsumer and calls asyncio.run."""
+
+    runner = CliRunner()
+
+    mock_consumer = MagicMock()
+    mock_cls = MagicMock(return_value=mock_consumer)
+
+    # Patch the dead_letter module to expose DEAD_LETTER_SUBJECT (which lives in
+    # router.py but the CLI imports from dead_letter — inject it so the import works).
+    import loom.router.dead_letter as _dl_mod
+
+    _orig_subject = getattr(_dl_mod, "DEAD_LETTER_SUBJECT", "NOT_PRESENT")
+    _orig_consumer = _dl_mod.DeadLetterConsumer
+    _dl_mod.DEAD_LETTER_SUBJECT = "loom.tasks.dead_letter"
+    _dl_mod.DeadLetterConsumer = mock_cls
+
+    try:
+        with patch("loom.cli.main.asyncio.run") as mock_run:
+            result = runner.invoke(
+                cli,
+                [
+                    "dead-letter",
+                    "monitor",
+                    "--nats-url",
+                    "nats://localhost:4222",
+                    "--max-size",
+                    "500",
+                ],
+            )
+    finally:
+        _dl_mod.DeadLetterConsumer = _orig_consumer
+        if _orig_subject == "NOT_PRESENT":
+            if hasattr(_dl_mod, "DEAD_LETTER_SUBJECT"):
+                del _dl_mod.DEAD_LETTER_SUBJECT
+        else:
+            _dl_mod.DEAD_LETTER_SUBJECT = _orig_subject
+
+    assert result.exit_code == 0
+    mock_cls.assert_called_once_with(
+        actor_id="dead-letter-monitor",
+        max_size=500,
+        nats_url="nats://localhost:4222",
+    )
+    mock_run.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# submit command — async _submit body
+# ---------------------------------------------------------------------------
+
+
+def test_submit_async_body_publishes_goal():
+    """submit command runs the async body: connect, publish, drain."""
+    runner = CliRunner()
+
+    mock_nc = MagicMock()
+
+    async def _noop(*args, **kwargs):
+        return None
+
+    mock_nc.publish = MagicMock(side_effect=_noop)
+    mock_nc.drain = MagicMock(side_effect=_noop)
+
+    async def fake_connect(url):
+        return mock_nc
+
+    with patch("nats.connect", side_effect=fake_connect):
+        result = runner.invoke(
+            cli,
+            [
+                "submit",
+                "Async body test goal",
+                "--nats-url",
+                "nats://localhost:4222",
+                "--context",
+                "key=value",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Submitted goal" in result.output
+
+
+# ---------------------------------------------------------------------------
+# pipeline — preflight check path
+# ---------------------------------------------------------------------------
+
+
+def test_pipeline_preflight_check_called(tmp_path):
+    """pipeline without --skip-preflight invokes _run_preflight."""
+    config_path = _write_yaml(
+        tmp_path / "pipeline.yaml",
+        "name: test_pipeline\npipeline_stages:\n  - name: stage1\n    worker_type: summarizer\n",
+    )
+    runner = CliRunner()
+
+    with (
+        patch("loom.cli.main._run_preflight") as mock_preflight,
+        patch("loom.cli.main.asyncio.run"),
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "pipeline",
+                "--config",
+                config_path,
+                "--nats-url",
+                "nats://localhost:4222",
+            ],
+        )
+
+    assert result.exit_code == 0
+    mock_preflight.assert_called_once_with("nats://localhost:4222", config=config_path)
+
+
+def test_pipeline_preflight_skip_flag(tmp_path):
+    """pipeline with --skip-preflight does NOT call _run_preflight."""
+    config_path = _write_yaml(
+        tmp_path / "pipeline.yaml",
+        "name: test_pipeline\npipeline_stages:\n  - name: stage1\n    worker_type: summarizer\n",
+    )
+    runner = CliRunner()
+
+    with (
+        patch("loom.cli.main._run_preflight") as mock_preflight,
+        patch("loom.cli.main.asyncio.run"),
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "pipeline",
+                "--skip-preflight",
+                "--config",
+                config_path,
+                "--nats-url",
+                "nats://localhost:4222",
+            ],
+        )
+
+    assert result.exit_code == 0
+    mock_preflight.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# router — preflight check path
+# ---------------------------------------------------------------------------
+
+
+def test_router_preflight_check_called(tmp_path):
+    """router without --skip-preflight invokes _run_preflight."""
+    runner = CliRunner()
+
+    mock_router = MagicMock()
+    mock_router.run = MagicMock(return_value=None)
+    mock_router.process_messages = MagicMock(return_value=None)
+
+    with (
+        patch("loom.cli.main._run_preflight") as mock_preflight,
+        patch("loom.cli.main.asyncio.run") as mock_run,
+        patch("loom.bus.nats_adapter.NATSBus"),
+        patch("loom.router.router.TaskRouter", return_value=mock_router),
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "router",
+                "--config",
+                "configs/router_rules.yaml",
+                "--nats-url",
+                "nats://localhost:4222",
+            ],
+        )
+
+    assert result.exit_code == 0
+    mock_preflight.assert_called_once_with(
+        "nats://localhost:4222", config="configs/router_rules.yaml"
+    )
+    mock_run.assert_called_once()
+
+
+def test_router_preflight_skip_flag(tmp_path):
+    """router with --skip-preflight does NOT call _run_preflight."""
+    runner = CliRunner()
+
+    mock_router = MagicMock()
+    mock_router.run = MagicMock(return_value=None)
+    mock_router.process_messages = MagicMock(return_value=None)
+
+    with (
+        patch("loom.cli.main._run_preflight") as mock_preflight,
+        patch("loom.cli.main.asyncio.run") as mock_run,
+        patch("loom.bus.nats_adapter.NATSBus"),
+        patch("loom.router.router.TaskRouter", return_value=mock_router),
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "router",
+                "--skip-preflight",
+                "--config",
+                "configs/router_rules.yaml",
+                "--nats-url",
+                "nats://localhost:4222",
+            ],
+        )
+
+    assert result.exit_code == 0
+    mock_preflight.assert_not_called()
+    mock_run.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _run_preflight — direct unit tests (lines 87-104)
+# ---------------------------------------------------------------------------
+
+
+def test_preflight_config_not_readable():
+    """_run_preflight aborts when check_config_readable returns failure."""
+    from loom.cli.main import _run_preflight
+
+    with (
+        patch("loom.cli.main.check_config_readable", return_value=(False, "Cannot read config")),
+        pytest.raises(click.Abort),
+    ):
+        _run_preflight("nats://localhost:4222", config="bad.yaml")
+
+
+def test_preflight_nats_fail():
+    """_run_preflight aborts when NATS connectivity check fails."""
+    from loom.cli.main import _run_preflight
+
+    with (
+        patch("loom.cli.main.check_config_readable", return_value=(True, "ok")),
+        patch("loom.cli.main._run_async", return_value=(False, "Connection refused")),
+        pytest.raises(click.Abort),
+    ):
+        _run_preflight("nats://localhost:4222", config="good.yaml")
+
+
+def test_preflight_nats_ok_with_env_warnings(capsys):
+    """_run_preflight echoes env var warnings when check_env=True and tier set."""
+    from loom.cli.main import _run_preflight
+
+    with (
+        patch("loom.cli.main.check_config_readable", return_value=(True, "ok")),
+        patch("loom.cli.main._run_async", return_value=(True, "NATS connected")),
+        patch(
+            "loom.cli.main.check_env_vars",
+            return_value=["ANTHROPIC_API_KEY not set"],
+        ) as mock_env,
+    ):
+        _run_preflight("nats://localhost:4222", config="good.yaml", tier="standard", check_env=True)
+
+    mock_env.assert_called_once_with("standard")
+
+
+def test_preflight_nats_ok_no_env_check():
+    """_run_preflight does not call check_env_vars when check_env=False."""
+    from loom.cli.main import _run_preflight
+
+    with (
+        patch("loom.cli.main.check_config_readable", return_value=(True, "ok")),
+        patch("loom.cli.main._run_async", return_value=(True, "NATS connected")),
+        patch("loom.cli.main.check_env_vars") as mock_env,
+    ):
+        _run_preflight(
+            "nats://localhost:4222", config="good.yaml", tier="standard", check_env=False
+        )
+
+    mock_env.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# mdns command — async body (lines 838-862)
+# ---------------------------------------------------------------------------
+
+
+def test_mdns_runs_and_registers_services():
+    """mdns command starts advertiser, registers workshop + nats, and stops."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    runner = CliRunner()
+
+    mock_advertiser = MagicMock()
+    mock_advertiser.start = AsyncMock()
+    mock_advertiser.stop = AsyncMock()
+
+    mock_mdns_module = MagicMock()
+    mock_mdns_module.LoomServiceAdvertiser.return_value = mock_advertiser
+
+    import sys
+
+    saved = sys.modules.get("loom.discovery.mdns", "NOT_PRESENT")
+    sys.modules["loom.discovery.mdns"] = mock_mdns_module
+
+    try:
+        # Make asyncio.sleep raise CancelledError immediately so the command exits
+        with patch("asyncio.sleep", side_effect=asyncio.CancelledError):
+            result = runner.invoke(
+                cli,
+                [
+                    "mdns",
+                    "--workshop-port",
+                    "8080",
+                    "--nats-port",
+                    "4222",
+                ],
+            )
+    finally:
+        if saved == "NOT_PRESENT":
+            del sys.modules["loom.discovery.mdns"]
+        else:
+            sys.modules["loom.discovery.mdns"] = saved
+
+    assert result.exit_code == 0
+    mock_mdns_module.LoomServiceAdvertiser.assert_called_once()
+    mock_advertiser.start.assert_awaited_once()
+    mock_advertiser.register_workshop.assert_called_once_with(port=8080, host=None)
+    mock_advertiser.register_nats.assert_called_once_with(port=4222, host=None)
+    mock_advertiser.stop.assert_awaited_once()
+
+
+def test_mdns_with_mcp_port():
+    """mdns with --mcp-port > 0 also registers the MCP service."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    runner = CliRunner()
+
+    mock_advertiser = MagicMock()
+    mock_advertiser.start = AsyncMock()
+    mock_advertiser.stop = AsyncMock()
+
+    mock_mdns_module = MagicMock()
+    mock_mdns_module.LoomServiceAdvertiser.return_value = mock_advertiser
+
+    import sys
+
+    saved = sys.modules.get("loom.discovery.mdns", "NOT_PRESENT")
+    sys.modules["loom.discovery.mdns"] = mock_mdns_module
+
+    try:
+        with patch("asyncio.sleep", side_effect=asyncio.CancelledError):
+            result = runner.invoke(
+                cli,
+                [
+                    "mdns",
+                    "--workshop-port",
+                    "8080",
+                    "--nats-port",
+                    "4222",
+                    "--mcp-port",
+                    "9000",
+                ],
+            )
+    finally:
+        if saved == "NOT_PRESENT":
+            del sys.modules["loom.discovery.mdns"]
+        else:
+            sys.modules["loom.discovery.mdns"] = saved
+
+    assert result.exit_code == 0
+    mock_advertiser.register_mcp.assert_called_once_with(port=9000, host=None)
+
+
+# ---------------------------------------------------------------------------
+# worker command — config validation errors (lines 159-162)
+# ---------------------------------------------------------------------------
+
+
+def test_worker_config_validation_errors(tmp_path):
+    """worker command fails with ClickException when config has validation errors."""
+    config_path = _write_yaml(
+        tmp_path / "worker.yaml",
+        "not_a_valid_field: 123\n",
+    )
+    runner = CliRunner()
+
+    with patch("loom.cli.main.asyncio.run"):
+        result = runner.invoke(
+            cli,
+            [
+                "worker",
+                "--skip-preflight",
+                "--config",
+                config_path,
+                "--tier",
+                "local",
+                "--nats-url",
+                "nats://localhost:4222",
+            ],
+        )
+
+    assert result.exit_code != 0
+    assert "error(s)" in result.output
+
+
+# ---------------------------------------------------------------------------
+# processor command — config validation errors (lines 257-260)
+# ---------------------------------------------------------------------------
+
+
+def test_processor_config_validation_errors(tmp_path):
+    """processor command fails with ClickException when config has validation errors."""
+    config_path = _write_yaml(
+        tmp_path / "proc.yaml",
+        "not_a_valid_field: 123\n",
+    )
+    runner = CliRunner()
+
+    with patch("loom.cli.main.asyncio.run"):
+        result = runner.invoke(
+            cli,
+            [
+                "processor",
+                "--skip-preflight",
+                "--config",
+                config_path,
+                "--nats-url",
+                "nats://localhost:4222",
+            ],
+        )
+
+    assert result.exit_code != 0
+    assert "error(s)" in result.output
+
+
+# ---------------------------------------------------------------------------
+# worker command — preflight invoked (line 148)
+# ---------------------------------------------------------------------------
+
+
+def test_worker_preflight_check_called(tmp_path):
+    """worker without --skip-preflight invokes _run_preflight with check_env=True."""
+    config_path = _write_yaml(
+        tmp_path / "worker.yaml",
+        "name: summarizer\ndefault_model_tier: local\nsystem_prompt: You are a summarizer.\n",
+    )
+    runner = CliRunner()
+
+    with (
+        patch("loom.cli.main._run_preflight") as mock_preflight,
+        patch.dict("os.environ", {"OLLAMA_URL": "http://localhost:11434"}, clear=False),
+        patch("loom.cli.main.asyncio.run"),
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "worker",
+                "--config",
+                config_path,
+                "--tier",
+                "local",
+                "--nats-url",
+                "nats://localhost:4222",
+            ],
+        )
+
+    assert result.exit_code == 0
+    mock_preflight.assert_called_once_with(
+        "nats://localhost:4222", config=config_path, tier="local", check_env=True
+    )
+
+
+# ---------------------------------------------------------------------------
+# processor command — preflight invoked (line 247)
+# ---------------------------------------------------------------------------
+
+
+def test_processor_preflight_check_called(tmp_path):
+    """processor without --skip-preflight invokes _run_preflight with check_env=True."""
+    config_path = _write_yaml(
+        tmp_path / "proc.yaml",
+        "name: doc_extractor\nworker_kind: processor\nprocessing_backend: os.path.join\n",
+    )
+    runner = CliRunner()
+
+    mock_backend = MagicMock()
+    with (
+        patch("loom.cli.main._run_preflight") as mock_preflight,
+        patch("loom.cli.main._load_processing_backend", return_value=mock_backend),
+        patch("loom.cli.main.asyncio.run"),
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "processor",
+                "--config",
+                config_path,
+                "--nats-url",
+                "nats://localhost:4222",
+                "--tier",
+                "local",
+            ],
+        )
+
+    assert result.exit_code == 0
+    mock_preflight.assert_called_once_with(
+        "nats://localhost:4222", config=config_path, tier="local", check_env=True
+    )

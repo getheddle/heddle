@@ -337,3 +337,88 @@ class TestDeploymentSafety:
         app_dir = tmp_path / "apps" / "test-app"
         for item in app_dir.rglob("*"):
             assert not item.is_symlink(), f"Unexpected symlink: {item}"
+
+    def test_config_path_escapes_app_dir(self):
+        """Config path that resolves to app-root itself (no trailing slash) is rejected."""
+        from loom.workshop.app_manager import _validate_config_path
+
+        # A path like "." resolves to "/app-root" which doesn't start with "/app-root/"
+        with pytest.raises(AppDeployError, match="escapes app directory"):
+            _validate_config_path(".")
+
+    def test_list_apps_apps_dir_removed_after_init(self, tmp_path):
+        """list_apps returns [] when apps_dir is removed after initialization."""
+        import shutil
+
+        apps_dir = tmp_path / "apps"
+        mgr = AppManager(apps_dir=str(apps_dir))
+        # Remove the directory that __init__ created
+        shutil.rmtree(apps_dir)
+        apps = mgr.list_apps()
+        assert apps == []
+
+    def test_list_apps_skips_non_dirs(self, tmp_path):
+        """Files (not dirs) inside apps_dir are silently skipped."""
+        mgr = AppManager(apps_dir=str(tmp_path))
+        # Place a plain file in the apps dir (not a directory)
+        (tmp_path / "stray-file.txt").write_text("not an app")
+        apps = mgr.list_apps()
+        assert apps == []
+
+    def test_list_apps_skips_dir_without_manifest(self, tmp_path):
+        """Dirs without manifest.yaml are silently skipped."""
+        mgr = AppManager(apps_dir=str(tmp_path))
+        # A directory with no manifest.yaml
+        (tmp_path / "no-manifest-app").mkdir()
+        apps = mgr.list_apps()
+        assert apps == []
+
+    def test_list_apps_logs_corrupt_manifest(self, tmp_path):
+        """Dirs with a corrupt manifest.yaml are skipped with a warning (no crash)."""
+        mgr = AppManager(apps_dir=str(tmp_path))
+        app_dir = tmp_path / "bad-app"
+        app_dir.mkdir()
+        (app_dir / "manifest.yaml").write_text(": invalid: yaml: [")
+        # Should not raise — corrupt manifests are logged and skipped
+        apps = mgr.list_apps()
+        assert apps == []
+
+    def test_manifest_yaml_non_dict_rejected(self, tmp_path):
+        """manifest.yaml that is not a YAML mapping is rejected."""
+        mgr = AppManager(apps_dir=str(tmp_path / "apps"))
+        zip_path = tmp_path / "scalar-manifest.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.yaml", "just a string\n")
+        with pytest.raises(AppDeployError, match="must be a YAML mapping"):
+            mgr.deploy_app(zip_path)
+
+    def test_deploy_with_python_package_logs_warning(self, tmp_path):
+        """Manifests with python_package trigger a warning log (no crash)."""
+        mgr = AppManager(apps_dir=str(tmp_path / "apps"))
+        manifest = {
+            "name": "pkg-app",
+            "version": "1.0.0",
+            "description": "App with python package",
+            "python_package": {"name": "pkg-app", "install_path": "src/"},
+        }
+        zip_path = tmp_path / "pkg-app.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.yaml", yaml.dump(manifest))
+        result = mgr.deploy_app(zip_path)
+        assert result.name == "pkg-app"
+        assert result.python_package is not None
+        assert result.python_package.name == "pkg-app"
+
+
+class TestAppManagerReloadErrors:
+    @pytest.mark.asyncio
+    async def test_notify_reload_bus_publish_raises(self, tmp_path):
+        """notify_reload logs a warning when bus.publish raises (no crash)."""
+        from unittest.mock import AsyncMock
+
+        mock_bus = AsyncMock()
+        mock_bus.publish.side_effect = RuntimeError("connection lost")
+
+        mgr = AppManager(apps_dir=str(tmp_path), bus=mock_bus)
+        # Should not raise — failure is caught and logged
+        await mgr.notify_reload()

@@ -1,11 +1,13 @@
-"""Tests for InMemoryBus edge cases (bus/memory.py)."""
+"""Tests for InMemoryBus edge cases (bus/memory.py) and MessageBus ABC."""
 
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import pytest
 
+from loom.bus.base import MessageBus, Subscription
 from loom.bus.memory import InMemoryBus, InMemorySubscription
 
 # ---------------------------------------------------------------------------
@@ -169,3 +171,84 @@ class TestInMemoryBus:
         entries = bus._subscribers["grouped.subject"]
         assert len(entries) == 1
         assert entries[0][0] == "my-group"
+
+
+# ---------------------------------------------------------------------------
+# MessageBus ABC coverage — concrete subclass exercises abstract method stubs
+# ---------------------------------------------------------------------------
+
+
+class _MinimalSubscription(Subscription):
+    """Concrete Subscription that delegates to super() to exercise ABC stubs."""
+
+    def __init__(self) -> None:
+        self._exhausted = False
+
+    async def unsubscribe(self) -> None:
+        await super().unsubscribe()  # covers Subscription.unsubscribe stub
+
+    def __aiter__(self) -> _MinimalSubscription:
+        super().__aiter__()  # covers Subscription.__aiter__ stub
+        return self
+
+    async def __anext__(self) -> dict[str, Any]:
+        await super().__anext__()  # covers Subscription.__anext__ stub (returns None)
+        if self._exhausted:
+            raise StopAsyncIteration
+        self._exhausted = True
+        return {}
+
+
+class _MinimalBus(MessageBus):
+    """Concrete MessageBus that delegates to super() to exercise ABC stubs."""
+
+    async def connect(self) -> None:
+        await super().connect()  # covers MessageBus.connect stub
+
+    async def close(self) -> None:
+        await super().close()  # covers MessageBus.close stub
+
+    async def publish(self, subject: str, data: dict[str, Any]) -> None:
+        await super().publish(subject, data)  # covers MessageBus.publish stub
+
+    async def subscribe(
+        self,
+        subject: str,
+        queue_group: str | None = None,
+    ) -> Subscription:
+        await super().subscribe(subject, queue_group)  # covers MessageBus.subscribe stub
+        return _MinimalSubscription()
+
+
+class TestMessageBusABC:
+    """Instantiate concrete subclasses to cover abstract method stubs."""
+
+    @pytest.mark.asyncio
+    async def test_minimal_bus_connect_close(self):
+        bus = _MinimalBus()
+        await bus.connect()
+        await bus.close()
+
+    @pytest.mark.asyncio
+    async def test_minimal_bus_publish(self):
+        bus = _MinimalBus()
+        await bus.publish("some.subject", {"key": "value"})
+
+    @pytest.mark.asyncio
+    async def test_minimal_bus_subscribe(self):
+        bus = _MinimalBus()
+        sub = await bus.subscribe("some.subject")
+        assert sub is not None
+        sub2 = await bus.subscribe("other.subject", queue_group="grp")
+        assert sub2 is not None
+
+    @pytest.mark.asyncio
+    async def test_minimal_subscription_lifecycle(self):
+        sub = _MinimalSubscription()
+        assert sub.__aiter__() is sub
+        await sub.unsubscribe()
+        # First call returns an item, second raises StopAsyncIteration
+        first = await sub.__anext__()
+        assert first == {}
+        with pytest.raises(StopAsyncIteration):
+            await sub.__anext__()

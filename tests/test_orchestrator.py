@@ -843,3 +843,175 @@ class TestCheckpointing:
             assert goal_state.checkpoint_counter == 0
         finally:
             os.unlink(config_path)
+
+
+# ---------------------------------------------------------------------------
+# on_reload tests (lines 278-281)
+# ---------------------------------------------------------------------------
+
+
+class TestOnReload:
+    @pytest.mark.asyncio
+    async def test_on_reload_updates_timeout_and_concurrency(self, tmp_path):
+        """Lines 278-281: on_reload re-reads config from disk."""
+        import yaml
+
+        config_path = _write_config(timeout_seconds=10)
+        try:
+            backend = MockOrchestratorBackend("[]")
+            actor = OrchestratorActor(
+                actor_id="test-reload",
+                config_path=config_path,
+                backend=backend,
+            )
+
+            assert actor._task_timeout == 10.0
+
+            # Write an updated config with a different timeout.
+            updated = {
+                "name": "test-orchestrator",
+                "timeout_seconds": 42,
+                "max_concurrent_tasks": 3,
+                "available_workers": [],
+            }
+            with open(config_path, "w") as f:
+                yaml.dump(updated, f)
+
+            await actor.on_reload()
+
+            assert actor._task_timeout == 42.0
+            assert actor._max_concurrent_tasks == 3
+        finally:
+            os.unlink(config_path)
+
+    @pytest.mark.asyncio
+    async def test_on_reload_uses_defaults_when_keys_absent(self, tmp_path):
+        """on_reload falls back to defaults (300s, 5 tasks) when keys are missing."""
+        import yaml
+
+        config_path = _write_config(timeout_seconds=5)
+        try:
+            backend = MockOrchestratorBackend("[]")
+            actor = OrchestratorActor(
+                actor_id="test-reload-defaults",
+                config_path=config_path,
+                backend=backend,
+            )
+
+            # Write a config without timeout_seconds or max_concurrent_tasks.
+            minimal = {"name": "test-orchestrator", "available_workers": []}
+            with open(config_path, "w") as f:
+                yaml.dump(minimal, f)
+
+            await actor.on_reload()
+
+            assert actor._task_timeout == 300.0
+            assert actor._max_concurrent_tasks == 5
+        finally:
+            os.unlink(config_path)
+
+
+# ---------------------------------------------------------------------------
+# handle_message exception handler (lines 404-407)
+# ---------------------------------------------------------------------------
+
+
+class TestHandleMessageExceptionPath:
+    @pytest.mark.asyncio
+    async def test_unexpected_exception_during_dispatch_publishes_failure(self):
+        """Lines 404-407: unexpected exception during _dispatch_subtasks publishes FAILED."""
+        config_path = _write_config(timeout_seconds=5)
+        try:
+            plan = json.dumps([{"worker_type": "summarizer", "payload": {"text": "test"}}])
+            backend = MockOrchestratorBackend(plan)
+            bus = InMemoryBus()
+            await bus.connect()
+            actor = OrchestratorActor(
+                actor_id="test-exc",
+                config_path=config_path,
+                backend=backend,
+                bus=bus,
+            )
+
+            goal_data = _make_goal_data("Exception test")
+            goal_id = goal_data["goal_id"]
+            result_sub = await bus.subscribe(f"loom.results.{goal_id}")
+
+            # Patch _dispatch_subtasks to raise an unexpected exception.
+            async def _boom(*args, **kwargs):
+                raise RuntimeError("unexpected crash")
+
+            actor._dispatch_subtasks = _boom
+
+            await actor.handle_message(goal_data)
+
+            result = await asyncio.wait_for(result_sub.__anext__(), timeout=2.0)
+            assert result["status"] == TaskStatus.FAILED.value
+            assert "Orchestrator error" in result["error"]
+            assert "unexpected crash" in result["error"]
+            # Goal state must be cleaned up.
+            assert goal_id not in actor._active_goals
+        finally:
+            os.unlink(config_path)
+
+
+# ---------------------------------------------------------------------------
+# _collect_results early_exit path (lines 567-568)
+# ---------------------------------------------------------------------------
+
+
+class TestCollectResultsEarlyExit:
+    @pytest.mark.asyncio
+    async def test_early_exit_branch_logged_when_callback_signals_stop(self):
+        """Lines 567-568: early_exited branch triggers log message."""
+        config_path = _write_config(timeout_seconds=5)
+        try:
+            bus = InMemoryBus()
+            await bus.connect()
+            backend = MockOrchestratorBackend("[]")
+            actor = OrchestratorActor(
+                actor_id="test-early-exit",
+                config_path=config_path,
+                backend=backend,
+                bus=bus,
+            )
+
+            goal = OrchestratorGoal(instruction="Early exit test")
+            task = TaskMessage(worker_type="summarizer", payload={"text": "hi"})
+            goal_state = GoalState(goal=goal)
+            goal_state.dispatched_tasks[task.task_id] = task
+
+            # Callback that signals early exit after first result.
+            async def stop_after_first(result, collected, expected):
+                return True  # signal stop
+
+            import structlog
+
+            log = structlog.get_logger().bind(goal_id=goal.goal_id)
+
+            # Publish a result so the stream can collect it and trigger early exit.
+            async def publisher():
+                await asyncio.sleep(0.05)
+                result = TaskResult(
+                    task_id=task.task_id,
+                    parent_task_id=goal.goal_id,
+                    worker_type="summarizer",
+                    status=TaskStatus.COMPLETED,
+                    output={"summary": "done"},
+                )
+                await bus.publish(
+                    f"loom.results.{goal.goal_id}",
+                    result.model_dump(mode="json"),
+                )
+
+            pub_task = asyncio.create_task(publisher())
+
+            results = await actor._collect_results(goal_state, log, on_result=stop_after_first)
+
+            await pub_task
+
+            # We should have gotten exactly 1 result (the one we published).
+            assert len(results) == 1
+            assert results[0].task_id == task.task_id
+        finally:
+            os.unlink(config_path)
