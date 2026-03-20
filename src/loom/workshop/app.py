@@ -201,8 +201,17 @@ def create_app(  # noqa: PLR0915
 
     @app.get("/workers/{name}/impact", response_class=JSONResponse)
     async def worker_impact(name: str):
-        """Return config impact analysis for a worker."""
+        """Return config impact analysis for a worker (JSON API)."""
         return JSONResponse(get_impact(name, config_mgr))
+
+    @app.get("/workers/{name}/impact-panel", response_class=HTMLResponse)
+    async def worker_impact_panel(request: Request, name: str):
+        """HTMX endpoint: render impact analysis as an HTML partial."""
+        impact = get_impact(name, config_mgr)
+        return templates.TemplateResponse(
+            "partials/impact_panel.html",
+            {"request": request, "impact": impact},
+        )
 
     @app.post("/workers/{name}", response_class=HTMLResponse)
     async def worker_save(request: Request, name: str):

@@ -1,0 +1,56 @@
+{% if impact.total_pipelines == 0 %}
+<p class="impact-none"><small>This worker is not used in any pipeline.</small></p>
+{% else %}
+<div class="impact-summary">
+    <div class="impact-stats">
+        <span class="impact-stat">
+            <strong>{{ impact.total_pipelines }}</strong> pipeline{{ 's' if impact.total_pipelines != 1 }}
+        </span>
+        <span class="impact-stat">
+            <strong>{{ impact.total_stages }}</strong> stage{{ 's' if impact.total_stages != 1 }}
+        </span>
+        {% if impact.total_downstream > 0 %}
+        <span class="impact-stat impact-stat-warn">
+            <strong>{{ impact.total_downstream }}</strong> downstream
+        </span>
+        {% endif %}
+        {% if impact.risk == "high" %}
+        <mark data-status="fail" class="small">HIGH RISK</mark>
+        {% else %}
+        <mark data-status="pass" class="small">LOW RISK</mark>
+        {% endif %}
+    </div>
+    {% if not impact.has_output_schema %}
+    <p class="impact-warning"><small>No <code>output_schema</code> defined — downstream stages have no contract protection.</small></p>
+    {% endif %}
+</div>
+
+{% for p in impact.pipelines %}
+<details class="impact-pipeline" {% if impact.total_pipelines == 1 %}open{% endif %}>
+    <summary>
+        <strong>{{ p.name }}</strong>
+        — {{ p.stages | length }} stage{{ 's' if p.stages | length != 1 }}
+        {% if p.downstream %}, {{ p.downstream | length }} downstream{% endif %}
+    </summary>
+    <div class="impact-detail">
+        <div class="impact-stages">
+            <span class="impact-label">Direct stages:</span>
+            {% for s in p.stages %}
+            <span class="stage-chip">
+                {{ s.name }} <kbd>{{ s.tier }}</kbd>
+                {% if s.has_output_schema %}<span class="impact-schema-ok" title="Has output_schema">&#10003;</span>{% endif %}
+            </span>
+            {% endfor %}
+        </div>
+        {% if p.downstream %}
+        <div class="impact-downstream">
+            <span class="impact-label">Downstream (affected by changes):</span>
+            {% for d in p.downstream %}
+            <span class="stage-chip stage-chip-downstream">{{ d }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</details>
+{% endfor %}
+{% endif %}

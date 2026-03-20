@@ -240,3 +240,110 @@ class TestGetImpactViaApp:
         assert data["worker_name"] == "summarizer"
         assert data["has_output_schema"] is True
         assert data["total_pipelines"] == 0
+
+    def test_impact_panel_endpoint(self, tmp_path):
+        from fastapi.testclient import TestClient
+
+        from loom.workshop.app import create_app
+
+        configs_dir = tmp_path / "configs"
+        workers_dir = configs_dir / "workers"
+        workers_dir.mkdir(parents=True)
+        orch_dir = configs_dir / "orchestrators"
+        orch_dir.mkdir()
+
+        worker_yaml = workers_dir / "summarizer.yaml"
+        worker_yaml.write_text(
+            "name: summarizer\n"
+            "system_prompt: Summarize.\n"
+            "input_schema:\n"
+            "  type: object\n"
+            "  required: [text]\n"
+            "  properties:\n"
+            "    text: {type: string}\n"
+            "output_schema:\n"
+            "  type: object\n"
+            "  required: [summary]\n"
+            "  properties:\n"
+            "    summary: {type: string}\n"
+            "default_model_tier: local\n"
+        )
+
+        app = create_app(
+            configs_dir=str(configs_dir),
+            db_path=":memory:",
+            apps_dir=str(tmp_path / "apps"),
+        )
+        client = TestClient(app)
+
+        resp = client.get("/workers/summarizer/impact-panel")
+        assert resp.status_code == 200
+        assert "not used in any pipeline" in resp.text
+
+    def test_impact_panel_with_pipeline(self, tmp_path):
+        from fastapi.testclient import TestClient
+
+        from loom.workshop.app import create_app
+
+        configs_dir = tmp_path / "configs"
+        workers_dir = configs_dir / "workers"
+        workers_dir.mkdir(parents=True)
+        orch_dir = configs_dir / "orchestrators"
+        orch_dir.mkdir()
+
+        worker_yaml = workers_dir / "extractor.yaml"
+        worker_yaml.write_text(
+            "name: extractor\n"
+            "system_prompt: Extract.\n"
+            "input_schema:\n"
+            "  type: object\n"
+            "  required: [text]\n"
+            "  properties:\n"
+            "    text: {type: string}\n"
+            "output_schema:\n"
+            "  type: object\n"
+            "  required: [data]\n"
+            "  properties:\n"
+            "    data: {type: string}\n"
+            "default_model_tier: local\n"
+        )
+
+        workers_dir.joinpath("summarizer.yaml").write_text(
+            "name: summarizer\n"
+            "system_prompt: Summarize.\n"
+            "input_schema:\n"
+            "  type: object\n"
+            "  required: [text]\n"
+            "  properties:\n"
+            "    text: {type: string}\n"
+            "default_model_tier: local\n"
+        )
+
+        orch_dir.joinpath("doc_pipeline.yaml").write_text(
+            "name: doc_pipeline\n"
+            "pipeline_stages:\n"
+            "  - name: extract\n"
+            "    worker_type: extractor\n"
+            "    tier: local\n"
+            "    input_mapping:\n"
+            "      text: goal.context.text\n"
+            "  - name: summarize\n"
+            "    worker_type: summarizer\n"
+            "    tier: local\n"
+            "    input_mapping:\n"
+            "      text: extract.output.data\n"
+        )
+
+        app = create_app(
+            configs_dir=str(configs_dir),
+            db_path=":memory:",
+            apps_dir=str(tmp_path / "apps"),
+        )
+        client = TestClient(app)
+
+        resp = client.get("/workers/extractor/impact-panel")
+        assert resp.status_code == 200
+        assert "doc_pipeline" in resp.text
+        assert "summarize" in resp.text
+        assert "downstream" in resp.text.lower()
+        assert "HIGH RISK" in resp.text

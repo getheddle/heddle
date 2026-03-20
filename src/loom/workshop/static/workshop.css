@@ -608,6 +608,101 @@ mark[data-status="neutral"] {
     margin-bottom: 1rem;
 }
 
+/* ── Impact Analysis Panel ───────────────────────────────────── */
+
+.impact-none {
+    color: var(--pico-muted-color);
+    margin: 0;
+}
+
+.impact-summary {
+    margin-bottom: 0.75rem;
+}
+
+.impact-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.impact-stat {
+    font-size: 0.88rem;
+}
+
+.impact-stat strong {
+    font-size: 1rem;
+}
+
+.impact-stat-warn strong {
+    color: var(--ws-fail);
+}
+
+.impact-warning {
+    margin: 0.5rem 0 0;
+    padding: 0.35rem 0.65rem;
+    border-radius: var(--ws-radius-sm);
+    border-left: 3px solid #f9a825;
+    background: color-mix(in srgb, #f9a825 8%, var(--pico-card-background-color));
+}
+
+.impact-pipeline {
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: var(--ws-radius);
+    padding: 0.5rem 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+.impact-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.impact-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--pico-muted-color);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 0.35rem;
+}
+
+.impact-stages,
+.impact-downstream {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.stage-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.82rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: var(--ws-radius-sm);
+    background: color-mix(in srgb, var(--ws-accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ws-accent) 25%, transparent);
+}
+
+.stage-chip kbd {
+    font-size: 0.7rem;
+    padding: 0.05rem 0.3rem;
+}
+
+.stage-chip-downstream {
+    background: color-mix(in srgb, var(--ws-fail) 10%, transparent);
+    border-color: color-mix(in srgb, var(--ws-fail) 25%, transparent);
+}
+
+.impact-schema-ok {
+    color: var(--ws-pass);
+    font-weight: 700;
+    font-size: 0.75rem;
+}
+
 /* ── Focus styles (accessibility) ─────────────────────────────── */
 
 :focus-visible {
