@@ -367,7 +367,7 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 - **Pipeline parallelism (C) already benefits MCP.** The `MCPBridge.call_pipeline()` dispatches a goal and the pipeline runs stages concurrently. The bridge's `_collect_pipeline_results()` correctly filters intermediate stage results from the final result.
 - **Concurrent MCP calls are supported** — the bridge is fully async. Multiple MCP clients can call tools simultaneously. However, if all calls target the same single-instance orchestrator, they queue at the orchestrator's semaphore.
 - **PipelineOrchestrator supports `max_concurrent_goals`** — like `OrchestratorActor`, the pipeline orchestrator reads this config and passes it to `BaseActor.max_concurrent`. Set `max_concurrent_goals: N` in pipeline config to process N goals simultaneously. Pipeline execution is stateless per-goal (local `context` dict), so concurrent goals are naturally isolated.
-- **MCP progress notifications** — the bridge has a `progress_callback` parameter but the MCP server doesn't wire it to MCP progress tokens yet. This would let MCP clients show per-stage progress during pipeline execution.
+- **MCP progress notifications** — the server wires `MCPBridge.call_pipeline()` progress_callback to MCP progress tokens. MCP clients with `progressToken` in their request metadata see per-stage progress during pipeline execution.
 
 ## Known issues
 
@@ -403,8 +403,7 @@ Loom supports multiple users (e.g., two analysts on Claude Desktop) working simu
 1. **Workshop MetricsCollector** — optional NATS subscriber for live worker metrics in Workshop dashboard
 2. **Workshop LLM-as-judge scoring** — use a separate LLM call to evaluate worker output quality
 3. **Router dead-letter consumer** — implement a dead-letter processor for monitoring/retry
-4. **MCP progress notifications** — wire `MCPBridge.call_pipeline()` progress_callback to MCP progress tokens
-5. **Streaming result collection (Strategy A)** — process subtask results as they arrive
+4. **Streaming result collection (Strategy A)** — process subtask results as they arrive
 6. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
 7. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
 

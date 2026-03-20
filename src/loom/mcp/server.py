@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Callable
 
 import structlog
 
@@ -165,7 +165,25 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
             gateway.resources.snapshot()
 
         try:
-            result = await _dispatch_tool(gateway, entry, arguments)
+            ctx = server.request_context
+        except LookupError:
+            ctx = None
+
+        async def progress_callback(_stage_name: str, stage_idx: int, total: int) -> None:
+            if ctx and ctx.meta and ctx.meta.progressToken is not None:
+                await ctx.session.send_progress_notification(
+                    progress_token=ctx.meta.progressToken,
+                    progress=stage_idx,
+                    total=total if total > 0 else None,
+                )
+
+        try:
+            result = await _dispatch_tool(
+                gateway,
+                entry,
+                arguments,
+                progress_callback=progress_callback,
+            )
         except BridgeTimeoutError as exc:
             return [
                 types.TextContent(
@@ -240,6 +258,7 @@ async def _dispatch_tool(
     gateway: MCPGateway,
     entry: ToolEntry,
     arguments: dict[str, Any],
+    progress_callback: Callable[[str, int, int], Any] | None = None,
 ) -> dict[str, Any]:
     """Dispatch an MCP tool call to the appropriate bridge method."""
     meta = entry.loom_meta
@@ -253,12 +272,10 @@ async def _dispatch_tool(
         )
 
     if entry.kind == "pipeline":
-        # TODO: Pass a progress_callback that emits MCP progress notifications
-        #   so clients can track per-stage pipeline progress. Requires access to
-        #   the MCP session context (not available in low-level call_tool handler).
         return await gateway.bridge.call_pipeline(
             goal_context=arguments,
             timeout=meta.get("timeout", 300),
+            progress_callback=progress_callback,
         )
 
     if entry.kind == "query":

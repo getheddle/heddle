@@ -321,6 +321,230 @@ class TestDispatchTool:
 
 
 # ---------------------------------------------------------------------------
+# Progress callback wiring (MCP progress notifications)
+# ---------------------------------------------------------------------------
+
+
+class TestProgressCallback:
+    """Test that _dispatch_tool passes progress_callback to pipeline calls."""
+
+    @pytest.fixture
+    async def bus_and_bridge(self):
+        bus = InMemoryBus()
+        await bus.connect()
+        bridge = MCPBridge(bus)
+        yield bus, bridge
+        await bus.close()
+
+    async def test_pipeline_receives_progress_callback(self, bus_and_bridge):
+        """_dispatch_tool passes progress_callback to call_pipeline for pipelines."""
+        bus, bridge = bus_and_bridge
+        gateway = MCPGateway(
+            config={"name": "test"},
+            bridge=bridge,
+            tool_registry={},
+            tool_defs=[],
+        )
+
+        entry = ToolEntry(
+            name="ingest_doc",
+            kind="pipeline",
+            tool_def={},
+            loom_meta={"kind": "pipeline", "timeout": 5},
+        )
+
+        progress_calls = []
+
+        async def track_progress(stage_name: str, stage_idx: int, total: int) -> None:
+            progress_calls.append((stage_name, stage_idx, total))
+
+        ready = asyncio.Event()
+
+        async def mock_pipeline():
+            sub = await bus.subscribe("loom.goals.incoming")
+            ready.set()
+            async for data in sub:
+                goal_id = data.get("goal_id")
+                # Emit an intermediate stage result first.
+                stage_result = TaskResult(
+                    task_id="stage-1-id",
+                    parent_task_id=goal_id,
+                    worker_type="extractor",
+                    status=TaskStatus.COMPLETED,
+                    output={"text": "extracted"},
+                    processing_time_ms=10,
+                )
+                await bus.publish(
+                    f"loom.results.{goal_id}",
+                    stage_result.model_dump(mode="json"),
+                )
+                # Small delay to let consumer process intermediate result.
+                await asyncio.sleep(0.01)
+                # Then emit the final result.
+                final = TaskResult(
+                    task_id=goal_id,
+                    parent_task_id=None,
+                    worker_type="pipeline",
+                    status=TaskStatus.COMPLETED,
+                    output={"processed": True},
+                )
+                await bus.publish(
+                    f"loom.results.{goal_id}",
+                    final.model_dump(mode="json"),
+                )
+                await sub.unsubscribe()
+                break
+
+        worker_task = asyncio.create_task(mock_pipeline())
+        await ready.wait()
+
+        result = await _dispatch_tool(
+            gateway, entry, {"file_ref": "test.pdf"}, progress_callback=track_progress,
+        )
+        assert result == {"processed": True}
+        assert len(progress_calls) == 1
+        assert progress_calls[0] == ("extractor", 1, 0)
+        await worker_task
+
+    async def test_worker_dispatch_ignores_progress_callback(self, bus_and_bridge):
+        """_dispatch_tool for workers does not pass progress_callback."""
+        bus, bridge = bus_and_bridge
+        gateway = MCPGateway(
+            config={"name": "test"},
+            bridge=bridge,
+            tool_registry={},
+            tool_defs=[],
+        )
+
+        entry = ToolEntry(
+            name="summarizer",
+            kind="worker",
+            tool_def={},
+            loom_meta={
+                "kind": "worker",
+                "worker_type": "summarizer",
+                "tier": "local",
+                "timeout": 5,
+            },
+        )
+
+        ready = asyncio.Event()
+
+        async def mock_worker():
+            sub = await bus.subscribe("loom.tasks.incoming")
+            ready.set()
+            async for data in sub:
+                result = TaskResult(
+                    task_id=data["task_id"],
+                    worker_type="summarizer",
+                    status=TaskStatus.COMPLETED,
+                    output={"summary": "done"},
+                )
+                await bus.publish(
+                    f"loom.results.{data['parent_task_id']}",
+                    result.model_dump(mode="json"),
+                )
+                await sub.unsubscribe()
+                break
+
+        worker_task = asyncio.create_task(mock_worker())
+        await ready.wait()
+
+        # Passing a callback shouldn't cause errors for non-pipeline tools.
+        callback = AsyncMock()
+        result = await _dispatch_tool(
+            gateway, entry, {"text": "hi"}, progress_callback=callback,
+        )
+        assert result == {"summary": "done"}
+        callback.assert_not_called()
+        await worker_task
+
+    async def test_progress_callback_none_is_safe(self, bus_and_bridge):
+        """_dispatch_tool with progress_callback=None works for pipelines."""
+        bus, bridge = bus_and_bridge
+        gateway = MCPGateway(
+            config={"name": "test"},
+            bridge=bridge,
+            tool_registry={},
+            tool_defs=[],
+        )
+
+        entry = ToolEntry(
+            name="ingest_doc",
+            kind="pipeline",
+            tool_def={},
+            loom_meta={"kind": "pipeline", "timeout": 5},
+        )
+
+        ready = asyncio.Event()
+
+        async def mock_pipeline():
+            sub = await bus.subscribe("loom.goals.incoming")
+            ready.set()
+            async for data in sub:
+                goal_id = data.get("goal_id")
+                final = TaskResult(
+                    task_id=goal_id,
+                    worker_type="pipeline",
+                    status=TaskStatus.COMPLETED,
+                    output={"ok": True},
+                )
+                await bus.publish(
+                    f"loom.results.{goal_id}",
+                    final.model_dump(mode="json"),
+                )
+                await sub.unsubscribe()
+                break
+
+        worker_task = asyncio.create_task(mock_pipeline())
+        await ready.wait()
+
+        # Explicitly passing None (default).
+        result = await _dispatch_tool(gateway, entry, {}, progress_callback=None)
+        assert result == {"ok": True}
+        await worker_task
+
+
+class TestServerProgressWiring:
+    """Test that the server's call_tool handler constructs and passes progress_callback."""
+
+    def test_progress_callback_created_for_pipeline_tool(self, tmp_path):
+        """handle_call_tool passes a progress_callback to _dispatch_tool for pipelines."""
+        config_path = _make_gateway_config(tmp_path, worker_cfgs=_single_worker_cfgs("pipe"))
+        server, gateway = create_server(config_path)
+
+        # Re-register the tool as a pipeline kind.
+        gateway.tool_registry["pipe"] = ToolEntry(
+            name="pipe",
+            kind="pipeline",
+            tool_def={"name": "pipe", "inputSchema": {}},
+            loom_meta={"kind": "pipeline", "timeout": 5},
+        )
+
+        with patch("loom.mcp.server._dispatch_tool", new_callable=AsyncMock) as m:
+            m.return_value = {"ok": True}
+
+            from mcp import types
+
+            handler = server.request_handlers[types.CallToolRequest]
+            params = types.CallToolRequestParams(name="pipe", arguments={"file": "x"})
+            request = types.CallToolRequest(method="tools/call", params=params)
+            _unwrap(asyncio.run(handler(request)))
+
+            # Verify _dispatch_tool was called with a progress_callback.
+            assert m.call_count == 1
+            call_kwargs = m.call_args
+            # The progress_callback is the 4th positional arg or keyword.
+            # _dispatch_tool(gateway, entry, arguments, progress_callback=...)
+            if len(call_kwargs[0]) > 3:
+                cb = call_kwargs[0][3]
+            else:
+                cb = call_kwargs[1].get("progress_callback")
+            assert cb is not None
+            assert callable(cb)
+
+
+# ---------------------------------------------------------------------------
 # MCPGateway field tests
 # ---------------------------------------------------------------------------
 

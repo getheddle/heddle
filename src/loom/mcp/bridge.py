@@ -118,10 +118,6 @@ class MCPBridge:
     # Pipeline dispatch
     # ------------------------------------------------------------------
 
-    # TODO: Wire progress_callback to MCP progress tokens so that MCP clients
-    #   can display per-stage progress during pipeline execution. The callback
-    #   is plumbed through but the MCP server (server.py) doesn't pass it yet.
-
     async def call_pipeline(
         self,
         goal_context: dict[str, Any],
