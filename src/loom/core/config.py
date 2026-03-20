@@ -115,11 +115,8 @@ def validate_worker_config(  # noqa: PLR0912
             errors.append(f"{pfx}: processor worker missing 'processing_backend'")
         elif not isinstance(config["processing_backend"], str):
             errors.append(f"{pfx}: 'processing_backend' must be a string")
-        elif "." not in config["processing_backend"]:
-            errors.append(
-                f"{pfx}: 'processing_backend' must be a fully qualified class path "
-                f"(e.g., 'mypackage.backends.MyBackend')"
-            )
+        else:
+            errors.extend(_validate_processing_backend(config["processing_backend"], pfx))
     else:
         errors.append(f"{pfx}: 'worker_kind' must be 'llm' or 'processor', got '{kind}'")
 
@@ -249,6 +246,20 @@ def validate_pipeline_config(  # noqa: PLR0912, PLR0915
                         errors.append(f"{sp}: input_mapping['{target}'] must be a string path")
                     elif not source_path:
                         errors.append(f"{sp}: input_mapping['{target}'] must not be empty")
+                    elif (
+                        isinstance(source_path, str)
+                        and source_path
+                        and not (source_path.startswith("'") and source_path.endswith("'"))
+                    ):
+                        # Validate source path references goal.* or an existing stage
+                        # (literal values wrapped in single quotes are skipped)
+                        root = source_path.split(".")[0]
+                        if root != "goal" and root not in stage_names:
+                            errors.append(
+                                f"{sp}: input_mapping['{target}'] references unknown "
+                                f"source '{root}' (must be 'goal' or a preceding "
+                                f"stage name)"
+                            )
 
         # depends_on validation
         deps = stage.get("depends_on")
@@ -500,6 +511,30 @@ def _check_positive_number(config: dict[str, Any], key: str, pfx: str, errors: l
         errors.append(f"{pfx}: '{key}' must be a number, got {type(val).__name__}")
     elif val <= 0:
         errors.append(f"{pfx}: '{key}' must be positive, got {val}")
+
+
+def _validate_processing_backend(backend: str, pfx: str) -> list[str]:
+    """Validate that a processing_backend value is a valid dotted Python import path.
+
+    Must have at least two dot-separated segments, and every segment must be a
+    valid Python identifier (e.g., ``mypackage.backends.MyBackend``).
+    """
+    errors: list[str] = []
+    segments = backend.split(".")
+    if len(segments) < 2:
+        errors.append(
+            f"{pfx}: 'processing_backend' must be a fully qualified class path "
+            f"with at least two segments (e.g., 'mypackage.backends.MyBackend'), "
+            f"got '{backend}'"
+        )
+        return errors
+    errors.extend(
+        f"{pfx}: 'processing_backend' segment '{seg}' is not a valid "
+        f"Python identifier in '{backend}'"
+        for seg in segments
+        if not seg.isidentifier()
+    )
+    return errors
 
 
 def _validate_knowledge_silos(  # noqa: PLR0912

@@ -8,6 +8,7 @@ Start via CLI: ``loom workshop --port 8080``
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -34,6 +35,22 @@ logger = structlog.get_logger()
 _THIS_DIR = Path(__file__).parent
 _TEMPLATES_DIR = _THIS_DIR / "templates"
 _STATIC_DIR = _THIS_DIR / "static"
+
+
+def _detect_available_backends() -> list[dict[str, str]]:
+    """Detect available LLM backends from environment variables.
+
+    Returns a list of dicts with 'name' and 'label' keys for display as
+    badges on the test bench page.
+    """
+    available = []
+    if os.getenv("ANTHROPIC_API_KEY"):
+        available.append({"name": "anthropic", "label": "Anthropic (Claude)"})
+    if os.getenv("OLLAMA_URL"):
+        available.append({"name": "ollama", "label": "Ollama (local)"})
+    if os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_BASE_URL"):
+        available.append({"name": "openai", "label": "OpenAI-compatible"})
+    return available
 
 
 def _build_extra_config_dirs(app_mgr: AppManager) -> list[Path]:
@@ -153,6 +170,33 @@ def create_app(  # noqa: PLR0915
             },
         )
 
+    @app.post("/workers/{name}/validate", response_class=HTMLResponse)
+    async def worker_validate(request: Request, name: str):  # noqa: ARG001
+        """HTMX endpoint: validate YAML content and return inline errors."""
+        form = await request.form()
+        import yaml
+
+        errors = []
+        try:
+            config = yaml.safe_load(form["yaml_content"])
+            if config is None:
+                errors.append("YAML content is empty")
+            elif not isinstance(config, dict):
+                errors.append("YAML must be a mapping (key-value pairs)")
+            else:
+                # Run config validation without saving
+                from loom.core.config import validate_worker_config
+
+                validation_errors = validate_worker_config(config)
+                errors.extend(validation_errors)
+        except yaml.YAMLError as e:
+            errors.append(f"Invalid YAML syntax: {e}")
+
+        return templates.TemplateResponse(
+            "partials/validation_errors.html",
+            {"request": request, "errors": errors},
+        )
+
     @app.post("/workers/{name}", response_class=HTMLResponse)
     async def worker_save(request: Request, name: str):
         form = await request.form()
@@ -191,6 +235,7 @@ def create_app(  # noqa: PLR0915
                 "config": config,
                 "name": name,
                 "available_tiers": list(backends.keys()),
+                "available_backends": _detect_available_backends(),
             },
         )
 
@@ -375,7 +420,7 @@ def create_app(  # noqa: PLR0915
             {"request": request, "manifest": manifest},
         )
 
-    @app.post("/apps/deploy", response_class=RedirectResponse)
+    @app.post("/apps/deploy")
     async def app_deploy(request: Request):
         form = await request.form()
         zip_file: UploadFile = form["zip_file"]

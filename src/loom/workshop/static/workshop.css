@@ -503,6 +503,111 @@ article[aria-label="Error"] {
     }
 }
 
+/* ── Backend Badges (test bench) ──────────────────────────────── */
+
+.backend-badges {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+    padding: 0.6rem 1rem;
+    border-radius: var(--ws-radius);
+    background: color-mix(in srgb, var(--pico-card-background-color) 60%, transparent);
+    border: 1px solid var(--pico-muted-border-color);
+}
+
+.backend-badges-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--pico-muted-color);
+    margin-right: 0.25rem;
+}
+
+.backend-badge {
+    background: color-mix(in srgb, var(--ws-accent) 18%, transparent);
+    color: var(--ws-accent);
+    font-weight: 600;
+}
+
+.backend-badges-empty {
+    border-color: color-mix(in srgb, var(--ws-fail) 40%, transparent);
+    background: color-mix(in srgb, var(--ws-fail) 5%, var(--pico-card-background-color));
+}
+
+.backend-badges-empty small {
+    color: var(--pico-muted-color);
+    font-size: 0.8rem;
+}
+
+/* ── Validation Errors (inline, worker editor) ───────────────── */
+
+.validation-errors {
+    list-style: none;
+    padding: 0.5rem 0.75rem;
+    margin: 0.25rem 0 0.75rem;
+    border-radius: var(--ws-radius-sm);
+    background: color-mix(in srgb, var(--ws-fail) 8%, var(--pico-card-background-color));
+    border-left: 3px solid var(--ws-fail);
+}
+
+.validation-errors li {
+    color: var(--ws-fail);
+    font-size: 0.85rem;
+    padding: 0.15rem 0;
+}
+
+.validation-errors li::before {
+    content: "\2717 ";
+    font-weight: 700;
+}
+
+.validation-ok {
+    display: inline-block;
+    font-size: 0.82rem;
+    color: var(--ws-pass);
+    font-weight: 600;
+    padding: 0.25rem 0;
+}
+
+.validation-ok::before {
+    content: "\2713 ";
+}
+
+/* ── Eval Status Badges ──────────────────────────────────────── */
+
+mark[data-status="partial"] {
+    background: #f9a825;
+    color: #000;
+}
+
+mark[data-status="neutral"] {
+    background: var(--pico-muted-color);
+    color: #fff;
+}
+
+/* ── Deploy Progress (apps page) ─────────────────────────────── */
+
+.deploy-progress {
+    margin-top: 0.75rem;
+    text-align: center;
+}
+
+.deploy-progress progress {
+    width: 100%;
+    margin-bottom: 0.25rem;
+}
+
+.deploy-progress small {
+    color: var(--pico-muted-color);
+}
+
+/* ── Worker Search (worker list) ─────────────────────────────── */
+
+#worker-search {
+    margin-bottom: 1rem;
+}
+
 /* ── Focus styles (accessibility) ─────────────────────────────── */
 
 :focus-visible {

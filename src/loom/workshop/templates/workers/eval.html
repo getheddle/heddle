@@ -46,6 +46,7 @@
         <tr>
             <th scope="col">Run ID</th>
             <th scope="col">Tier</th>
+            <th scope="col">Result</th>
             <th scope="col">Status</th>
             <th scope="col">Cases</th>
             <th scope="col">Passed</th>
@@ -59,6 +60,17 @@
         <tr>
             <td><a href="/workers/{{ name }}/eval/{{ r.id }}"><code>{{ r.id[:8] }}</code></a></td>
             <td><kbd>{{ r.tier }}</kbd></td>
+            <td>
+                {% if r.total_cases == 0 %}
+                <mark data-status="neutral">EMPTY</mark>
+                {% elif r.failed_cases == 0 %}
+                <mark data-status="pass">ALL PASS</mark>
+                {% elif r.passed_cases == 0 %}
+                <mark data-status="fail">ALL FAIL</mark>
+                {% else %}
+                <mark data-status="partial">PARTIAL</mark>
+                {% endif %}
+            </td>
             <td>{{ r.status }}</td>
             <td>{{ r.total_cases }}</td>
             <td>{{ r.passed_cases }}</td>

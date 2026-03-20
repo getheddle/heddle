@@ -7,6 +7,20 @@
     <p>Send a payload and see the raw LLM output with contract validation.</p>
 </hgroup>
 
+{% if available_backends %}
+<div class="backend-badges" aria-label="Available LLM backends">
+    <span class="backend-badges-label">Backends:</span>
+    {% for b in available_backends %}
+    <kbd class="backend-badge" data-backend="{{ b.name }}">{{ b.label }}</kbd>
+    {% endfor %}
+</div>
+{% else %}
+<div class="backend-badges backend-badges-empty" role="alert">
+    <span class="backend-badges-label">No backends detected.</span>
+    <small>Set ANTHROPIC_API_KEY, OLLAMA_URL, or OPENAI_API_KEY / OPENAI_BASE_URL.</small>
+</div>
+{% endif %}
+
 {% if config.get('input_schema', {}).get('properties') %}
 <details>
     <summary>Input Schema</summary>

@@ -1,0 +1,9 @@
+{% if errors %}
+<ul class="validation-errors" role="alert">
+    {% for e in errors %}
+    <li>{{ e }}</li>
+    {% endfor %}
+</ul>
+{% else %}
+<span class="validation-ok" role="status">YAML is valid</span>
+{% endif %}

@@ -25,9 +25,15 @@
 </div>
 
 <h2>Config (YAML)</h2>
-<form method="post" action="/workers/{{ name }}">
+<form method="post" action="/workers/{{ name }}" id="worker-form">
     <label for="yaml_content">Worker configuration</label>
-    <textarea name="yaml_content" id="yaml_content" rows="25">{{ yaml_content }}</textarea>
+    <textarea name="yaml_content" id="yaml_content" rows="25"
+              hx-post="/workers/{{ name }}/validate"
+              hx-target="#validation-feedback"
+              hx-trigger="input changed delay:500ms"
+              hx-swap="innerHTML"
+              hx-include="[name='yaml_content']">{{ yaml_content }}</textarea>
+    <div id="validation-feedback" aria-live="polite"></div>
     <label for="description">Version note</label>
     <input type="text" name="description" id="description" placeholder="Optional version note">
     <button type="submit">Save</button>

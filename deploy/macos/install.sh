@@ -22,20 +22,76 @@ HOST="${1:-127.0.0.1}"
 WORKSHOP_PORT="${2:-8080}"
 NATS_URL="${NATS_URL:-nats://localhost:4222}"
 
+# ---------------------------------------------------------------------------
+# Pre-flight checks
+# ---------------------------------------------------------------------------
+
+echo "=== Loom Service Installer (macOS) ==="
+echo ""
+
+# Check for existing services
+if launchctl list 2>/dev/null | grep -q "com.loom.workshop"; then
+    echo "Warning: Loom Workshop service already exists."
+    echo "  Run 'bash deploy/macos/uninstall.sh' first to remove the old installation."
+    echo "  Continuing will replace the existing services."
+    echo ""
+fi
+
 # Detect loom binary
 LOOM_BIN=$(which loom 2>/dev/null || echo "")
 if [ -z "$LOOM_BIN" ]; then
     # Try uv-managed path
     LOOM_BIN="$HOME/.local/bin/loom"
     if [ ! -f "$LOOM_BIN" ]; then
-        echo "Error: 'loom' not found in PATH. Install with: pip install loom[workshop]"
+        echo "Error: 'loom' not found in PATH."
+        echo ""
+        echo "  Install with one of:"
+        echo "    pip install loom[workshop]"
+        echo "    uv pip install loom[workshop]"
+        echo ""
+        echo "  Or specify the full path to the loom binary:"
+        echo "    LOOM_BIN=/path/to/loom bash deploy/macos/install.sh"
         exit 1
     fi
 fi
 
-echo "Using loom binary: $LOOM_BIN"
-echo "NATS URL: $NATS_URL"
-echo "Workshop host: $HOST:$WORKSHOP_PORT"
+# Allow override via env var
+LOOM_BIN="${LOOM_BIN:-$LOOM_BIN}"
+
+# Verify loom binary works
+if ! "$LOOM_BIN" --help >/dev/null 2>&1; then
+    echo "Error: '$LOOM_BIN' exists but is not executable or has errors."
+    echo "  Try running: $LOOM_BIN --help"
+    exit 1
+fi
+
+# Check Python version (loom requires 3.11+)
+PYTHON_VERSION=$("$LOOM_BIN" --version 2>/dev/null || echo "unknown")
+echo "Loom: $PYTHON_VERSION"
+
+# Check NATS availability (non-blocking warning)
+NATS_HOST=$(echo "$NATS_URL" | sed 's|nats://||' | cut -d: -f1)
+NATS_PORT=$(echo "$NATS_URL" | sed 's|nats://||' | cut -d: -f2)
+if command -v nc >/dev/null 2>&1; then
+    if nc -z -w2 "$NATS_HOST" "$NATS_PORT" 2>/dev/null; then
+        echo "NATS: reachable at $NATS_URL"
+    else
+        echo "Warning: NATS not reachable at $NATS_URL"
+        echo "  The router service will retry connecting automatically."
+        echo "  To start NATS: docker run -d -p 4222:4222 nats:latest"
+        echo ""
+    fi
+else
+    echo "NATS: $NATS_URL (connectivity check skipped — nc not available)"
+fi
+
+echo "Binary: $LOOM_BIN"
+echo "Workshop: ${HOST}:${WORKSHOP_PORT}"
+echo ""
+
+# ---------------------------------------------------------------------------
+# Install services
+# ---------------------------------------------------------------------------
 
 # Create log directory
 LOG_DIR="$HOME/Library/Logs/loom"
@@ -44,6 +100,10 @@ mkdir -p "$LOG_DIR"
 # Create plist directory
 PLIST_DIR="$HOME/Library/LaunchAgents"
 mkdir -p "$PLIST_DIR"
+
+# Unload existing services (if any) before replacing
+launchctl unload "$PLIST_DIR/com.loom.workshop.plist" 2>/dev/null || true
+launchctl unload "$PLIST_DIR/com.loom.router.plist" 2>/dev/null || true
 
 # --- Workshop plist ---
 cat > "$PLIST_DIR/com.loom.workshop.plist" <<EOF
@@ -109,10 +169,27 @@ EOF
 launchctl load "$PLIST_DIR/com.loom.workshop.plist" 2>/dev/null || true
 launchctl load "$PLIST_DIR/com.loom.router.plist" 2>/dev/null || true
 
+# ---------------------------------------------------------------------------
+# Post-install health check
+# ---------------------------------------------------------------------------
+
+echo "Loom services installed and started."
 echo ""
-echo "Loom services installed and started:"
-echo "  Workshop: http://${HOST}:${WORKSHOP_PORT}"
+
+# Wait briefly for Workshop to start, then health check
+sleep 2
+if command -v curl >/dev/null 2>&1; then
+    if curl -sf "http://${HOST}:${WORKSHOP_PORT}/health" >/dev/null 2>&1; then
+        echo "  Workshop: http://${HOST}:${WORKSHOP_PORT} [healthy]"
+    else
+        echo "  Workshop: http://${HOST}:${WORKSHOP_PORT} [starting...]"
+        echo "    Check logs if it doesn't come up: cat ${LOG_DIR}/workshop.err"
+    fi
+else
+    echo "  Workshop: http://${HOST}:${WORKSHOP_PORT}"
+fi
 echo "  Router:   connected to ${NATS_URL}"
 echo ""
 echo "Logs: ${LOG_DIR}/"
 echo "Uninstall: bash deploy/macos/uninstall.sh"
+echo "Update: bash deploy/macos/uninstall.sh && bash deploy/macos/install.sh"

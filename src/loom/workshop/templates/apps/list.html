@@ -9,11 +9,16 @@
 
 <article>
     <header>Deploy App</header>
-    <form action="/apps/deploy" method="post" enctype="multipart/form-data">
+    <form action="/apps/deploy" method="post" enctype="multipart/form-data"
+          hx-post="/apps/deploy" hx-indicator="#deploy-spinner" hx-encoding="multipart/form-data">
         <fieldset role="group">
             <input type="file" name="zip_file" accept=".zip" required aria-label="Select app bundle ZIP file">
             <button type="submit">Deploy</button>
         </fieldset>
+        <div id="deploy-spinner" class="htmx-indicator deploy-progress" aria-busy="true" role="status">
+            <progress></progress>
+            <small>Deploying app bundle&hellip;</small>
+        </div>
     </form>
 </article>
 

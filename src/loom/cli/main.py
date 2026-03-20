@@ -35,6 +35,8 @@ import importlib
 import click
 import structlog
 
+from loom.cli.preflight import check_config_readable, check_env_vars, check_nats_connectivity
+
 # Configure structlog for human-readable console output with ISO timestamps.
 # This runs at import time so all CLI commands share the same log format.
 structlog.configure(
@@ -45,6 +47,46 @@ structlog.configure(
 )
 
 logger = structlog.get_logger()
+
+
+def _run_preflight(
+    nats_url: str,
+    config: str | None = None,
+    tier: str | None = None,
+    check_env: bool = False,
+) -> None:
+    """Run pre-flight checks and abort on hard failures.
+
+    Called by CLI commands before starting long-lived actors. Checks:
+    1. NATS connectivity (hard fail if unreachable)
+    2. Config file readability (hard fail if unreadable, only if config given)
+    3. Environment variables for the model tier (warnings only, if check_env=True)
+
+    Args:
+        nats_url: NATS server URL to check connectivity.
+        config: Path to config YAML (skip readability check if None).
+        tier: Model tier for env var checks (only used when check_env=True).
+        check_env: Whether to check tier-specific environment variables.
+    """
+    # Config readability check (hard fail).
+    if config is not None:
+        ok, msg = check_config_readable(config)
+        if not ok:
+            click.echo(click.style(f"Pre-flight FAIL: {msg}", fg="red"), err=True)
+            raise click.Abort()
+
+    # NATS connectivity check (hard fail).
+    ok, msg = asyncio.run(check_nats_connectivity(nats_url))
+    if not ok:
+        click.echo(click.style(f"Pre-flight FAIL: {msg}", fg="red"), err=True)
+        raise click.Abort()
+    click.echo(click.style(f"Pre-flight OK: {msg}", fg="green"), err=True)
+
+    # Env var checks (warnings only).
+    if check_env and tier:
+        warnings = check_env_vars(tier)
+        for w in warnings:
+            click.echo(click.style(f"Pre-flight WARNING: {w}", fg="yellow"), err=True)
 
 
 @click.group()
@@ -62,7 +104,8 @@ def cli():
 @click.option("--config", required=True, help="Path to worker config YAML")
 @click.option("--nats-url", default="nats://nats:4222", help="NATS server URL")
 @click.option("--tier", default="standard", help="Model tier this worker serves")
-def worker(config: str, nats_url: str, tier: str):
+@click.option("--skip-preflight", is_flag=True, default=False, help="Skip pre-flight checks")
+def worker(config: str, nats_url: str, tier: str, skip_preflight: bool):
     r"""Start an LLM worker actor.
 
     Loads a worker configuration YAML and starts a long-running LLM worker
@@ -85,6 +128,9 @@ def worker(config: str, nats_url: str, tier: str):
     import os
 
     import yaml
+
+    if not skip_preflight:
+        _run_preflight(nats_url, config=config, tier=tier, check_env=True)
 
     from loom.core.config import validate_worker_config
     from loom.worker.backends import AnthropicBackend, OllamaBackend
@@ -164,7 +210,8 @@ def worker(config: str, nats_url: str, tier: str):
 @click.option("--config", required=True, help="Path to processor worker config YAML")
 @click.option("--nats-url", default="nats://nats:4222", help="NATS server URL")
 @click.option("--tier", default="local", help="Tier this processor serves")
-def processor(config: str, nats_url: str, tier: str):
+@click.option("--skip-preflight", is_flag=True, default=False, help="Skip pre-flight checks")
+def processor(config: str, nats_url: str, tier: str, skip_preflight: bool):
     """Start a processor (non-LLM) worker actor.
 
     Processors handle tasks that do not require an LLM, such as document
@@ -180,6 +227,9 @@ def processor(config: str, nats_url: str, tier: str):
     constructor, allowing runtime configuration without code changes.
     """
     import yaml
+
+    if not skip_preflight:
+        _run_preflight(nats_url, config=config, tier=tier, check_env=True)
 
     from loom.core.config import validate_worker_config
     from loom.worker.processor import ProcessorWorker
@@ -267,7 +317,8 @@ def _load_processing_backend(name: str, config: dict):
 @cli.command()
 @click.option("--config", required=True, help="Path to pipeline orchestrator config YAML")
 @click.option("--nats-url", default="nats://nats:4222", help="NATS server URL")
-def pipeline(config: str, nats_url: str):
+@click.option("--skip-preflight", is_flag=True, default=False, help="Skip pre-flight checks")
+def pipeline(config: str, nats_url: str, skip_preflight: bool):
     """Start a pipeline orchestrator (sequential stage execution).
 
     The pipeline orchestrator executes a fixed sequence of stages defined in
@@ -282,6 +333,9 @@ def pipeline(config: str, nats_url: str):
     See configs/orchestrators/ for example pipeline configs.
     """
     import yaml
+
+    if not skip_preflight:
+        _run_preflight(nats_url, config=config)
 
     from loom.core.config import validate_pipeline_config
     from loom.orchestrator.pipeline import PipelineOrchestrator
@@ -317,7 +371,8 @@ def pipeline(config: str, nats_url: str):
     default="redis://redis:6379",
     help="Redis URL for checkpointing (empty to disable)",
 )
-def orchestrator(config: str, nats_url: str, redis_url: str):
+@click.option("--skip-preflight", is_flag=True, default=False, help="Skip pre-flight checks")
+def orchestrator(config: str, nats_url: str, redis_url: str, skip_preflight: bool):
     r"""Start the dynamic LLM-based orchestrator (OrchestratorActor).
 
     Unlike the pipeline orchestrator which follows a fixed stage sequence,
@@ -341,6 +396,9 @@ def orchestrator(config: str, nats_url: str, redis_url: str):
 
     """
     import yaml
+
+    if not skip_preflight:
+        _run_preflight(nats_url, config=config)
 
     from loom.core.config import validate_orchestrator_config
     from loom.orchestrator.runner import OrchestratorActor
@@ -402,7 +460,8 @@ def orchestrator(config: str, nats_url: str, redis_url: str):
 @cli.command()
 @click.option("--config", required=True, help="Path to scheduler config YAML")
 @click.option("--nats-url", default="nats://nats:4222", help="NATS server URL")
-def scheduler(config: str, nats_url: str):
+@click.option("--skip-preflight", is_flag=True, default=False, help="Skip pre-flight checks")
+def scheduler(config: str, nats_url: str, skip_preflight: bool):
     r"""Start the time-driven scheduler (cron + interval dispatch).
 
     The scheduler reads a YAML config defining cron expressions and/or
@@ -423,6 +482,9 @@ def scheduler(config: str, nats_url: str):
     See configs/schedulers/example.yaml for a reference config.
     """
     import yaml
+
+    if not skip_preflight:
+        _run_preflight(nats_url, config=config)
 
     from loom.scheduler.config import validate_scheduler_config
     from loom.scheduler.scheduler import SchedulerActor
@@ -461,7 +523,8 @@ def scheduler(config: str, nats_url: str):
 @cli.command()
 @click.option("--config", default="configs/router_rules.yaml", help="Path to router rules YAML")
 @click.option("--nats-url", default="nats://nats:4222", help="NATS server URL")
-def router(config: str, nats_url: str):
+@click.option("--skip-preflight", is_flag=True, default=False, help="Skip pre-flight checks")
+def router(config: str, nats_url: str, skip_preflight: bool):
     """Start the deterministic task router.
 
     The router subscribes to loom.tasks.incoming and forwards each task
@@ -474,6 +537,9 @@ def router(config: str, nats_url: str):
 
     The router runs indefinitely until the process is terminated.
     """
+    if not skip_preflight:
+        _run_preflight(nats_url, config=config)
+
     from loom.bus.nats_adapter import NATSBus
     from loom.core.config import load_config, validate_router_rules
     from loom.router.router import TaskRouter
@@ -562,7 +628,8 @@ def submit(goal: str, nats_url: str, context: tuple[str, ...]):
 )
 @click.option("--host", default="127.0.0.1", help="HTTP host (streamable-http only)")
 @click.option("--port", default=8000, type=int, help="HTTP port (streamable-http only)")
-def mcp(config: str, transport: str, host: str, port: int):
+@click.option("--skip-preflight", is_flag=True, default=False, help="Skip pre-flight checks")
+def mcp(config: str, transport: str, host: str, port: int, skip_preflight: bool):
     r"""Start an MCP server exposing LOOM tools and resources.
 
     Reads an MCP gateway config YAML and starts an MCP server that exposes
@@ -581,6 +648,13 @@ def mcp(config: str, transport: str, host: str, port: int):
 
     See docs/mcp.md for config format and examples.
     """
+    if not skip_preflight:
+        # MCP gets its NATS URL from the config file, so only check config readability here.
+        ok, msg = check_config_readable(config)
+        if not ok:
+            click.echo(click.style(f"Pre-flight FAIL: {msg}", fg="red"), err=True)
+            raise click.Abort()
+
     from loom.mcp import create_server, run_stdio, run_streamable_http
 
     server, gateway = create_server(config)

@@ -418,3 +418,174 @@ class TestLoadConfig:
     def test_missing_file(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             load_config(tmp_path / "missing.yaml")
+
+
+# ---------------------------------------------------------------------------
+# P3.4 — Config validation at load time
+# ---------------------------------------------------------------------------
+
+
+class TestInputMappingPathValidation:
+    """Test that input_mapping source paths are validated against stage names."""
+
+    def test_input_mapping_referencing_nonexistent_stage(self):
+        cfg = {
+            "name": "p",
+            "pipeline_stages": [
+                {
+                    "name": "b",
+                    "worker_type": "classifier",
+                    "input_mapping": {"text": "nonexistent.output.text"},
+                },
+            ],
+        }
+        errors = validate_pipeline_config(cfg)
+        assert any("unknown source 'nonexistent'" in e for e in errors)
+
+    def test_input_mapping_referencing_goal(self):
+        cfg = {
+            "name": "p",
+            "pipeline_stages": [
+                {
+                    "name": "a",
+                    "worker_type": "extractor",
+                    "input_mapping": {"text": "goal.context.document"},
+                },
+            ],
+        }
+        errors = validate_pipeline_config(cfg)
+        assert not any("unknown source" in e for e in errors)
+
+    def test_input_mapping_referencing_valid_stage(self):
+        cfg = {
+            "name": "p",
+            "pipeline_stages": [
+                {"name": "a", "worker_type": "extractor"},
+                {
+                    "name": "b",
+                    "worker_type": "classifier",
+                    "input_mapping": {"text": "a.output.text"},
+                },
+            ],
+        }
+        errors = validate_pipeline_config(cfg)
+        assert not any("unknown source" in e for e in errors)
+
+    def test_input_mapping_referencing_later_stage_fails(self):
+        """A stage can only reference stages defined before it."""
+        cfg = {
+            "name": "p",
+            "pipeline_stages": [
+                {
+                    "name": "a",
+                    "worker_type": "extractor",
+                    "input_mapping": {"text": "b.output.text"},
+                },
+                {"name": "b", "worker_type": "classifier"},
+            ],
+        }
+        errors = validate_pipeline_config(cfg)
+        assert any("unknown source 'b'" in e for e in errors)
+
+
+class TestProcessingBackendValidation:
+    """Test processing_backend format validation."""
+
+    def test_valid_backend_path(self):
+        cfg = {
+            "name": "proc",
+            "worker_kind": "processor",
+            "processing_backend": "loom.contrib.duckdb.query_backend.DuckDBQueryBackend",
+        }
+        errors = validate_worker_config(cfg)
+        assert errors == []
+
+    def test_valid_two_segment_path(self):
+        cfg = {
+            "name": "proc",
+            "worker_kind": "processor",
+            "processing_backend": "mypackage.MyBackend",
+        }
+        errors = validate_worker_config(cfg)
+        assert errors == []
+
+    def test_single_segment_fails(self):
+        cfg = {
+            "name": "proc",
+            "worker_kind": "processor",
+            "processing_backend": "notamodule",
+        }
+        errors = validate_worker_config(cfg)
+        assert any("fully qualified" in e or "at least two segments" in e for e in errors)
+
+    def test_invalid_identifier_segment(self):
+        cfg = {
+            "name": "proc",
+            "worker_kind": "processor",
+            "processing_backend": "my-package.backends.MyBackend",
+        }
+        errors = validate_worker_config(cfg)
+        assert any("not a valid Python identifier" in e for e in errors)
+
+    def test_empty_segment_fails(self):
+        cfg = {
+            "name": "proc",
+            "worker_kind": "processor",
+            "processing_backend": "mypackage..MyBackend",
+        }
+        errors = validate_worker_config(cfg)
+        assert any("not a valid Python identifier" in e for e in errors)
+
+
+class TestConditionValidation:
+    """Test condition operator validation at config load time."""
+
+    def test_valid_equals_condition(self):
+        cfg = {
+            "name": "p",
+            "pipeline_stages": [
+                {"name": "s", "worker_type": "w", "condition": "a.output.flag == true"},
+            ],
+        }
+        errors = validate_pipeline_config(cfg)
+        assert not any("condition" in e for e in errors)
+
+    def test_valid_not_equals_condition(self):
+        cfg = {
+            "name": "p",
+            "pipeline_stages": [
+                {"name": "s", "worker_type": "w", "condition": "a.output.flag != false"},
+            ],
+        }
+        errors = validate_pipeline_config(cfg)
+        assert not any("condition" in e for e in errors)
+
+    def test_invalid_operator(self):
+        cfg = {
+            "name": "p",
+            "pipeline_stages": [
+                {"name": "s", "worker_type": "w", "condition": "a.output.count > 5"},
+            ],
+        }
+        errors = validate_pipeline_config(cfg)
+        assert any("operator must be '==' or '!='" in e for e in errors)
+
+    def test_wrong_number_of_parts_too_few(self):
+        cfg = {
+            "name": "p",
+            "pipeline_stages": [
+                {"name": "s", "worker_type": "w", "condition": "incomplete"},
+            ],
+        }
+        errors = validate_pipeline_config(cfg)
+        assert any("3 space-separated parts" in e for e in errors)
+
+    def test_wrong_number_of_parts_too_many(self):
+        cfg = {
+            "name": "p",
+            "pipeline_stages": [
+                {"name": "s", "worker_type": "w", "condition": "a == b extra stuff"},
+            ],
+        }
+        errors = validate_pipeline_config(cfg)
+        assert any("3 space-separated parts" in e for e in errors)

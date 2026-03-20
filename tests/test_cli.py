@@ -168,6 +168,7 @@ def test_processor_missing_backend_raises(tmp_path):
             cli,
             [
                 "processor",
+                "--skip-preflight",
                 "--config",
                 config_path,
                 "--nats-url",
@@ -269,6 +270,7 @@ def test_worker_loads_config_and_runs(tmp_path):
             cli,
             [
                 "worker",
+                "--skip-preflight",
                 "--config",
                 config_path,
                 "--tier",
@@ -296,6 +298,7 @@ def test_worker_tier_mismatch_warns(tmp_path):
             cli,
             [
                 "worker",
+                "--skip-preflight",
                 "--config",
                 config_path,
                 "--tier",
@@ -332,6 +335,7 @@ def test_worker_no_backend_for_tier_warns(tmp_path):
                 cli,
                 [
                     "worker",
+                    "--skip-preflight",
                     "--config",
                     config_path,
                     "--tier",
@@ -369,6 +373,7 @@ def test_worker_with_anthropic_backend(tmp_path):
                 cli,
                 [
                     "worker",
+                    "--skip-preflight",
                     "--config",
                     config_path,
                     "--tier",
@@ -411,6 +416,7 @@ def test_processor_loads_backend_and_runs(tmp_path):
             cli,
             [
                 "processor",
+                "--skip-preflight",
                 "--config",
                 config_path,
                 "--nats-url",
@@ -442,6 +448,7 @@ def test_pipeline_loads_config_and_runs(tmp_path):
             cli,
             [
                 "pipeline",
+                "--skip-preflight",
                 "--config",
                 config_path,
                 "--nats-url",
@@ -475,6 +482,7 @@ def test_orchestrator_loads_config_and_runs(tmp_path):
             cli,
             [
                 "orchestrator",
+                "--skip-preflight",
                 "--config",
                 config_path,
                 "--nats-url",
@@ -514,6 +522,7 @@ def test_orchestrator_with_redis_import_error(tmp_path):
                 cli,
                 [
                     "orchestrator",
+                    "--skip-preflight",
                     "--config",
                     config_path,
                     "--nats-url",
@@ -550,6 +559,7 @@ def test_orchestrator_with_redis_store(tmp_path):
             cli,
             [
                 "orchestrator",
+                "--skip-preflight",
                 "--config",
                 config_path,
                 "--nats-url",
@@ -588,6 +598,7 @@ def test_scheduler_loads_config_and_runs(tmp_path):
             cli,
             [
                 "scheduler",
+                "--skip-preflight",
                 "--config",
                 config_path,
                 "--nats-url",
@@ -615,6 +626,7 @@ def test_scheduler_config_validation_errors(tmp_path):
             cli,
             [
                 "scheduler",
+                "--skip-preflight",
                 "--config",
                 config_path,
                 "--nats-url",
@@ -648,6 +660,7 @@ def test_router_loads_config_and_runs(tmp_path):
             cli,
             [
                 "router",
+                "--skip-preflight",
                 "--config",
                 "configs/router_rules.yaml",
                 "--nats-url",
@@ -733,6 +746,7 @@ def test_mcp_stdio_transport(tmp_path):
             cli,
             [
                 "mcp",
+                "--skip-preflight",
                 "--config",
                 config_path,
                 "--transport",
@@ -765,6 +779,7 @@ def test_mcp_streamable_http_transport(tmp_path):
             cli,
             [
                 "mcp",
+                "--skip-preflight",
                 "--config",
                 config_path,
                 "--transport",
