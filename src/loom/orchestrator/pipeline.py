@@ -63,6 +63,7 @@ import structlog
 import yaml
 
 from loom.core.actor import BaseActor
+from loom.core.contracts import validate_input, validate_output
 from loom.core.messages import (
     ModelTier,
     OrchestratorGoal,
@@ -238,6 +239,16 @@ class PipelineOrchestrator(BaseActor):
         except (KeyError, ValueError) as e:
             raise PipelineStageError(stage_name, f"Stage '{stage_name}' mapping error: {e}") from e
 
+        # Validate payload against stage's input_schema (if declared).
+        stage_input_schema = stage.get("input_schema")
+        if stage_input_schema:
+            errors = validate_input(payload, stage_input_schema)
+            if errors:
+                raise PipelineStageError(
+                    stage_name,
+                    f"Stage '{stage_name}' input validation failed: {errors}",
+                )
+
         task = TaskMessage(
             worker_type=stage["worker_type"],
             payload=payload,
@@ -267,6 +278,16 @@ class PipelineOrchestrator(BaseActor):
                 stage_name,
                 f"Stage '{stage_name}' failed: {result.error}",
             )
+
+        # Validate result against stage's output_schema (if declared).
+        stage_output_schema = stage.get("output_schema")
+        if stage_output_schema and result.output is not None:
+            output_errors = validate_output(result.output, stage_output_schema)
+            if output_errors:
+                raise PipelineStageError(
+                    stage_name,
+                    f"Stage '{stage_name}' output validation failed: {output_errors}",
+                )
 
         stage_log.info("pipeline.stage_completed", ms=result.processing_time_ms)
         return stage_name, {
@@ -357,12 +378,30 @@ class PipelineOrchestrator(BaseActor):
                     )
 
         except PipelineStageError as e:
-            log.error("pipeline.stage_failed", error=str(e))
+            log.error(
+                "pipeline.stage_failed",
+                stage=e.stage_name,
+                error=str(e),
+            )
             elapsed = int((time.monotonic() - start) * 1000)
             await self._publish_pipeline_result(
                 goal,
                 TaskStatus.FAILED,
                 error=str(e),
+                elapsed=elapsed,
+            )
+            return
+        except Exception as e:
+            log.error(
+                "pipeline.unexpected_error",
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            elapsed = int((time.monotonic() - start) * 1000)
+            await self._publish_pipeline_result(
+                goal,
+                TaskStatus.FAILED,
+                error=f"Pipeline error ({type(e).__name__}): {e}",
                 elapsed=elapsed,
             )
             return

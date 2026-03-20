@@ -632,6 +632,292 @@ class TestParallelExecution:
 # --- max_concurrent_goals tests ---
 
 
+# --- Inter-stage contract validation tests (P1.1) ---
+
+
+class TestInterStageValidation:
+    """Verify that pipeline validates payloads against stage schemas."""
+
+    @pytest.mark.asyncio
+    async def test_input_schema_mismatch_fails_pipeline(self, tmp_path):
+        """If a stage's input doesn't match its input_schema, the pipeline fails."""
+        stages = [
+            {
+                "name": "extract",
+                "worker_type": "extractor",
+                "tier": "local",
+                "input_mapping": {"file_ref": "goal.context.file_ref"},
+            },
+            {
+                "name": "classify",
+                "worker_type": "classifier",
+                "tier": "local",
+                "input_mapping": {
+                    # Maps from extract output — but schema requires 'text' which
+                    # won't be provided.
+                    "text_preview": "extract.output.text_preview",
+                },
+                "input_schema": {
+                    "type": "object",
+                    "required": ["text_preview", "page_count"],
+                    "properties": {
+                        "text_preview": {"type": "string"},
+                        "page_count": {"type": "integer"},
+                    },
+                },
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(
+            instruction="test input validation",
+            context={"file_ref": "doc.pdf"},
+        )
+
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
+
+        # Extract stage dispatched — send result (no page_count).
+        first_data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        first_result = TaskResult(
+            task_id=first_data["task_id"],
+            worker_type="extractor",
+            status=TaskStatus.COMPLETED,
+            output={"text_preview": "hello world"},
+            processing_time_ms=10,
+        )
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            first_result.model_dump(mode="json"),
+        )
+
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        # Pipeline should fail because classify stage's input is missing 'page_count'.
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id),
+            timeout=3,
+        )
+        assert final["status"] == TaskStatus.FAILED.value
+        assert "input validation failed" in final["error"].lower()
+        assert "page_count" in final["error"]
+
+    @pytest.mark.asyncio
+    async def test_output_schema_mismatch_fails_pipeline(self, tmp_path):
+        """If a stage's output doesn't match its output_schema, the pipeline fails."""
+        stages = [
+            {
+                "name": "extract",
+                "worker_type": "extractor",
+                "tier": "local",
+                "input_mapping": {"file_ref": "goal.context.file_ref"},
+                "output_schema": {
+                    "type": "object",
+                    "required": ["text_preview", "page_count"],
+                    "properties": {
+                        "text_preview": {"type": "string"},
+                        "page_count": {"type": "integer"},
+                    },
+                },
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(
+            instruction="test output validation",
+            context={"file_ref": "doc.pdf"},
+        )
+
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
+
+        # Extract stage returns output missing 'page_count'.
+        data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        result = TaskResult(
+            task_id=data["task_id"],
+            worker_type="extractor",
+            status=TaskStatus.COMPLETED,
+            output={"text_preview": "hello"},  # Missing page_count
+            processing_time_ms=10,
+        )
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            result.model_dump(mode="json"),
+        )
+
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id),
+            timeout=3,
+        )
+        assert final["status"] == TaskStatus.FAILED.value
+        assert "output validation failed" in final["error"].lower()
+        assert "page_count" in final["error"]
+
+    @pytest.mark.asyncio
+    async def test_valid_schemas_pass_through(self, tmp_path):
+        """Stages with matching schemas proceed normally."""
+        stages = [
+            {
+                "name": "extract",
+                "worker_type": "extractor",
+                "tier": "local",
+                "input_mapping": {"file_ref": "goal.context.file_ref"},
+                "input_schema": {
+                    "type": "object",
+                    "required": ["file_ref"],
+                    "properties": {"file_ref": {"type": "string"}},
+                },
+                "output_schema": {
+                    "type": "object",
+                    "required": ["text"],
+                    "properties": {"text": {"type": "string"}},
+                },
+            },
+            {
+                "name": "classify",
+                "worker_type": "classifier",
+                "tier": "local",
+                "input_mapping": {"text": "extract.output.text"},
+                "input_schema": {
+                    "type": "object",
+                    "required": ["text"],
+                    "properties": {"text": {"type": "string"}},
+                },
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(
+            instruction="test valid schemas",
+            context={"file_ref": "doc.pdf"},
+        )
+
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
+
+        # Extract stage.
+        data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            TaskResult(
+                task_id=data["task_id"],
+                worker_type="extractor",
+                status=TaskStatus.COMPLETED,
+                output={"text": "document content"},
+                processing_time_ms=10,
+            ).model_dump(mode="json"),
+        )
+
+        # Classify stage.
+        data2 = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            TaskResult(
+                task_id=data2["task_id"],
+                worker_type="classifier",
+                status=TaskStatus.COMPLETED,
+                output={"category": "report"},
+                processing_time_ms=10,
+            ).model_dump(mode="json"),
+        )
+
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id),
+            timeout=3,
+        )
+        assert final["status"] == TaskStatus.COMPLETED.value
+
+    @pytest.mark.asyncio
+    async def test_no_schemas_still_works(self, tmp_path):
+        """Stages without schemas (backward compat) pass without validation."""
+        stages = [
+            {
+                "name": "A",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+                # No input_schema or output_schema — should still work.
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test no schema", context={"x": "val"})
+
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
+
+        data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            TaskResult(
+                task_id=data["task_id"],
+                worker_type="w1",
+                status=TaskStatus.COMPLETED,
+                output={"anything": "goes"},
+                processing_time_ms=10,
+            ).model_dump(mode="json"),
+        )
+
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id),
+            timeout=3,
+        )
+        assert final["status"] == TaskStatus.COMPLETED.value
+
+    @pytest.mark.asyncio
+    async def test_input_type_mismatch_fails(self, tmp_path):
+        """Type mismatch (string expected, got integer) is caught by inter-stage validation."""
+        stages = [
+            {
+                "name": "A",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+                "input_schema": {
+                    "type": "object",
+                    "required": ["x"],
+                    "properties": {"x": {"type": "string"}},
+                },
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        # Pass integer instead of string.
+        goal = OrchestratorGoal(instruction="test type mismatch", context={"x": 42})
+
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
+
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id),
+            timeout=3,
+        )
+        assert final["status"] == TaskStatus.FAILED.value
+        assert "input validation failed" in final["error"].lower()
+
+
 class TestPipelineConcurrentGoals:
     def test_default_max_concurrent_goals_is_one(self, tmp_path):
         """Without config, max_concurrent_goals defaults to 1."""

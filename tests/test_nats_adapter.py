@@ -19,7 +19,7 @@ from loom.bus.nats_adapter import NATSBus, NATSSubscription
 
 @pytest.mark.asyncio
 async def test_connect_calls_nats_connect_with_defaults():
-    """connect() passes URL and reconnect settings to nats.connect."""
+    """connect() passes URL, reconnect settings, and callbacks to nats.connect."""
     bus = NATSBus(url="nats://localhost:4222")
     mock_nc = AsyncMock()
 
@@ -28,11 +28,13 @@ async def test_connect_calls_nats_connect_with_defaults():
     ) as mock_connect:
         await bus.connect()
 
-    mock_connect.assert_awaited_once_with(
-        "nats://localhost:4222",
-        reconnect_time_wait=2,
-        max_reconnect_attempts=30,
-    )
+    mock_connect.assert_awaited_once()
+    call_kwargs = mock_connect.call_args
+    assert call_kwargs[0][0] == "nats://localhost:4222"
+    assert call_kwargs[1]["reconnect_time_wait"] == 1
+    assert call_kwargs[1]["max_reconnect_attempts"] == 60
+    assert callable(call_kwargs[1]["reconnected_cb"])
+    assert callable(call_kwargs[1]["disconnected_cb"])
     assert bus._nc is mock_nc
 
 
@@ -180,3 +182,93 @@ async def test_subscription_unsubscribe_delegates():
     await sub.unsubscribe()
 
     mock_nats_sub.unsubscribe.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# NATSSubscription — malformed message handling (P1.3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_subscription_skips_malformed_json():
+    """Malformed JSON messages are skipped; next valid message is returned."""
+    bad_msg = MagicMock()
+    bad_msg.data = b"not valid json {{"
+    bad_msg.subject = "loom.tasks.incoming"
+
+    good_payload = {"task_id": "t2", "worker_type": "summarizer"}
+    good_msg = MagicMock()
+    good_msg.data = json.dumps(good_payload).encode()
+
+    mock_nats_sub = AsyncMock()
+    mock_nats_sub.next_msg = AsyncMock(side_effect=[bad_msg, good_msg])
+
+    sub = NATSSubscription(mock_nats_sub)
+    result = await sub.__anext__()
+
+    # Should have skipped the bad message and returned the good one.
+    assert result == good_payload
+    assert mock_nats_sub.next_msg.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_subscription_skips_unicode_decode_error():
+    """Messages with invalid encoding are skipped; next valid message is returned."""
+    bad_msg = MagicMock()
+    # Invalid UTF-8 bytes
+    bad_msg.data = b"\x80\x81\x82"
+    bad_msg.subject = "loom.tasks.incoming"
+
+    good_payload = {"ok": True}
+    good_msg = MagicMock()
+    good_msg.data = json.dumps(good_payload).encode()
+
+    mock_nats_sub = AsyncMock()
+    mock_nats_sub.next_msg = AsyncMock(side_effect=[bad_msg, good_msg])
+
+    sub = NATSSubscription(mock_nats_sub)
+    result = await sub.__anext__()
+
+    assert result == good_payload
+    assert mock_nats_sub.next_msg.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_subscription_multiple_malformed_before_valid():
+    """Multiple consecutive malformed messages are all skipped."""
+    bad1 = MagicMock()
+    bad1.data = b"bad1"
+    bad1.subject = "test"
+
+    bad2 = MagicMock()
+    bad2.data = b"bad2"
+    bad2.subject = "test"
+
+    good_payload = {"result": "ok"}
+    good = MagicMock()
+    good.data = json.dumps(good_payload).encode()
+
+    mock_nats_sub = AsyncMock()
+    mock_nats_sub.next_msg = AsyncMock(side_effect=[bad1, bad2, good])
+
+    sub = NATSSubscription(mock_nats_sub)
+    result = await sub.__anext__()
+
+    assert result == good_payload
+    assert mock_nats_sub.next_msg.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_subscription_nats_error_after_malformed_still_stops():
+    """If NATS subscription errors after skipping malformed, StopAsyncIteration is raised."""
+    bad_msg = MagicMock()
+    bad_msg.data = b"not json"
+    bad_msg.subject = "test"
+
+    mock_nats_sub = AsyncMock()
+    mock_nats_sub.next_msg = AsyncMock(side_effect=[bad_msg, Exception("connection lost")])
+
+    sub = NATSSubscription(mock_nats_sub)
+
+    with pytest.raises(StopAsyncIteration):
+        await sub.__anext__()

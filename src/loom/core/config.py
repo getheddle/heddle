@@ -283,6 +283,11 @@ def validate_pipeline_config(  # noqa: PLR0912, PLR0915
         if "timeout_seconds" in stage:
             _check_positive_number(stage, "timeout_seconds", sp, errors)
 
+        # Per-stage I/O schemas (for inter-stage contract validation)
+        for schema_key in ("input_schema", "output_schema"):
+            if schema_key in stage:
+                errors.extend(_validate_json_schema(stage, schema_key, sp))
+
     return errors
 
 

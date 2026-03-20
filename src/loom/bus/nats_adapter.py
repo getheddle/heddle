@@ -15,8 +15,14 @@ Subject naming convention:
     loom.events                  — System-wide events (logging, metrics) [not yet used]
 
 Connection defaults:
-    reconnect_time_wait=2s, max_reconnect_attempts=30 — totals ~60s of retry.
+    reconnect_time_wait=1s, max_reconnect_attempts=60 — totals ~60s of retry.
     If NATS is down longer than that, the actor will crash and needs restart.
+    Disconnect and reconnect events are logged for operational visibility.
+
+Delivery semantics:
+    At-most-once. If no subscriber is listening when a message is published,
+    the message is silently dropped. NATS JetStream would add persistence
+    but is not yet configured.
 
 NOTE: All messages are JSON-serialized dicts. Binary payloads are not supported.
       Large data should be passed via file references (workspace directory), not
@@ -38,6 +44,11 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
+# Reconnection defaults — exponential backoff with cap.
+_RECONNECT_INITIAL_WAIT = 1  # seconds
+_RECONNECT_MAX_WAIT = 30  # seconds
+_RECONNECT_MAX_ATTEMPTS = 60
+
 
 class NATSSubscription(Subscription):
     """Wraps a nats-py subscription as an async iterator of parsed dicts."""
@@ -57,13 +68,34 @@ class NATSSubscription(Subscription):
 
         Blocks until a message arrives. Raises StopAsyncIteration when the
         underlying NATS subscription is drained or closed.
+
+        Malformed (non-JSON) messages are logged and skipped — the
+        subscription continues processing subsequent messages rather than
+        terminating.
         """
-        try:
-            msg = await self._sub.next_msg(timeout=None)
-        except Exception as e:
-            logger.error("nats.subscription_error", error=str(e), error_type=type(e).__name__)
-            raise StopAsyncIteration from e
-        return json.loads(msg.data.decode())
+        while True:
+            try:
+                msg = await self._sub.next_msg(timeout=None)
+            except Exception as e:
+                logger.error(
+                    "nats.subscription_error",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
+                raise StopAsyncIteration from e
+
+            try:
+                return json.loads(msg.data.decode())
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                logger.warning(
+                    "nats.malformed_message_skipped",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    subject=msg.subject,
+                    data_length=len(msg.data),
+                )
+                # Skip this message and wait for the next one.
+                continue
 
 
 class NATSBus(MessageBus):
@@ -73,6 +105,9 @@ class NATSBus(MessageBus):
     - publish(): Fire-and-forget (tasks, results)
     - subscribe(): Async iterator with optional queue groups for load balancing
     - request(): Request-reply for synchronous-style calls (not yet used by any actor)
+
+    Delivery semantics: at-most-once. Messages published with no active
+    subscriber are silently dropped.
     """
 
     def __init__(self, url: str = "nats://nats:4222") -> None:
@@ -80,11 +115,24 @@ class NATSBus(MessageBus):
         self._nc: NATSClient | None = None
 
     async def connect(self) -> None:
-        """Connect to the NATS server."""
+        """Connect to the NATS server with reconnection and event logging.
+
+        Reconnection: 1s interval, up to 60 attempts (~60s of total retry).
+        Disconnect/reconnect events are logged for operational visibility.
+        """
+
+        async def _on_reconnect(_nc: Any) -> None:
+            logger.info("bus.reconnected", url=self.url)
+
+        async def _on_disconnect(_nc: Any) -> None:
+            logger.warning("bus.disconnected", url=self.url)
+
         self._nc = await nats.connect(
             self.url,
-            reconnect_time_wait=2,
-            max_reconnect_attempts=30,
+            reconnect_time_wait=_RECONNECT_INITIAL_WAIT,
+            max_reconnect_attempts=_RECONNECT_MAX_ATTEMPTS,
+            reconnected_cb=_on_reconnect,
+            disconnected_cb=_on_disconnect,
         )
         logger.info("bus.connected", url=self.url)
 
