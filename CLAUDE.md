@@ -414,21 +414,34 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 - **Atomic ZIP deployment** — extracts to temp dir then renames; rejects symlinks and path traversal in config paths
 
 **P2 — Observability:**
-- **OpenTelemetry distributed tracing** — optional OTel integration (`uv sync --extra otel`); spans on actor message processing, router dispatch, pipeline stage execution, MCP bridge calls; W3C traceparent propagation through NATS messages via `_trace_context` key; graceful no-op when OTel SDK not installed
-- **Config impact analysis** — `workshop/config_impact.py` reverse-maps worker→pipelines/stages, finds downstream dependencies, assesses breaking-change risk; exposed via `/workers/{name}/impact` JSON API
 - **request_id propagation** — `TaskMessage` and `OrchestratorGoal` carry `request_id` through goal→task→result chain; structured log bindings per goal
 - **I/O tracing** — `LOOM_TRACE=1` env var enables full input/output logging; `_summarize()` helper truncates by default
-- **Dead-letter consumer** — `DeadLetterConsumer` actor with bounded in-memory store (default 1000), list/count/clear/replay via CLI (`loom dead-letter monitor`) and Workshop UI (`/dead-letters`); replay audit trail (`ReplayRecord`, `replay_log()`, `replay_count()`) tracks all replayed entries with timestamps and original reason
+- **Dead-letter consumer** — `DeadLetterConsumer` actor with bounded in-memory store (default 1000), list/count/clear/replay via CLI (`loom dead-letter monitor`) and Workshop UI (`/dead-letters`)
 - **Pipeline execution timeline** — each pipeline output includes `_timeline` with per-stage `started_at`, `ended_at`, `wall_time_ms`
 
 **P3 — Developer experience:**
 - **CLI pre-flight checks** — `check_nats_connectivity()`, `check_env_vars()`, `check_config_readable()` run before actor startup; skip with `--skip-preflight`
-- **Workshop UI improvements** — worker search/filter, backend availability badges, inline config validation (`/workers/{name}/validate`), deploy spinner, dead-letter inspection page with replay history
-- **LLM-as-judge scoring** — `EvalRunner.run_suite(scoring="llm_judge")` uses a separate LLM call to evaluate worker output quality on correctness, completeness, and format compliance criteria (0-to-1 scale with reasoning); customizable via `judge_prompt` parameter
-- **Golden dataset regression baselines** — `WorkshopDB.promote_baseline()` marks an eval run as the reference for a worker; `compare_against_baseline()` auto-compares new runs against the baseline; Workshop UI shows regression/improvement per case on the eval detail page
+- **Workshop UI improvements** — worker search/filter, backend availability badges, inline config validation (`/workers/{name}/validate`), deploy spinner, dead-letter inspection page
 - **Config validation** — input_mapping path validation, processing_backend dotted-path format, condition operator strict allowlist
 - **Troubleshooting guide** — `docs/TROUBLESHOOTING.md` covering NATS, workers, pipelines, router, Workshop, Docker/K8s, macOS/Windows services
 - **Deploy script improvements** — macOS `install.sh` and Windows `install.ps1` with pre-flight checks, NATS connectivity test, post-install health check
+
+## Evaluation, tracing, and config tooling (v0.6.0)
+
+**Evaluation framework:**
+- **LLM-as-judge scoring** — `EvalRunner.run_suite(scoring="llm_judge")` uses a separate LLM call to evaluate worker output quality on correctness, completeness, and format compliance criteria (0-to-1 scale with reasoning); customizable via `judge_prompt` parameter
+- **Golden dataset regression baselines** — `WorkshopDB.promote_baseline()` marks an eval run as the reference for a worker; `compare_against_baseline()` auto-compares new runs against the baseline; Workshop UI shows regression/improvement per case on the eval detail page
+- **Dead-letter replay audit trail** — `ReplayRecord` tracks all replayed entries with timestamps and original failure reason; `replay_log()`, `replay_count()` on `DeadLetterConsumer`; Workshop dead-letters page shows replay history
+
+**Distributed tracing:**
+- **OpenTelemetry integration** — optional `otel` extra (`uv sync --extra otel`); `loom.tracing` module with `get_tracer()`, `init_tracing()`, `inject_trace_context()`, `extract_trace_context()`; graceful no-op when OTel SDK not installed
+- **Span instrumentation** — spans on `BaseActor._process_one()`, `TaskRouter.route()`, `PipelineOrchestrator._execute_stage()`, `MCPBridge._dispatch_and_wait()`
+- **W3C traceparent propagation** — trace context propagated through NATS messages via `_trace_context` key; spans link across actor boundaries for end-to-end pipeline tracing
+
+**Config tooling:**
+- **Config impact analysis** — `workshop/config_impact.py` reverse-maps worker→pipelines/stages, finds transitive downstream dependencies, assesses breaking-change risk based on output_schema presence
+- **Impact panel in Workshop** — HTMX-loaded panel on worker detail page shows affected pipelines, direct stages, downstream stages, risk level; loads async via `/workers/{name}/impact-panel`
+- **JSON API** — `GET /workers/{name}/impact` returns full impact analysis as JSON for programmatic use
 
 ## App deployment
 
