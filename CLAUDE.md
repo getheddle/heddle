@@ -14,10 +14,12 @@ src/loom/
     actor.py              # BaseActor — async actor with signal handling, configurable concurrency,
                           #   control subscription (loom.control.reload), on_reload() hook
     config.py             # load_config(), ConfigValidationError, worker/pipeline/orchestrator/router validation
+                          #   Input mapping path validation, processing_backend format validation,
+                          #   condition operator strict validation
     contracts.py          # I/O contract validation (bool/int distinction, schema enforcement)
     manifest.py           # AppManifest Pydantic model, validate_app_manifest(), load_manifest()
     messages.py           # Pydantic models: TaskMessage, TaskResult, OrchestratorGoal,
-                          #   CheckpointState, ModelTier, TaskStatus
+                          #   CheckpointState, ModelTier, TaskStatus; request_id propagation
     workspace.py          # WorkspaceManager — file-ref resolution, path traversal protection
 
   worker/
@@ -37,6 +39,12 @@ src/loom/
     decomposer.py         # GoalDecomposer — LLM-based task decomposition, WorkerDescriptor
     synthesizer.py        # ResultSynthesizer — merge + LLM synthesis modes
     pipeline.py           # PipelineOrchestrator — dependency-aware parallel stage execution with input mapping
+                          #   Typed error hierarchy: PipelineStageError → Timeout/Validation/Worker/Mapping
+                          #   Per-stage retry (max_retries, transient errors only)
+                          #   Inter-stage contract validation (input_schema/output_schema on stages)
+                          #   Execution timeline (_timeline in output: started_at, ended_at, wall_time_ms)
+                          #   LOOM_TRACE env var for full I/O debug logging
+                          #   request_id propagation across goal→task→result chain
     checkpoint.py         # CheckpointManager — pluggable store, configurable TTL
     store.py              # CheckpointStore ABC + InMemoryCheckpointStore
 
@@ -47,35 +55,43 @@ src/loom/
 
   router/
     router.py             # Deterministic task router + token-bucket rate limiter + dead-letter
+    dead_letter.py        # DeadLetterConsumer — bounded in-memory store, list/count/clear/replay
 
   bus/
     base.py               # MessageBus ABC + Subscription ABC
     memory.py             # InMemoryBus + InMemorySubscription (for testing, no infra needed)
     nats_adapter.py       # NATSBus + NATSSubscription (production, queue groups)
+                          #   Malformed message skip-and-continue, reconnection event logging
 
   mcp/
     config.py             # MCP gateway YAML config loading + validation
     discovery.py          # Tool definition generators (worker/pipeline/query → MCP tools)
     bridge.py             # MCPBridge — MCP tool calls → NATS TaskMessage dispatch + result collection
+                          #   Pydantic ValidationError catching, progress callback error logging
     resources.py          # WorkspaceResources — workspace files as MCP resources (workspace:/// URIs)
     server.py             # create_server(), MCPGateway, run_stdio(), run_streamable_http()
+                          #   MCP progress notifications wired to pipeline stage callbacks
 
   discovery/
     mdns.py               # LoomServiceAdvertiser — mDNS/Bonjour LAN service advertisement
 
   cli/
     main.py               # Click CLI: worker, processor, pipeline, orchestrator, scheduler,
-                          #   router, submit, mcp, workshop, mdns (10 commands)
+                          #   router, submit, mcp, workshop, mdns, dead-letter (11 commands)
+                          #   --skip-preflight flag on all actor commands
+    preflight.py          # Pre-flight checks: NATS connectivity, env vars, config readability
 
   workshop/               # LLM Worker Workshop — web-based worker builder, test bench, eval tool
-    app.py                # FastAPI + HTMX + Jinja2 web application (19 routes, mDNS lifespan)
+    app.py                # FastAPI + HTMX + Jinja2 web application (22+ routes, mDNS lifespan)
+                          #   Dead-letter inspection UI, backend detection, worker validation endpoint
     app_manager.py        # AppManager — deploy/list/remove app bundles (ZIP upload, reload notify)
+                          #   Atomic deployment (temp dir + rename), symlink rejection, path traversal validation
     test_runner.py        # WorkerTestRunner — execute worker configs directly against LLM backends
     db.py                 # WorkshopDB — DuckDB storage for eval results, worker versions, metrics
     eval_runner.py        # EvalRunner — systematic test suite execution with field_match/exact_match scoring
     config_manager.py     # ConfigManager — CRUD for worker/pipeline YAML configs with versioning + multi-dir
     pipeline_editor.py    # PipelineEditor — insert/swap/branch/remove pipeline stages with dep validation
-    templates/            # Jinja2 templates: workers, pipelines, apps (list, detail, deploy)
+    templates/            # Jinja2 templates: workers, pipelines, apps, dead_letters (list, detail, deploy)
     static/               # CSS (Pico CSS + custom styles)
 
   contrib/                # Optional integrations (Django-style contrib namespace)
@@ -129,6 +145,7 @@ docs/                     # Project documentation
   KUBERNETES.md           # Kubernetes deployment guide
   CONTRIBUTING.md         # Contribution guidelines
   CODING_GUIDE.md         # Coding, documentation, and commenting standards
+  TROUBLESHOOTING.md      # Common issues and solutions (NATS, workers, pipelines, services)
   building-workflows.md   # How to build custom workflows
   rag-howto.md            # RAG pipeline setup guide
   workshop.md             # Workshop web app design, architecture, enhancement guide
@@ -146,7 +163,7 @@ deploy/
   macos/                  # launchd plist files + install/uninstall scripts
   windows/                # NSSM-based Windows service install/uninstall scripts
 
-tests/                    # 60 test files, 1049 unit tests + 1 integration test (85% coverage)
+tests/                    # 63 test files, 1147 unit tests + 1 integration test (85% coverage)
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -164,10 +181,11 @@ tests/                    # 60 test files, 1049 unit tests + 1 integration test 
   test_e2e_advanced.py                            # E2E failure paths, timeouts, diamonds
   test_workshop_runner.py test_workshop_db.py     test_workshop_eval.py
   test_workshop_config.py test_workshop_pipeline_editor.py
-  test_app_manifest.py    test_app_manager.py     # App manifest + ZIP deployment
+  test_app_manifest.py    test_app_manager.py     # App manifest + ZIP deployment safety
   test_reload.py          test_mdns.py            # Config reload, mDNS discovery
   test_scheduler_expansion.py                     # Scheduler expand_from
   test_serialize_writes.py                        # SyncProcessingBackend write lock
+  test_dead_letter.py     test_preflight.py       # Dead-letter consumer, CLI pre-flight checks
   test_integration.py                             # @pytest.mark.integration (needs NATS)
   contrib/rag/            # 6 RAG test files (backends, chunker, ingestion, mux, schemas, tools)
 ```
@@ -329,7 +347,7 @@ OLLAMA_URL=http://localhost:11434 uv run loom workshop --port 8080
 
 The orchestrator is the throughput bottleneck: all goals funnel through a single actor. Five strategies address this at different levels:
 
-**Implemented (v0.3.0):**
+**Implemented (v0.3.0–v0.4.0):**
 
 - **B — Concurrent goal processing.** `OrchestratorActor` reads `max_concurrent_goals` from YAML config and passes it to `BaseActor.max_concurrent`. All mutable state (`conversation_history`, `checkpoint_counter`) is per-goal inside `GoalState` — concurrent goals are fully isolated with no shared mutable data and no locks required. Set `max_concurrent_goals: N` in the orchestrator config to process N goals simultaneously within a single instance.
 
@@ -373,6 +391,29 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 
 - None currently blocking.
 
+## Robustness and observability (v0.5.0)
+
+**P1 — Robustness:**
+- **Inter-stage contract validation** — pipeline stages can declare `input_schema`/`output_schema` for validation between stages
+- **Typed pipeline errors** — `PipelineStageError` hierarchy: `PipelineTimeoutError`, `PipelineValidationError`, `PipelineWorkerError`, `PipelineMappingError`
+- **Per-stage retry** — configurable `max_retries` per stage (transient errors only: timeout, worker errors)
+- **NATS adapter hardening** — malformed messages are logged and skipped (not crashed), reconnection events logged with structured data
+- **MCP bridge hardening** — catches `pydantic.ValidationError`, logs progress callback errors, debug logging for intermediate results
+- **Atomic ZIP deployment** — extracts to temp dir then renames; rejects symlinks and path traversal in config paths
+
+**P2 — Observability:**
+- **request_id propagation** — `TaskMessage` and `OrchestratorGoal` carry `request_id` through goal→task→result chain; structured log bindings per goal
+- **I/O tracing** — `LOOM_TRACE=1` env var enables full input/output logging; `_summarize()` helper truncates by default
+- **Dead-letter consumer** — `DeadLetterConsumer` actor with bounded in-memory store (default 1000), list/count/clear/replay via CLI (`loom dead-letter monitor`) and Workshop UI (`/dead-letters`)
+- **Pipeline execution timeline** — each pipeline output includes `_timeline` with per-stage `started_at`, `ended_at`, `wall_time_ms`
+
+**P3 — Developer experience:**
+- **CLI pre-flight checks** — `check_nats_connectivity()`, `check_env_vars()`, `check_config_readable()` run before actor startup; skip with `--skip-preflight`
+- **Workshop UI improvements** — worker search/filter, backend availability badges, inline config validation (`/workers/{name}/validate`), deploy spinner, dead-letter inspection page
+- **Config validation** — input_mapping path validation, processing_backend dotted-path format, condition operator strict allowlist
+- **Troubleshooting guide** — `docs/TROUBLESHOOTING.md` covering NATS, workers, pipelines, router, Workshop, Docker/K8s, macOS/Windows services
+- **Deploy script improvements** — macOS `install.sh` and Windows `install.ps1` with pre-flight checks, NATS connectivity test, post-install health check
+
 ## App deployment
 
 Loom apps (like baft, docman) can be deployed as ZIP bundles via the Workshop UI.
@@ -402,10 +443,9 @@ Loom supports multiple users (e.g., two analysts on Claude Desktop) working simu
 
 1. **Workshop MetricsCollector** — optional NATS subscriber for live worker metrics in Workshop dashboard
 2. **Workshop LLM-as-judge scoring** — use a separate LLM call to evaluate worker output quality
-3. **Router dead-letter consumer** — implement a dead-letter processor for monitoring/retry
-4. **Streaming result collection (Strategy A)** — process subtask results as they arrive
-6. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
-7. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
+3. **Streaming result collection (Strategy A)** — process subtask results as they arrive
+4. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
+5. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
 
 ## What NOT to do
 
