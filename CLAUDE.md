@@ -106,7 +106,7 @@ src/loom/
 
   workshop/               # LLM Worker Workshop — web-based worker builder, test bench, eval tool
     config_impact.py      # Config impact analysis — reverse-map worker→pipelines, downstream stages, risk
-    app.py                # FastAPI + HTMX + Jinja2 web application (22+ routes, mDNS lifespan)
+    app.py                # FastAPI + HTMX + Jinja2 web application (27 routes, mDNS lifespan)
                           #   Dead-letter inspection UI, backend detection, worker validation endpoint
     app_manager.py        # AppManager — deploy/list/remove app bundles (ZIP upload, reload notify)
                           #   Atomic deployment (temp dir + rename), symlink rejection, path traversal validation
@@ -172,6 +172,8 @@ docs/                     # Project documentation
   CODING_GUIDE.md         # Coding, documentation, and commenting standards
   TROUBLESHOOTING.md      # Common issues and solutions (NATS, workers, pipelines, services)
   DESIGN_INVARIANTS.md    # Non-obvious design decisions and red lines (must-read before structural changes)
+  APP_DEPLOYMENT.md       # App bundle format, manifest schema, ZIP deployment guide
+  LOCAL_DEPLOYMENT.md     # Local deployment with native process managers
   building-workflows.md   # How to build custom workflows
   rag-howto.md            # RAG pipeline setup guide
   workshop.md             # Workshop web app design, architecture, enhancement guide
@@ -189,7 +191,7 @@ deploy/
   macos/                  # launchd plist files + install/uninstall scripts
   windows/                # NSSM-based Windows service install/uninstall scripts
 
-tests/                    # 71 test files, 1318 unit tests + 1 integration test (85% coverage)
+tests/                    # 68 test files, 1355 unit tests + 1 integration test
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -236,7 +238,9 @@ tests/                    # 71 test files, 1318 unit tests + 1 integration test 
   - `loom.tasks.{worker_type}.{tier}` — Routed tasks land here; workers subscribe with queue groups
   - `loom.tasks.dead_letter` — Unroutable/rate-limited tasks land here
   - `loom.results.{goal_id}` — Results flow back to orchestrators
+  - `loom.results.default` — Results from standalone tasks (no parent goal)
   - `loom.goals.incoming` — Top-level goals for orchestrators
+  - `loom.control.reload` — Config hot-reload signal (broadcast)
   - `loom.scheduler.{name}` — Scheduler health-check subject
 
 ## Build and test commands
@@ -305,6 +309,7 @@ uv sync --extra scheduler     # Cron expression parsing (croniter)
 uv sync --extra mcp           # MCP gateway (Model Context Protocol SDK)
 uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
 uv sync --extra mdns          # mDNS/Bonjour service discovery on LAN (zeroconf)
+uv sync --extra tui           # TUI terminal dashboard (Textual)
 uv sync --extra otel          # OpenTelemetry distributed tracing (spans, OTLP export)
 uv sync --extra docs           # Sphinx API documentation generation
 uv sync --all-extras          # All dependencies including dev/test

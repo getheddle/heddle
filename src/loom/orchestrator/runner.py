@@ -325,7 +325,8 @@ class OrchestratorActor(BaseActor):
             ) as decompose_span:
                 subtasks = await self._decompose_goal(goal, log)
                 decompose_span.set_attribute(
-                    "orchestrator.subtask_count", len(subtasks) if subtasks else 0,
+                    "orchestrator.subtask_count",
+                    len(subtasks) if subtasks else 0,
                 )
 
             if not subtasks:
@@ -382,7 +383,8 @@ class OrchestratorActor(BaseActor):
             ) as synth_span:
                 synthesis = await self._synthesize_results(goal, results, log)
                 synth_span.set_attribute(
-                    "orchestrator.confidence", synthesis.get("confidence", "unknown"),
+                    "orchestrator.confidence",
+                    synthesis.get("confidence", "unknown"),
                 )
 
             # -- 6. Publish final result --

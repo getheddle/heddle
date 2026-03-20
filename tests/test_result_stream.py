@@ -83,7 +83,10 @@ class TestCollectAll:
         )
 
         stream = ResultStream(
-            bus=bus, subject=subject, expected_task_ids=expected_ids, timeout=5.0,
+            bus=bus,
+            subject=subject,
+            expected_task_ids=expected_ids,
+            timeout=5.0,
         )
 
         results = await stream.collect_all()
@@ -108,7 +111,10 @@ class TestCollectAll:
         )
 
         stream = ResultStream(
-            bus=bus, subject=subject, expected_task_ids={task.task_id}, timeout=5.0,
+            bus=bus,
+            subject=subject,
+            expected_task_ids={task.task_id},
+            timeout=5.0,
         )
 
         results = await stream.collect_all()
@@ -124,7 +130,10 @@ class TestCollectAll:
         await bus.connect()
 
         stream = ResultStream(
-            bus=bus, subject="loom.results.empty", expected_task_ids=set(), timeout=5.0,
+            bus=bus,
+            subject="loom.results.empty",
+            expected_task_ids=set(),
+            timeout=5.0,
         )
 
         results = await stream.collect_all()
@@ -154,7 +163,10 @@ class TestTimeout:
         )
 
         stream = ResultStream(
-            bus=bus, subject=subject, expected_task_ids=expected_ids, timeout=0.3,
+            bus=bus,
+            subject=subject,
+            expected_task_ids=expected_ids,
+            timeout=0.3,
         )
 
         results = await stream.collect_all()
@@ -172,8 +184,10 @@ class TestTimeout:
 
         task = _make_task()
         stream = ResultStream(
-            bus=bus, subject="loom.results.zero",
-            expected_task_ids={task.task_id}, timeout=0.0,
+            bus=bus,
+            subject="loom.results.zero",
+            expected_task_ids={task.task_id},
+            timeout=0.0,
         )
 
         results = await stream.collect_all()
@@ -199,15 +213,21 @@ class TestFiltering:
 
         # Publish unexpected first, then expected.
         _bg = asyncio.create_task(
-            _bg_publish(bus, subject, [
-                _make_result(unexpected_task.task_id),
-                _make_result(expected_task.task_id),
-            ]),
+            _bg_publish(
+                bus,
+                subject,
+                [
+                    _make_result(unexpected_task.task_id),
+                    _make_result(expected_task.task_id),
+                ],
+            ),
         )
 
         stream = ResultStream(
-            bus=bus, subject=subject,
-            expected_task_ids={expected_task.task_id}, timeout=5.0,
+            bus=bus,
+            subject=subject,
+            expected_task_ids={expected_task.task_id},
+            timeout=5.0,
         )
 
         results = await stream.collect_all()
@@ -226,15 +246,21 @@ class TestFiltering:
 
         # Publish the same result twice.
         _bg = asyncio.create_task(
-            _bg_publish(bus, subject, [
-                _make_result(task.task_id),
-                _make_result(task.task_id),
-            ]),
+            _bg_publish(
+                bus,
+                subject,
+                [
+                    _make_result(task.task_id),
+                    _make_result(task.task_id),
+                ],
+            ),
         )
 
         stream = ResultStream(
-            bus=bus, subject=subject,
-            expected_task_ids={task.task_id}, timeout=5.0,
+            bus=bus,
+            subject=subject,
+            expected_task_ids={task.task_id},
+            timeout=5.0,
         )
 
         results = await stream.collect_all()
@@ -260,8 +286,10 @@ class TestFiltering:
         _bg = asyncio.create_task(publish())
 
         stream = ResultStream(
-            bus=bus, subject=subject,
-            expected_task_ids={task.task_id}, timeout=5.0,
+            bus=bus,
+            subject=subject,
+            expected_task_ids={task.task_id},
+            timeout=5.0,
         )
 
         results = await stream.collect_all()
@@ -294,8 +322,10 @@ class TestCallbacks:
         )
 
         stream = ResultStream(
-            bus=bus, subject=subject,
-            expected_task_ids={t.task_id for t in tasks}, timeout=5.0,
+            bus=bus,
+            subject=subject,
+            expected_task_ids={t.task_id for t in tasks},
+            timeout=5.0,
             on_result=on_result,
         )
 
@@ -324,8 +354,10 @@ class TestCallbacks:
         )
 
         stream = ResultStream(
-            bus=bus, subject=subject,
-            expected_task_ids={t.task_id for t in tasks}, timeout=5.0,
+            bus=bus,
+            subject=subject,
+            expected_task_ids={t.task_id for t in tasks},
+            timeout=5.0,
             on_result=stop_after_two,
         )
 
@@ -354,8 +386,10 @@ class TestCallbacks:
         )
 
         stream = ResultStream(
-            bus=bus, subject=subject,
-            expected_task_ids={task.task_id}, timeout=5.0,
+            bus=bus,
+            subject=subject,
+            expected_task_ids={task.task_id},
+            timeout=5.0,
             on_result=sync_callback,
         )
 
@@ -381,8 +415,10 @@ class TestCallbacks:
         )
 
         stream = ResultStream(
-            bus=bus, subject=subject,
-            expected_task_ids={t.task_id for t in tasks}, timeout=5.0,
+            bus=bus,
+            subject=subject,
+            expected_task_ids={t.task_id for t in tasks},
+            timeout=5.0,
             on_result=failing_callback,
         )
 
@@ -412,8 +448,10 @@ class TestStreamingIteration:
         )
 
         stream = ResultStream(
-            bus=bus, subject=subject,
-            expected_task_ids={t.task_id for t in tasks}, timeout=5.0,
+            bus=bus,
+            subject=subject,
+            expected_task_ids={t.task_id for t in tasks},
+            timeout=5.0,
         )
 
         yielded = [result.task_id async for result in stream]
@@ -427,8 +465,10 @@ class TestStreamingIteration:
         await bus.connect()
 
         stream = ResultStream(
-            bus=bus, subject="loom.results.once",
-            expected_task_ids=set(), timeout=1.0,
+            bus=bus,
+            subject="loom.results.once",
+            expected_task_ids=set(),
+            timeout=1.0,
         )
 
         await stream.collect_all()
@@ -450,8 +490,10 @@ class TestProperties:
         await bus.connect()
 
         stream = ResultStream(
-            bus=bus, subject="loom.results.props",
-            expected_task_ids={"a", "b", "c"}, timeout=5.0,
+            bus=bus,
+            subject="loom.results.props",
+            expected_task_ids={"a", "b", "c"},
+            timeout=5.0,
         )
 
         assert stream.expected_count == 3
@@ -472,15 +514,21 @@ class TestProperties:
 
         # Only publish 2 of 3.
         _bg = asyncio.create_task(
-            _bg_publish(bus, subject, [
-                _make_result(tasks[0].task_id),
-                _make_result(tasks[1].task_id),
-            ]),
+            _bg_publish(
+                bus,
+                subject,
+                [
+                    _make_result(tasks[0].task_id),
+                    _make_result(tasks[1].task_id),
+                ],
+            ),
         )
 
         stream = ResultStream(
-            bus=bus, subject=subject,
-            expected_task_ids={t.task_id for t in tasks}, timeout=0.3,
+            bus=bus,
+            subject=subject,
+            expected_task_ids={t.task_id for t in tasks},
+            timeout=0.3,
         )
 
         await stream.collect_all()
@@ -517,8 +565,10 @@ class TestFailedResults:
         _bg = asyncio.create_task(publish())
 
         stream = ResultStream(
-            bus=bus, subject=subject,
-            expected_task_ids={task.task_id}, timeout=5.0,
+            bus=bus,
+            subject=subject,
+            expected_task_ids={task.task_id},
+            timeout=5.0,
         )
 
         results = await stream.collect_all()

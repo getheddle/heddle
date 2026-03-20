@@ -235,9 +235,7 @@ class TestEvalRun:
                 "eval.run",
                 {
                     "name": "nonexistent",
-                    "test_suite": [
-                        {"name": "t1", "input": {}, "expected_output": {}}
-                    ],
+                    "test_suite": [{"name": "t1", "input": {}, "expected_output": {}}],
                 },
             )
 
@@ -255,9 +253,7 @@ class TestEvalCompare:
         mock_db.compare_against_baseline.return_value = None
         bridge = WorkshopBridge(db=mock_db)
 
-        result = await bridge.dispatch(
-            "eval.compare", {"name": "summarizer", "run_id": "abc"}
-        )
+        result = await bridge.dispatch("eval.compare", {"name": "summarizer", "run_id": "abc"})
         assert "error" in result
         assert "No baseline" in result["error"]
 
@@ -272,9 +268,7 @@ class TestEvalCompare:
         }
         bridge = WorkshopBridge(db=mock_db)
 
-        result = await bridge.dispatch(
-            "eval.compare", {"name": "summarizer", "run_id": "abc"}
-        )
+        result = await bridge.dispatch("eval.compare", {"name": "summarizer", "run_id": "abc"})
         assert result["baseline_run_id"] == "base-1"
 
 
@@ -345,6 +339,17 @@ class TestDeadletterReplay:
         with pytest.raises(WorkshopBridgeError, match="message bus"):
             await bridge.dispatch("deadletter.replay", {"entry_id": "1"})
 
+    @pytest.mark.asyncio
+    async def test_replay_uses_replay_bus(self):
+        mock_dl = MagicMock()
+        mock_dl.replay = AsyncMock(return_value=True)
+        replay_bus = object()
+        bridge = WorkshopBridge(dead_letter=mock_dl, replay_bus=replay_bus)
+
+        result = await bridge.dispatch("deadletter.replay", {"entry_id": "1"})
+        assert result == {"success": True, "entry_id": "1"}
+        mock_dl.replay.assert_awaited_once_with("1", replay_bus)
+
 
 # ---------------------------------------------------------------------------
 # Unknown action
@@ -360,9 +365,7 @@ class TestWorkerGetVersionHistory:
         bridge = WorkshopBridge(config_manager=cm, db=mock_db)
 
         # ConfigManager.get_worker_version_history may not exist — mock it.
-        cm.get_worker_version_history = MagicMock(
-            return_value=[{"version": 1, "hash": "abc"}]
-        )
+        cm.get_worker_version_history = MagicMock(return_value=[{"version": 1, "hash": "abc"}])
 
         result = await bridge.dispatch("worker.get", {"name": "summarizer"})
         assert result["name"] == "summarizer"
@@ -432,9 +435,7 @@ class TestWorkerTestMissingArgs:
         bridge = WorkshopBridge(config_manager=cm, test_runner=mock_runner)
 
         with pytest.raises(WorkshopBridgeError, match="not found"):
-            await bridge.dispatch(
-                "worker.test", {"name": "nonexistent", "payload": {"text": "hi"}}
-            )
+            await bridge.dispatch("worker.test", {"name": "nonexistent", "payload": {"text": "hi"}})
 
 
 class TestEvalRunWithDB:
@@ -449,9 +450,7 @@ class TestEvalRunWithDB:
             {"score": 0.8, "case": "t1"},
             {"score": 0.6, "case": "t2"},
         ]
-        bridge = WorkshopBridge(
-            config_manager=cm, eval_runner=mock_eval, db=mock_db
-        )
+        bridge = WorkshopBridge(config_manager=cm, eval_runner=mock_eval, db=mock_db)
 
         result = await bridge.dispatch(
             "eval.run",
@@ -495,9 +494,7 @@ class TestEvalRunWithDB:
         mock_eval.run_suite.return_value = "run-789"
         mock_db = MagicMock()
         mock_db.get_eval_results.return_value = [{"case": "t1"}]  # no score key
-        bridge = WorkshopBridge(
-            config_manager=cm, eval_runner=mock_eval, db=mock_db
-        )
+        bridge = WorkshopBridge(config_manager=cm, eval_runner=mock_eval, db=mock_db)
 
         result = await bridge.dispatch(
             "eval.run",

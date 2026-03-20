@@ -124,8 +124,7 @@ def _import_pydantic_schema(dotted_path: str, ref_key: str) -> dict[str, Any]:
     parts = dotted_path.rsplit(".", 1)
     if len(parts) != 2:
         raise ConfigValidationError(
-            f"'{ref_key}' must be a fully qualified 'module.ClassName' path, "
-            f"got '{dotted_path}'"
+            f"'{ref_key}' must be a fully qualified 'module.ClassName' path, got '{dotted_path}'"
         )
     module_path, class_name = parts
     try:

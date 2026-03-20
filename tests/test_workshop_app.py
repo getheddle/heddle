@@ -149,9 +149,7 @@ class TestEvalBaselines:
         # Create new run
         new_id = db.save_eval_run("test_worker", "local", total_cases=1)
         db.save_eval_result(new_id, "case_1", {"text": "a"}, True, score=0.9)
-        db.update_eval_run(
-            new_id, {"status": "completed", "passed_cases": 1, "failed_cases": 0}
-        )
+        db.update_eval_run(new_id, {"status": "completed", "passed_cases": 1, "failed_cases": 0})
 
         resp = client.get(f"/workers/test_worker/eval/{new_id}")
         assert resp.status_code == 200

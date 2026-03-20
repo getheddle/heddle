@@ -49,9 +49,7 @@ class TestNoOpTracer:
 
     def test_start_as_current_span_with_kwargs(self):
         tracer = _NoOpTracer()
-        with tracer.start_as_current_span(
-            "test", context=None, attributes={"a": 1}
-        ) as span:
+        with tracer.start_as_current_span("test", context=None, attributes={"a": 1}) as span:
             assert isinstance(span, _NoOpSpan)
 
     def test_start_span(self):
@@ -92,9 +90,7 @@ class TestInjectTraceContext:
 
     def test_injects_when_otel_available(self):
         mock_propagate = MagicMock()
-        mock_propagate.inject.side_effect = lambda h: h.update(
-            {"traceparent": "00-abc-def-01"}
-        )
+        mock_propagate.inject.side_effect = lambda h: h.update({"traceparent": "00-abc-def-01"})
         with (
             patch("loom.tracing.otel._HAS_OTEL", True),
             patch("loom.tracing.otel._propagate_mod", mock_propagate),
@@ -152,9 +148,12 @@ class TestInitTracing:
     def test_returns_false_when_sdk_missing(self):
         with (
             patch("loom.tracing.otel._HAS_OTEL", True),
-            patch.dict("sys.modules", {
-                "opentelemetry.exporter.otlp.proto.grpc.trace_exporter": None,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "opentelemetry.exporter.otlp.proto.grpc.trace_exporter": None,
+                },
+            ),
         ):
             # The import will raise ImportError inside init_tracing
             assert init_tracing() is False

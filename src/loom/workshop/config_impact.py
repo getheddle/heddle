@@ -71,19 +71,21 @@ def get_impact(worker_name: str, config_manager: ConfigManager) -> dict[str, Any
         deps = _infer_dependencies(stages)
         downstream = _find_downstream(worker_stage_names, deps)
 
-        affected_pipelines.append({
-            "name": pipeline_cfg.get("name", pipeline_info["name"]),
-            "stages": [
-                {
-                    "name": s["name"],
-                    "tier": s.get("tier", "local"),
-                    "has_input_schema": "input_schema" in s,
-                    "has_output_schema": "output_schema" in s,
-                }
-                for s in worker_stages
-            ],
-            "downstream": sorted(downstream),
-        })
+        affected_pipelines.append(
+            {
+                "name": pipeline_cfg.get("name", pipeline_info["name"]),
+                "stages": [
+                    {
+                        "name": s["name"],
+                        "tier": s.get("tier", "local"),
+                        "has_input_schema": "input_schema" in s,
+                        "has_output_schema": "output_schema" in s,
+                    }
+                    for s in worker_stages
+                ],
+                "downstream": sorted(downstream),
+            }
+        )
         total_stages += len(worker_stages)
         total_downstream += len(downstream)
 

@@ -44,12 +44,14 @@ class WorkshopBridge:
         eval_runner: EvalRunner | None = None,
         db: WorkshopDB | None = None,
         dead_letter: DeadLetterConsumer | None = None,
+        replay_bus: Any | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.test_runner = test_runner
         self.eval_runner = eval_runner
         self.db = db
         self.dead_letter = dead_letter
+        self.replay_bus = replay_bus
 
     async def dispatch(
         self,
@@ -257,16 +259,10 @@ class WorkshopBridge:
         if not entry_id:
             raise WorkshopBridgeError("'entry_id' is required")
 
-        # dead_letter.replay requires a bus — check if available
-        from loom.bus.base import MessageBus
+        if self.replay_bus is None:
+            raise WorkshopBridgeError("Dead-letter replay requires a connected message bus")
 
-        bus = getattr(self.dead_letter, "_bus", None)
-        if bus is None or not isinstance(bus, MessageBus):
-            raise WorkshopBridgeError(
-                "Dead-letter replay requires a connected message bus"
-            )
-
-        success = await self.dead_letter.replay(entry_id, bus)
+        success = await self.dead_letter.replay(entry_id, self.replay_bus)
         return {"success": success, "entry_id": entry_id}
 
 

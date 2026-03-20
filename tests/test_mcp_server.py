@@ -62,6 +62,24 @@ def _make_gateway_config(tmp_path, worker_cfgs=None, resources_dir=None):
     return _write_yaml(str(tmp_path), "gateway.yaml", config)
 
 
+def _make_workshop_only_gateway_config(tmp_path, enable=None):
+    """Create an MCP gateway config that exposes only workshop tools."""
+    config = {
+        "name": "workshop-gateway",
+        "tools": {
+            "workers": [],
+            "pipelines": [],
+            "queries": [],
+            "workshop": {
+                "configs_dir": str(tmp_path),
+            },
+        },
+    }
+    if enable is not None:
+        config["tools"]["workshop"]["enable"] = enable
+    return _write_yaml(str(tmp_path), "workshop-gateway.yaml", config)
+
+
 def _unwrap(server_result):
     """Unwrap MCP ServerResult to get the inner result object."""
     return server_result.root
@@ -131,6 +149,15 @@ class TestCreateServer:
         config_path = _make_gateway_config(tmp_path)
         server, gateway = create_server(config_path)
         assert gateway.resources is None
+
+    def test_workshop_only_gateway_does_not_require_bus(self, tmp_path):
+        config_path = _make_workshop_only_gateway_config(tmp_path)
+        _server, gateway = create_server(config_path)
+
+        assert gateway.requires_bus is False
+        assert gateway.workshop_bridge is not None
+        assert gateway.workshop_bridge.dead_letter is not None
+        assert "workshop.worker.list" in gateway.tool_registry
 
 
 # ---------------------------------------------------------------------------
@@ -406,7 +433,10 @@ class TestProgressCallback:
         await ready.wait()
 
         result = await _dispatch_tool(
-            gateway, entry, {"file_ref": "test.pdf"}, progress_callback=track_progress,
+            gateway,
+            entry,
+            {"file_ref": "test.pdf"},
+            progress_callback=track_progress,
         )
         assert result == {"processed": True}
         assert len(progress_calls) == 1
@@ -460,7 +490,10 @@ class TestProgressCallback:
         # Passing a callback shouldn't cause errors for non-pipeline tools.
         callback = AsyncMock()
         result = await _dispatch_tool(
-            gateway, entry, {"text": "hi"}, progress_callback=callback,
+            gateway,
+            entry,
+            {"text": "hi"},
+            progress_callback=callback,
         )
         assert result == {"summary": "done"}
         callback.assert_not_called()
@@ -932,7 +965,10 @@ class TestRunStdio:
 
     def test_run_stdio_connects_and_closes_bridge(self, tmp_path):
         """Lines 284-303: run_stdio connects bridge, runs server, closes bridge."""
-        config_path = _make_gateway_config(tmp_path)
+        config_path = _make_gateway_config(
+            tmp_path,
+            worker_cfgs=_single_worker_cfgs("summarizer"),
+        )
         _server, gateway = create_server(config_path)
 
         gateway.bridge = MagicMock()
@@ -980,7 +1016,10 @@ class TestRunStdio:
 
     def test_run_stdio_closes_bridge_on_error(self, tmp_path):
         """Lines 300-301: bridge.close() is called even if server.run raises."""
-        config_path = _make_gateway_config(tmp_path)
+        config_path = _make_gateway_config(
+            tmp_path,
+            worker_cfgs=_single_worker_cfgs("summarizer"),
+        )
         _server, gateway = create_server(config_path)
 
         gateway.bridge = MagicMock()
@@ -1001,6 +1040,27 @@ class TestRunStdio:
 
         gateway.bridge.close.assert_awaited_once()
 
+    def test_run_stdio_skips_bridge_connect_for_workshop_only_gateway(self, tmp_path):
+        config_path = _make_workshop_only_gateway_config(tmp_path)
+        _server, gateway = create_server(config_path)
+
+        gateway.bridge = MagicMock()
+        gateway.bridge.connect = AsyncMock()
+        gateway.bridge.close = AsyncMock()
+
+        mock_server = MagicMock()
+        mock_server.run = AsyncMock()
+        mock_server.create_initialization_options = MagicMock(return_value={})
+
+        from loom.mcp.server import run_stdio
+
+        with patch("mcp.server.stdio.stdio_server", return_value=_fake_stdio_cm()):
+            run_stdio(mock_server, gateway)
+
+        gateway.bridge.connect.assert_not_awaited()
+        gateway.bridge.close.assert_not_awaited()
+        mock_server.run.assert_awaited_once()
+
 
 # ---------------------------------------------------------------------------
 # run_streamable_http (lines 319-366)
@@ -1012,7 +1072,10 @@ class TestRunStreamableHTTP:
 
     def test_run_streamable_http_connects_and_closes(self, tmp_path):
         """Lines 319-366: streamable HTTP connects bridge, starts uvicorn."""
-        config_path = _make_gateway_config(tmp_path)
+        config_path = _make_gateway_config(
+            tmp_path,
+            worker_cfgs=_single_worker_cfgs("summarizer"),
+        )
         server, gateway = create_server(config_path)
 
         gateway.bridge = MagicMock()
@@ -1058,7 +1121,10 @@ class TestRunStreamableHTTP:
 
     def test_run_streamable_http_closes_on_error(self, tmp_path):
         """Lines 363-364: bridge.close() called even if uvicorn raises."""
-        config_path = _make_gateway_config(tmp_path)
+        config_path = _make_gateway_config(
+            tmp_path,
+            worker_cfgs=_single_worker_cfgs("summarizer"),
+        )
         server, gateway = create_server(config_path)
 
         gateway.bridge = MagicMock()
@@ -1078,6 +1144,26 @@ class TestRunStreamableHTTP:
             run_streamable_http(server, gateway)
 
         gateway.bridge.close.assert_awaited_once()
+
+    def test_run_streamable_http_skips_bridge_connect_for_workshop_only_gateway(self, tmp_path):
+        config_path = _make_workshop_only_gateway_config(tmp_path)
+        server, gateway = create_server(config_path)
+
+        gateway.bridge = MagicMock()
+        gateway.bridge.connect = AsyncMock()
+        gateway.bridge.close = AsyncMock()
+
+        from loom.mcp.server import run_streamable_http
+
+        mock_uv = MagicMock()
+        mock_uv.serve = AsyncMock()
+
+        with patch("uvicorn.Config"), patch("uvicorn.Server", return_value=mock_uv):
+            run_streamable_http(server, gateway)
+
+        gateway.bridge.connect.assert_not_awaited()
+        gateway.bridge.close.assert_not_awaited()
+        mock_uv.serve.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
@@ -1158,7 +1244,8 @@ class TestDispatchToolWorkshop:
         result = await _dispatch_tool(gateway, entry, {})
         assert result == {"workers": [], "count": 0}
         mock_wb.dispatch.assert_awaited_once_with(
-            action="worker.list", arguments={},
+            action="worker.list",
+            arguments={},
         )
 
     async def test_dispatch_workshop_no_bridge_raises(self, bus_and_bridge):
@@ -1196,7 +1283,8 @@ class TestHandleCallToolWorkshopError:
 
     def test_workshop_bridge_error_returns_json(self, tmp_path):
         config_path = _make_gateway_config(
-            tmp_path, worker_cfgs=_single_worker_cfgs("ws_tool"),
+            tmp_path,
+            worker_cfgs=_single_worker_cfgs("ws_tool"),
         )
         server, gateway = create_server(config_path)
 
@@ -1212,7 +1300,8 @@ class TestHandleListToolsAnnotations:
 
     def test_annotations_attached_to_tools(self, tmp_path):
         config_path = _make_gateway_config(
-            tmp_path, worker_cfgs=_single_worker_cfgs("annotated"),
+            tmp_path,
+            worker_cfgs=_single_worker_cfgs("annotated"),
         )
         server, gateway = create_server(config_path)
 
@@ -1232,7 +1321,8 @@ class TestHandleListToolsAnnotations:
 
     def test_no_annotations_when_no_flags(self, tmp_path):
         config_path = _make_gateway_config(
-            tmp_path, worker_cfgs=_single_worker_cfgs("plain"),
+            tmp_path,
+            worker_cfgs=_single_worker_cfgs("plain"),
         )
         server, gateway = create_server(config_path)
 

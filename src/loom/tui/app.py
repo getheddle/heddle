@@ -205,7 +205,12 @@ class LoomDashboard(App):
         # Goals table
         goals_table = self.query_one("#goals-table", DataTable)
         goals_table.add_columns(
-            "Goal ID", "Instruction", "Status", "Subtasks", "Collected", "Elapsed",
+            "Goal ID",
+            "Instruction",
+            "Status",
+            "Subtasks",
+            "Collected",
+            "Elapsed",
         )
 
         # Tasks table

@@ -358,9 +358,7 @@ class TestBridgeErrorHandling:
                     status=TaskStatus.COMPLETED,
                     output={"text": "extracted"},
                 )
-                await bus.publish(
-                    f"loom.results.{goal_id}", stage_result.model_dump(mode="json")
-                )
+                await bus.publish(f"loom.results.{goal_id}", stage_result.model_dump(mode="json"))
                 await asyncio.sleep(0.01)
                 # Final result.
                 final_result = TaskResult(
@@ -369,9 +367,7 @@ class TestBridgeErrorHandling:
                     status=TaskStatus.COMPLETED,
                     output={"final": "done"},
                 )
-                await bus.publish(
-                    f"loom.results.{goal_id}", final_result.model_dump(mode="json")
-                )
+                await bus.publish(f"loom.results.{goal_id}", final_result.model_dump(mode="json"))
                 await sub.unsubscribe()
                 break
 

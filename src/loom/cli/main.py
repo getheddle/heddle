@@ -31,6 +31,7 @@ Architecture notes:
 
 import asyncio
 import importlib
+import inspect
 
 import click
 import structlog
@@ -47,6 +48,20 @@ structlog.configure(
 )
 
 logger = structlog.get_logger()
+
+
+def _run_async(coro):
+    """Run a coroutine via ``asyncio.run`` and close it if a mock leaves it pending.
+
+    Several CLI tests patch ``asyncio.run`` to assert the command wiring without
+    actually driving the coroutine. In that case the created coroutine would be
+    garbage-collected as "never awaited" unless we close it explicitly.
+    """
+    try:
+        return asyncio.run(coro)
+    finally:
+        if inspect.iscoroutine(coro) and coro.cr_frame is not None:
+            coro.close()
 
 
 def _run_preflight(
@@ -76,7 +91,7 @@ def _run_preflight(
             raise click.Abort()
 
     # NATS connectivity check (hard fail).
-    ok, msg = asyncio.run(check_nats_connectivity(nats_url))
+    ok, msg = _run_async(check_nats_connectivity(nats_url))
     if not ok:
         click.echo(click.style(f"Pre-flight FAIL: {msg}", fg="red"), err=True)
         raise click.Abort()
@@ -198,7 +213,7 @@ def worker(config: str, nats_url: str, tier: str, skip_preflight: bool):
         nats_url=nats_url,
     )
     subject = f"loom.tasks.{cfg['name']}.{tier}"
-    asyncio.run(actor.run(subject, queue_group=f"workers-{cfg['name']}"))
+    _run_async(actor.run(subject, queue_group=f"workers-{cfg['name']}"))
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +273,7 @@ def processor(config: str, nats_url: str, tier: str, skip_preflight: bool):
         nats_url=nats_url,
     )
     subject = f"loom.tasks.{cfg['name']}.{tier}"
-    asyncio.run(actor.run(subject, queue_group=f"processors-{cfg['name']}"))
+    _run_async(actor.run(subject, queue_group=f"processors-{cfg['name']}"))
 
 
 def _load_processing_backend(name: str, config: dict):
@@ -352,7 +367,7 @@ def pipeline(config: str, nats_url: str, skip_preflight: bool):
         config_path=config,
         nats_url=nats_url,
     )
-    asyncio.run(orch.run("loom.goals.incoming", queue_group="pipelines"))
+    _run_async(orch.run("loom.goals.incoming", queue_group="pipelines"))
 
 
 # ---------------------------------------------------------------------------
@@ -443,7 +458,7 @@ def orchestrator(config: str, nats_url: str, redis_url: str, skip_preflight: boo
         timeout_seconds=cfg.get("timeout_seconds", "not set"),
     )
 
-    asyncio.run(actor.run("loom.goals.incoming", queue_group="orchestrators"))
+    _run_async(actor.run("loom.goals.incoming", queue_group="orchestrators"))
 
 
 # ---------------------------------------------------------------------------
@@ -506,7 +521,7 @@ def scheduler(config: str, nats_url: str, skip_preflight: bool):
         schedule_count=len(cfg.get("schedules", [])),
     )
 
-    asyncio.run(actor.run(subject))
+    _run_async(actor.run(subject))
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +569,7 @@ def router(config: str, nats_url: str, skip_preflight: bool):
         await r.run()
         await r.process_messages()
 
-    asyncio.run(_run())
+    _run_async(_run())
 
 
 # ---------------------------------------------------------------------------
@@ -604,7 +619,7 @@ def submit(goal: str, nats_url: str, context: tuple[str, ...]):
         await nc.drain()
         click.echo(f"Submitted goal: {g.goal_id}")
 
-    asyncio.run(_submit())
+    _run_async(_submit())
 
 
 # ---------------------------------------------------------------------------
@@ -775,8 +790,7 @@ def ui(nats_url: str) -> None:
         from loom.tui.app import run_dashboard
     except ImportError:
         click.echo(
-            "TUI dependencies not installed. Run:\n\n"
-            "    uv sync --extra tui\n",
+            "TUI dependencies not installed. Run:\n\n    uv sync --extra tui\n",
             err=True,
         )
         raise SystemExit(1) from None
@@ -845,7 +859,7 @@ def mdns(workshop_port: int, nats_port: int, mcp_port: int, host: str | None):
     import contextlib
 
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(_run())
+        _run_async(_run())
 
 
 # ---------------------------------------------------------------------------
@@ -884,7 +898,7 @@ def dead_letter_monitor(nats_url: str, max_size: int):
         subject=DEAD_LETTER_SUBJECT,
     )
 
-    asyncio.run(consumer.run(DEAD_LETTER_SUBJECT))
+    _run_async(consumer.run(DEAD_LETTER_SUBJECT))
 
 
 if __name__ == "__main__":

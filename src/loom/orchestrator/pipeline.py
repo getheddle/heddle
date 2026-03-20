@@ -14,7 +14,8 @@ independent and execute in parallel. Alternatively, explicit
 
 Execution proceeds in *levels* — each level contains stages whose
 dependencies are all satisfied by earlier levels. Stages within a level
-run concurrently via ``asyncio.gather``.
+run concurrently via ``asyncio.wait(FIRST_COMPLETED)`` for incremental
+progress reporting.
 
 Pipeline definition comes from YAML config with stages, input mappings,
 and optional conditions.
@@ -268,7 +269,13 @@ class PipelineOrchestrator(BaseActor):
             },
         ) as stage_span:
             return await self._execute_stage_inner(
-                stage, stage_name, context, goal, timeout, stage_log, stage_span,
+                stage,
+                stage_name,
+                context,
+                goal,
+                timeout,
+                stage_log,
+                stage_span,
             )
 
     async def _execute_stage_inner(
@@ -428,7 +435,11 @@ class PipelineOrchestrator(BaseActor):
         task_to_stage: dict[asyncio.Task, dict[str, Any]] = {}
         for stage in level:
             coro = self._execute_stage(
-                stage, context, goal, timeout, level_log,
+                stage,
+                context,
+                goal,
+                timeout,
+                level_log,
             )
             task = asyncio.create_task(coro)
             task_to_stage[task] = stage
@@ -515,7 +526,11 @@ class PipelineOrchestrator(BaseActor):
                     # Single stage — no concurrency overhead.
                     stage = level[0]
                     name, result_dict = await self._execute_stage(
-                        stage, context, goal, timeout, level_log,
+                        stage,
+                        context,
+                        goal,
+                        timeout,
+                        level_log,
                     )
                     if not result_dict.get("_skipped"):
                         context[name] = result_dict
@@ -527,8 +542,13 @@ class PipelineOrchestrator(BaseActor):
                     )
                 else:
                     completed_stage_count = await self._execute_parallel_level(
-                        level, context, goal, timeout, level_log,
-                        completed_stage_count, total_stage_count,
+                        level,
+                        context,
+                        goal,
+                        timeout,
+                        level_log,
+                        completed_stage_count,
+                        total_stage_count,
                     )
 
         except PipelineStageError as e:

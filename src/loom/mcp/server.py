@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -69,6 +70,7 @@ class MCPGateway:
     tool_defs: list[dict[str, Any]] = field(default_factory=list)
     resources: WorkspaceResources | None = None
     workshop_bridge: WorkshopBridge | None = None
+    requires_bus: bool = True
 
 
 def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
@@ -82,9 +84,15 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
     from mcp.server.lowlevel import Server
 
     config = load_mcp_config(config_path)
+    nats_url = config.get("nats_url", "nats://nats:4222")
+    bus = NATSBus(nats_url)
+    bridge = MCPBridge(bus)
 
     # --- Discover tools ---
     tools_config = config.get("tools", {})
+    requires_bus = bool(
+        tools_config.get("workers") or tools_config.get("pipelines") or tools_config.get("queries")
+    )
 
     all_tools: list[dict[str, Any]] = []
     all_tools.extend(discover_worker_tools(tools_config.get("workers", [])))
@@ -96,7 +104,10 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
     workshop_bridge: WorkshopBridge | None = None
     if workshop_config is not None:
         all_tools.extend(discover_workshop_tools(workshop_config))
-        workshop_bridge = _build_workshop_bridge(workshop_config)
+        workshop_bridge = _build_workshop_bridge(
+            workshop_config,
+            replay_bus=bridge.bus if requires_bus else None,
+        )
 
     # Build registry.
     registry: dict[str, ToolEntry] = {}
@@ -119,11 +130,6 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
         tools=sorted(registry.keys()),
     )
 
-    # --- Set up bridge ---
-    nats_url = config.get("nats_url", "nats://nats:4222")
-    bus = NATSBus(nats_url)
-    bridge = MCPBridge(bus)
-
     # --- Set up resources ---
     resources_config = config.get("resources")
     workspace_resources: WorkspaceResources | None = None
@@ -140,6 +146,7 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
         tool_defs=mcp_tool_defs,
         resources=workspace_resources,
         workshop_bridge=workshop_bridge,
+        requires_bus=requires_bus,
     )
 
     # --- Build MCP Server ---
@@ -362,14 +369,21 @@ def _build_annotations(loom_meta: dict[str, Any]) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _build_workshop_bridge(workshop_config: dict[str, Any]) -> WorkshopBridge:
+def _build_workshop_bridge(
+    workshop_config: dict[str, Any],
+    *,
+    replay_bus: Any | None = None,
+) -> WorkshopBridge:
     """Construct a WorkshopBridge from the MCP gateway workshop config.
 
-    Instantiates ConfigManager, and optionally WorkerTestRunner, EvalRunner,
-    and WorkshopDB based on available dependencies.
+    Instantiates ConfigManager, DeadLetterConsumer, and optionally
+    WorkerTestRunner, EvalRunner, and WorkshopDB based on available
+    dependencies.
     """
     from pathlib import Path
 
+    from loom.bus.memory import InMemoryBus
+    from loom.router.dead_letter import DeadLetterConsumer
     from loom.workshop.config_manager import ConfigManager
 
     configs_dir = workshop_config.get("configs_dir", "configs/")
@@ -420,11 +434,15 @@ def _build_workshop_bridge(workshop_config: dict[str, Any]) -> WorkshopBridge:
 
         eval_runner = EvalRunner(test_runner, db)
 
+    dead_letter = DeadLetterConsumer(bus=InMemoryBus())
+
     return WorkshopBridge(
         config_manager=config_manager,
         test_runner=test_runner,
         eval_runner=eval_runner,
         db=db,
+        dead_letter=dead_letter,
+        replay_bus=replay_bus,
     )
 
 
@@ -439,8 +457,11 @@ def run_stdio(server: Any, gateway: MCPGateway) -> None:
     async def _run() -> None:
         import mcp.server.stdio
 
-        await gateway.bridge.connect()
-        logger.info("mcp.gateway.connected", nats_url=gateway.config.get("nats_url"))
+        bridge_connected = False
+        if gateway.requires_bus:
+            await gateway.bridge.connect()
+            bridge_connected = True
+            logger.info("mcp.gateway.connected", nats_url=gateway.config.get("nats_url"))
 
         if gateway.resources:
             gateway.resources.snapshot()
@@ -453,7 +474,8 @@ def run_stdio(server: Any, gateway: MCPGateway) -> None:
                     server.create_initialization_options(),
                 )
         finally:
-            await gateway.bridge.close()
+            if bridge_connected:
+                await gateway.bridge.close()
 
     asyncio.run(_run())
 
@@ -478,8 +500,11 @@ def run_streamable_http(
         from starlette.responses import JSONResponse
         from starlette.routing import Route
 
-        await gateway.bridge.connect()
-        logger.info("mcp.gateway.connected", nats_url=gateway.config.get("nats_url"))
+        bridge_connected = False
+        if gateway.requires_bus:
+            await gateway.bridge.connect()
+            bridge_connected = True
+            logger.info("mcp.gateway.connected", nats_url=gateway.config.get("nats_url"))
 
         if gateway.resources:
             gateway.resources.snapshot()
@@ -498,6 +523,7 @@ def run_streamable_http(
         async def health(_request: Any) -> JSONResponse:
             return JSONResponse({"status": "ok", "name": gateway.config["name"]})
 
+        @asynccontextmanager
         async def lifespan(_app: Any) -> AsyncIterator[None]:
             async with session_manager.run():
                 yield
@@ -516,6 +542,7 @@ def run_streamable_http(
         try:
             await uv_server.serve()
         finally:
-            await gateway.bridge.close()
+            if bridge_connected:
+                await gateway.bridge.close()
 
     asyncio.run(_run())

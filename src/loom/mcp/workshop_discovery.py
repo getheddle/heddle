@@ -32,9 +32,17 @@ def discover_workshop_tools(
     # local in-memory DeadLetterConsumer that is NOT subscribed to the live
     # NATS dead-letter stream.  Listing/replay only works for entries stored
     # in that local consumer, which starts empty.  Require explicit opt-in.
-    enabled = set(workshop_config.get("enable", [
-        "worker", "test", "eval", "impact",
-    ]))
+    enabled = set(
+        workshop_config.get(
+            "enable",
+            [
+                "worker",
+                "test",
+                "eval",
+                "impact",
+            ],
+        )
+    )
 
     tools: list[dict[str, Any]] = []
 
@@ -156,8 +164,7 @@ def _eval_tools() -> list[dict[str, Any]]:
                 "test_suite": {
                     "type": "array",
                     "description": (
-                        "List of test cases, each with 'name', "
-                        "'input', and 'expected_output'"
+                        "List of test cases, each with 'name', 'input', and 'expected_output'"
                     ),
                     "items": {
                         "type": "object",

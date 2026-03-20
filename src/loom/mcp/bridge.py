@@ -278,9 +278,7 @@ class MCPBridge:
                     except ValidationError as exc:
                         with contextlib.suppress(asyncio.InvalidStateError):
                             result_future.set_exception(
-                                BridgeError(
-                                    f"Malformed result for task {match_task_id}: {exc}"
-                                )
+                                BridgeError(f"Malformed result for task {match_task_id}: {exc}")
                             )
                         break
                     with contextlib.suppress(asyncio.InvalidStateError):

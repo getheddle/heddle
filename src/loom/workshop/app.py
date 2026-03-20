@@ -146,9 +146,9 @@ def create_app(  # noqa: PLR0915
     async def workers_list(request: Request):
         workers = config_mgr.list_workers()
         return templates.TemplateResponse(
+            request,
             "workers/list.html",
             {
-                "request": request,
                 "workers": workers,
             },
         )
@@ -162,9 +162,9 @@ def create_app(  # noqa: PLR0915
             return HTMLResponse("Worker not found", status_code=404)
         versions = config_mgr.get_worker_version_history(name)
         return templates.TemplateResponse(
+            request,
             "workers/detail.html",
             {
-                "request": request,
                 "config": config,
                 "yaml_content": yaml_content,
                 "name": name,
@@ -195,8 +195,9 @@ def create_app(  # noqa: PLR0915
             errors.append(f"Invalid YAML syntax: {e}")
 
         return templates.TemplateResponse(
+            request,
             "partials/validation_errors.html",
-            {"request": request, "errors": errors},
+            {"errors": errors},
         )
 
     @app.get("/workers/{name}/impact", response_class=JSONResponse)
@@ -209,8 +210,9 @@ def create_app(  # noqa: PLR0915
         """HTMX endpoint: render impact analysis as an HTML partial."""
         impact = get_impact(name, config_mgr)
         return templates.TemplateResponse(
+            request,
             "partials/impact_panel.html",
-            {"request": request, "impact": impact},
+            {"impact": impact},
         )
 
     @app.post("/workers/{name}", response_class=HTMLResponse)
@@ -245,9 +247,9 @@ def create_app(  # noqa: PLR0915
         except FileNotFoundError:
             return HTMLResponse("Worker not found", status_code=404)
         return templates.TemplateResponse(
+            request,
             "workers/test.html",
             {
-                "request": request,
                 "config": config,
                 "name": name,
                 "available_tiers": list(backends.keys()),
@@ -266,18 +268,18 @@ def create_app(  # noqa: PLR0915
             return HTMLResponse("Worker not found", status_code=404)
         except json.JSONDecodeError as e:
             return templates.TemplateResponse(
+                request,
                 "partials/test_result.html",
                 {
-                    "request": request,
                     "error": f"Invalid JSON payload: {e}",
                 },
             )
 
         result = await test_runner.run(config, payload, tier=tier)
         return templates.TemplateResponse(
+            request,
             "partials/test_result.html",
             {
-                "request": request,
                 "result": result,
             },
         )
@@ -292,9 +294,9 @@ def create_app(  # noqa: PLR0915
             return HTMLResponse("Worker not found", status_code=404)
         runs = db.get_eval_runs(name)
         return templates.TemplateResponse(
+            request,
             "workers/eval.html",
             {
-                "request": request,
                 "config": config,
                 "name": name,
                 "runs": runs,
@@ -341,9 +343,9 @@ def create_app(  # noqa: PLR0915
         if baseline and baseline["run_id"] != run_id:
             baseline_comparison = db.compare_against_baseline(name, run_id)
         return templates.TemplateResponse(
+            request,
             "workers/eval_detail.html",
             {
-                "request": request,
                 "name": name,
                 "run": run,
                 "results": results,
@@ -370,9 +372,9 @@ def create_app(  # noqa: PLR0915
     async def pipelines_list(request: Request):
         pipelines = config_mgr.list_pipelines()
         return templates.TemplateResponse(
+            request,
             "pipelines/list.html",
             {
-                "request": request,
                 "pipelines": pipelines,
             },
         )
@@ -386,9 +388,9 @@ def create_app(  # noqa: PLR0915
         graph = PipelineEditor.get_dependency_graph(config)
         workers = config_mgr.list_workers()
         return templates.TemplateResponse(
+            request,
             "pipelines/editor.html",
             {
-                "request": request,
                 "config": config,
                 "name": name,
                 "graph": graph,
@@ -448,8 +450,9 @@ def create_app(  # noqa: PLR0915
         apps = app_mgr.list_apps()
         error = request.query_params.get("error")
         return templates.TemplateResponse(
+            request,
             "apps/list.html",
-            {"request": request, "apps": apps, "error": error},
+            {"apps": apps, "error": error},
         )
 
     @app.get("/apps/{name}", response_class=HTMLResponse)
@@ -459,8 +462,9 @@ def create_app(  # noqa: PLR0915
         except (FileNotFoundError, ValueError):
             return HTMLResponse("App not found", status_code=404)
         return templates.TemplateResponse(
+            request,
             "apps/detail.html",
-            {"request": request, "manifest": manifest},
+            {"manifest": manifest},
         )
 
     @app.post("/apps/deploy")
@@ -510,9 +514,9 @@ def create_app(  # noqa: PLR0915
         replay_log = dead_letter_consumer.replay_log(limit=50)
         replay_count = dead_letter_consumer.replay_count()
         return templates.TemplateResponse(
+            request,
             "dead_letters.html",
             {
-                "request": request,
                 "entries": entries,
                 "total": total,
                 "replay_log": replay_log,

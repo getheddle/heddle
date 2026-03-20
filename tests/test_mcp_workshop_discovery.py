@@ -103,9 +103,7 @@ class TestDiscoverWorkshopTools:
             "workshop.deadletter.list",
         ]
         for name in read_only_tools:
-            assert by_name[name]["_loom"].get("read_only") is True, (
-                f"{name} should be read_only"
-            )
+            assert by_name[name]["_loom"].get("read_only") is True, f"{name} should be read_only"
 
         # These should NOT be read_only.
         assert "read_only" not in by_name["workshop.worker.update"]["_loom"]
