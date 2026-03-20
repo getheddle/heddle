@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from loom.workshop.app_manager import AppDeployError, AppManager
+from loom.workshop.app_manager import AppDeployError, AppManager, _validate_config_path
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -210,3 +210,130 @@ class TestAppManagerReload:
         msg = await sub._queue.get()
         assert msg["action"] == "reload"
         await bus.close()
+
+
+# ---------------------------------------------------------------------------
+# P1.5 — Deployment safety (symlinks, atomic deploy, path traversal)
+# ---------------------------------------------------------------------------
+
+
+class TestDeploymentSafety:
+    """Tests for ZIP symlink rejection, atomic deploy, and config path validation."""
+
+    def test_symlink_in_zip_rejected(self, tmp_path):
+        """ZIP entries with symlink external_attr are rejected."""
+        mgr = AppManager(apps_dir=str(tmp_path / "apps"))
+        zip_path = tmp_path / "symlink-app.zip"
+
+        manifest = {
+            "name": "sym-app",
+            "version": "1.0.0",
+            "description": "Test",
+        }
+
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.yaml", yaml.dump(manifest))
+            # Create a ZipInfo that looks like a symlink.
+            info = zipfile.ZipInfo("evil-link")
+            # S_IFLNK (0o120000) in the upper 16 bits of external_attr.
+            info.external_attr = (0o120777) << 16
+            zf.writestr(info, "/etc/passwd")
+
+        with pytest.raises(AppDeployError, match="symlink"):
+            mgr.deploy_app(zip_path)
+
+    def test_atomic_deploy_preserves_old_on_failure(self, tmp_path):
+        """If deployment fails mid-extraction, the previous version stays intact."""
+        apps_dir = tmp_path / "apps"
+        mgr = AppManager(apps_dir=str(apps_dir))
+
+        # Deploy v1 successfully.
+        zip_v1 = _make_app_zip(tmp_path)
+        mgr.deploy_app(zip_v1)
+        assert mgr.get_app("test-app").version == "1.0.0"
+
+        # Create a v2 ZIP with a symlink that will cause deploy to fail.
+        v2_dir = tmp_path / "v2"
+        v2_dir.mkdir()
+        v2_manifest = {**VALID_MANIFEST, "version": "2.0.0"}
+        zip_v2 = v2_dir / "test-app-v2.zip"
+        with zipfile.ZipFile(zip_v2, "w") as zf:
+            zf.writestr("manifest.yaml", yaml.dump(v2_manifest))
+            zf.writestr("configs/workers/my_worker.yaml", yaml.dump(WORKER_CONFIG))
+            info = zipfile.ZipInfo("sneaky-link")
+            info.external_attr = (0o120777) << 16
+            zf.writestr(info, "target")
+
+        with pytest.raises(AppDeployError, match="symlink"):
+            mgr.deploy_app(zip_v2)
+
+        # v1 should still be intact.
+        assert mgr.get_app("test-app").version == "1.0.0"
+
+    def test_atomic_deploy_cleans_temp_dir_on_failure(self, tmp_path):
+        """Temp directories are cleaned up when deployment fails."""
+        apps_dir = tmp_path / "apps"
+        mgr = AppManager(apps_dir=str(apps_dir))
+
+        # Create a ZIP with a symlink to trigger failure after extraction.
+        zip_path = tmp_path / "bad.zip"
+        manifest = {"name": "bad-app", "version": "1.0.0", "description": "Test"}
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.yaml", yaml.dump(manifest))
+            info = zipfile.ZipInfo("link")
+            info.external_attr = (0o120777) << 16
+            zf.writestr(info, "target")
+
+        with pytest.raises(AppDeployError):
+            mgr.deploy_app(zip_path)
+
+        # No temp dirs should remain in apps_dir.
+        remaining = list(apps_dir.iterdir())
+        temp_dirs = [d for d in remaining if d.name.startswith(".deploy-")]
+        assert temp_dirs == []
+
+    def test_config_path_traversal_rejected(self, tmp_path):
+        """Manifest config paths that escape the app dir are rejected."""
+        mgr = AppManager(apps_dir=str(tmp_path / "apps"))
+
+        bad_manifest = {
+            "name": "traverse-app",
+            "version": "1.0.0",
+            "description": "Test",
+            "entry_configs": {
+                "workers": [
+                    {"config": "../../../etc/passwd"},
+                ],
+            },
+        }
+        zip_path = tmp_path / "traverse.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.yaml", yaml.dump(bad_manifest))
+            # The unsafe path check runs before the "file missing" check,
+            # but the ".." check in names runs first. Add the path so it
+            # doesn't fail there.
+
+        # Should fail on either the ".." in names check or config path validation.
+        with pytest.raises(AppDeployError):
+            mgr.deploy_app(zip_path)
+
+    def test_absolute_config_path_rejected(self, tmp_path):
+        """Manifest config paths that are absolute are rejected."""
+        with pytest.raises(AppDeployError, match="absolute"):
+            _validate_config_path("/etc/passwd")
+
+    def test_valid_config_path_accepted(self):
+        """Normal config paths pass validation."""
+        # Should not raise.
+        _validate_config_path("configs/workers/my_worker.yaml")
+        _validate_config_path("configs/pipelines/pipeline.yaml")
+
+    def test_deploy_creates_no_symlinks_on_disk(self, tmp_path):
+        """Successful deployment has no symlinks in the extracted directory."""
+        mgr = AppManager(apps_dir=str(tmp_path / "apps"))
+        zip_path = _make_app_zip(tmp_path)
+        mgr.deploy_app(zip_path)
+
+        app_dir = tmp_path / "apps" / "test-app"
+        for item in app_dir.rglob("*"):
+            assert not item.is_symlink(), f"Unexpected symlink: {item}"

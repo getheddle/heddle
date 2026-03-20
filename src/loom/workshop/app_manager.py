@@ -8,11 +8,21 @@ configs become visible in the Workshop alongside the base configs.
 
 After deployment, a reload message is published to ``loom.control.reload``
 so running actors pick up new or changed configs without restart.
+
+Security:
+    - ZIP entries with ``..`` segments, absolute paths, or symlinks are
+      rejected before any files are written to disk.
+    - Extraction uses an atomic deploy strategy: files go to a temporary
+      directory first and are moved into place only on success.  A failed
+      deployment leaves the previous version intact.
+    - Config paths referenced in the manifest are validated against path
+      traversal (must stay within the app directory).
 """
 
 from __future__ import annotations
 
 import shutil
+import tempfile
 import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -27,6 +37,31 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 DEFAULT_APPS_DIR = "~/.loom/apps"
+
+
+def _validate_config_path(config_path: str) -> None:
+    """Validate that a config path stays within the app boundary.
+
+    Rejects paths that would resolve outside the app directory via
+    ``..`` segments, absolute paths, or other traversal tricks.
+
+    Raises:
+        AppDeployError: If the path escapes the app directory.
+    """
+    # Normalize the path and check for traversal.
+    normalized = Path(config_path).as_posix()
+    if normalized.startswith("/"):
+        msg = f"Config path is absolute: {config_path}"
+        raise AppDeployError(msg)
+
+    # Resolve against a synthetic root to detect traversal.
+    from pathlib import PurePosixPath
+
+    root = PurePosixPath("/app-root")
+    resolved = (root / normalized).as_posix()
+    if not resolved.startswith("/app-root/"):
+        msg = f"Config path escapes app directory: {config_path}"
+        raise AppDeployError(msg)
 
 
 class AppDeployError(Exception):
@@ -81,14 +116,71 @@ class AppManager:
         """Return the configs directory for a deployed app."""
         return self.apps_dir / app_name / "configs"
 
+    @staticmethod
+    def _validate_zip(zf: zipfile.ZipFile) -> AppManifest:
+        """Validate ZIP structure, manifest, security, and return manifest.
+
+        Raises ``AppDeployError`` on any validation failure.
+        """
+        import yaml
+
+        names = zf.namelist()
+        if "manifest.yaml" not in names:
+            msg = "ZIP must contain manifest.yaml at the root"
+            raise AppDeployError(msg)
+
+        # Parse and validate manifest.
+        manifest_data = yaml.safe_load(zf.read("manifest.yaml"))
+        if not isinstance(manifest_data, dict):
+            msg = "manifest.yaml must be a YAML mapping"
+            raise AppDeployError(msg)
+
+        errors = validate_app_manifest(manifest_data)
+        if errors:
+            msg = f"Invalid manifest: {'; '.join(errors)}"
+            raise AppDeployError(msg)
+
+        manifest = AppManifest(**manifest_data)
+
+        # Security: reject paths that escape the extraction directory.
+        for name in names:
+            if name.startswith("/") or ".." in name:
+                msg = f"ZIP contains unsafe path: {name}"
+                raise AppDeployError(msg)
+
+        # Security: reject symlinks in ZIP entries.
+        for info in zf.infolist():
+            # ZIP external_attr: upper 16 bits are Unix mode.
+            # Symlinks have S_IFLNK (0o120000) in the mode bits.
+            unix_mode = info.external_attr >> 16
+            if unix_mode & 0o170000 == 0o120000:
+                msg = f"ZIP contains symlink: {info.filename}"
+                raise AppDeployError(msg)
+
+        # Verify referenced config files exist and paths are safe.
+        for ref_list in [
+            manifest.entry_configs.workers,
+            manifest.entry_configs.pipelines,
+            manifest.entry_configs.schedulers,
+            manifest.entry_configs.mcp,
+        ]:
+            for ref in ref_list:
+                if ref.config not in names:
+                    msg = f"Manifest references missing file: {ref.config}"
+                    raise AppDeployError(msg)
+                _validate_config_path(ref.config)
+
+        return manifest
+
     def deploy_app(self, zip_path: Path) -> AppManifest:
         """Deploy an app from a ZIP archive.
 
         Steps:
-        1. Validate the ZIP structure (must contain manifest.yaml)
-        2. Parse and validate the manifest
-        3. Extract to ``apps_dir / app_name /``
-        4. Return the parsed manifest
+        1. Validate the ZIP structure, manifest, and security constraints
+        2. Atomic extract: write to temp dir, move into place on success
+        3. Return the parsed manifest
+
+        If extraction fails, the previous deployment (if any) is preserved.
 
         Args:
             zip_path: Path to the ZIP file.
@@ -108,53 +200,36 @@ class AppManager:
             raise AppDeployError(msg)
 
         with zipfile.ZipFile(zip_path, "r") as zf:
-            # Check for manifest.yaml at root
-            names = zf.namelist()
-            if "manifest.yaml" not in names:
-                msg = "ZIP must contain manifest.yaml at the root"
-                raise AppDeployError(msg)
+            manifest = self._validate_zip(zf)
 
-            # Read and validate manifest before extracting
-            import yaml
+            # Atomic deployment: extract to temp dir, then move into place.
+            app_dir = self.apps_dir / manifest.name
+            tmp_dir = None
+            try:
+                tmp_dir = Path(
+                    tempfile.mkdtemp(
+                        prefix=f".deploy-{manifest.name}-",
+                        dir=self.apps_dir,
+                    )
+                )
+                zf.extractall(tmp_dir)
 
-            manifest_data = yaml.safe_load(zf.read("manifest.yaml"))
-            if not isinstance(manifest_data, dict):
-                msg = "manifest.yaml must be a YAML mapping"
-                raise AppDeployError(msg)
-
-            errors = validate_app_manifest(manifest_data)
-            if errors:
-                msg = f"Invalid manifest: {'; '.join(errors)}"
-                raise AppDeployError(msg)
-
-            manifest = AppManifest(**manifest_data)
-
-            # Security: reject paths that escape the extraction directory
-            for name in names:
-                if name.startswith("/") or ".." in name:
-                    msg = f"ZIP contains unsafe path: {name}"
-                    raise AppDeployError(msg)
-
-            # Verify referenced config files exist in the ZIP
-            for ref_list in [
-                manifest.entry_configs.workers,
-                manifest.entry_configs.pipelines,
-                manifest.entry_configs.schedulers,
-                manifest.entry_configs.mcp,
-            ]:
-                for ref in ref_list:
-                    if ref.config not in names:
-                        msg = f"Manifest references missing file: {ref.config}"
+                # Post-extraction: verify no symlinks on disk (defense-in-depth).
+                for extracted in tmp_dir.rglob("*"):
+                    if extracted.is_symlink():
+                        msg = f"Extracted file is a symlink: {extracted.name}"
                         raise AppDeployError(msg)
 
-            # Extract to app directory
-            app_dir = self.apps_dir / manifest.name
-            if app_dir.exists():
-                shutil.rmtree(app_dir)
-            app_dir.mkdir(parents=True)
-            zf.extractall(app_dir)
+                # Swap: remove old, move new into place.
+                if app_dir.exists():
+                    shutil.rmtree(app_dir)
+                tmp_dir.rename(app_dir)
+                tmp_dir = None  # Prevent cleanup in finally block.
+            finally:
+                if tmp_dir is not None and tmp_dir.exists():
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
 
-        # Warn about Python packages that need manual install
+        # Warn about Python packages that need manual install.
         if manifest.python_package:
             pkg = manifest.python_package
             install_dir = app_dir / pkg.install_path

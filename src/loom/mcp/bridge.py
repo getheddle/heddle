@@ -23,6 +23,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import structlog
+from pydantic import ValidationError
 
 from loom.core.messages import (
     ModelTier,
@@ -187,18 +188,35 @@ class MCPBridge:
 
                 if task_id == goal_id:
                     # This is the final pipeline result.
-                    return TaskResult(**data)
+                    try:
+                        return TaskResult(**data)
+                    except ValidationError as exc:
+                        raise BridgeError(
+                            f"Malformed pipeline result for goal {goal_id}: {exc}"
+                        ) from exc
 
                 # Intermediate stage result — report progress.
+                worker_type = data.get("worker_type", "unknown")
                 stage_count += 1
+                logger.debug(
+                    "bridge.intermediate_result",
+                    task_id=task_id,
+                    worker_type=worker_type,
+                    goal_id=goal_id,
+                    stage_count=stage_count,
+                )
                 if progress_callback is not None:
                     stage_name = data.get("worker_type", f"stage_{stage_count}")
                     try:
                         cb_result = progress_callback(stage_name, stage_count, 0)
                         if asyncio.iscoroutine(cb_result):
                             await cb_result
-                    except Exception:
-                        pass  # Don't let callback errors break the pipeline.
+                    except Exception as exc:
+                        logger.warning(
+                            "bridge.progress_callback_error",
+                            stage_name=stage_name,
+                            error=str(exc),
+                        )
 
             raise BridgeError("Subscription closed before pipeline completed")
 
@@ -253,8 +271,18 @@ class MCPBridge:
         async def _consume() -> None:
             async for data in sub:
                 if data.get("task_id") == match_task_id:
+                    try:
+                        result = TaskResult(**data)
+                    except ValidationError as exc:
+                        with contextlib.suppress(asyncio.InvalidStateError):
+                            result_future.set_exception(
+                                BridgeError(
+                                    f"Malformed result for task {match_task_id}: {exc}"
+                                )
+                            )
+                        break
                     with contextlib.suppress(asyncio.InvalidStateError):
-                        result_future.set_result(TaskResult(**data))
+                        result_future.set_result(result)
                     break
 
         consume_task = asyncio.create_task(_consume())

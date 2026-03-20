@@ -10,7 +10,14 @@ from loom.core.messages import (
     TaskResult,
     TaskStatus,
 )
-from loom.orchestrator.pipeline import PipelineOrchestrator
+from loom.orchestrator.pipeline import (
+    PipelineMappingError,
+    PipelineOrchestrator,
+    PipelineStageError,
+    PipelineTimeoutError,
+    PipelineValidationError,
+    PipelineWorkerError,
+)
 
 # --- _resolve_path tests ---
 
@@ -937,3 +944,437 @@ class TestPipelineConcurrentGoals:
         """The bus= keyword argument is forwarded to BaseActor."""
         orch, bus = _make_pipeline_orchestrator(tmp_path, stages=[])
         assert orch._bus is bus
+
+
+# --- Typed pipeline error tests (P1.2) ---
+
+
+class TestTypedPipelineErrors:
+    """Verify correct error subclasses are raised for each failure mode."""
+
+    def test_error_hierarchy(self):
+        """All typed errors are subclasses of PipelineStageError."""
+        assert issubclass(PipelineTimeoutError, PipelineStageError)
+        assert issubclass(PipelineValidationError, PipelineStageError)
+        assert issubclass(PipelineWorkerError, PipelineStageError)
+        assert issubclass(PipelineMappingError, PipelineStageError)
+
+    def test_existing_catch_block_catches_subclasses(self):
+        """An `except PipelineStageError` block catches all subtypes."""
+        for cls in (PipelineTimeoutError, PipelineValidationError,
+                    PipelineWorkerError, PipelineMappingError):
+            err = cls("test_stage", "test message")
+            assert isinstance(err, PipelineStageError)
+            assert err.stage_name == "test_stage"
+
+    @pytest.mark.asyncio
+    async def test_mapping_error_raises_pipeline_mapping_error(self, tmp_path):
+        """A bad input_mapping raises PipelineMappingError."""
+        stages = [
+            {
+                "name": "bad_stage",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.nonexistent"},
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test", context={"y": "val"})
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(
+            orch.handle_message(goal.model_dump(mode="json"))
+        )
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+        assert final["status"] == TaskStatus.FAILED.value
+        assert "mapping error" in final["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_input_validation_raises_pipeline_validation_error(self, tmp_path):
+        """Input schema mismatch raises PipelineValidationError."""
+        stages = [
+            {
+                "name": "val_stage",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+                "input_schema": {
+                    "type": "object",
+                    "required": ["x"],
+                    "properties": {"x": {"type": "string"}},
+                },
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        # Pass integer instead of string.
+        goal = OrchestratorGoal(instruction="test", context={"x": 42})
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(
+            orch.handle_message(goal.model_dump(mode="json"))
+        )
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+        assert final["status"] == TaskStatus.FAILED.value
+        assert "input validation failed" in final["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_timeout_raises_pipeline_timeout_error(self, tmp_path):
+        """A stage timeout raises PipelineTimeoutError."""
+        stages = [
+            {
+                "name": "slow_stage",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+                "timeout_seconds": 0.1,  # Very short timeout.
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test", context={"x": "val"})
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        # Don't send any result — let it time out.
+        pipeline_task = asyncio.create_task(
+            orch.handle_message(goal.model_dump(mode="json"))
+        )
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+        assert final["status"] == TaskStatus.FAILED.value
+        assert "timed out" in final["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_worker_failure_raises_pipeline_worker_error(self, tmp_path):
+        """A worker returning FAILED raises PipelineWorkerError."""
+        stages = [
+            {
+                "name": "fail_stage",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test", context={"x": "val"})
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(
+            orch.handle_message(goal.model_dump(mode="json"))
+        )
+
+        data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        fail_result = TaskResult(
+            task_id=data["task_id"],
+            worker_type="w1",
+            status=TaskStatus.FAILED,
+            error="worker crashed",
+            processing_time_ms=10,
+        )
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            fail_result.model_dump(mode="json"),
+        )
+
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+        assert final["status"] == TaskStatus.FAILED.value
+        assert "failed" in final["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_output_validation_raises_pipeline_validation_error(self, tmp_path):
+        """Output schema mismatch raises PipelineValidationError."""
+        stages = [
+            {
+                "name": "out_stage",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+                "output_schema": {
+                    "type": "object",
+                    "required": ["result", "count"],
+                    "properties": {
+                        "result": {"type": "string"},
+                        "count": {"type": "integer"},
+                    },
+                },
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test", context={"x": "val"})
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(
+            orch.handle_message(goal.model_dump(mode="json"))
+        )
+
+        data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        # Return output missing 'count'.
+        ok_result = TaskResult(
+            task_id=data["task_id"],
+            worker_type="w1",
+            status=TaskStatus.COMPLETED,
+            output={"result": "ok"},  # Missing 'count'.
+            processing_time_ms=10,
+        )
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            ok_result.model_dump(mode="json"),
+        )
+
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+        assert final["status"] == TaskStatus.FAILED.value
+        assert "output validation failed" in final["error"].lower()
+
+
+class TestStageRetry:
+    """Test per-stage retry behavior."""
+
+    @pytest.mark.asyncio
+    async def test_retry_on_worker_failure_then_succeed(self, tmp_path):
+        """Worker fails once, retries, succeeds on second attempt."""
+        stages = [
+            {
+                "name": "retry_stage",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+                "max_retries": 1,
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test retry", context={"x": "val"})
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(
+            orch.handle_message(goal.model_dump(mode="json"))
+        )
+
+        # First attempt — worker fails.
+        data1 = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        fail_result = TaskResult(
+            task_id=data1["task_id"],
+            worker_type="w1",
+            status=TaskStatus.FAILED,
+            error="transient error",
+            processing_time_ms=10,
+        )
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            fail_result.model_dump(mode="json"),
+        )
+
+        # Second attempt (retry) — worker succeeds.
+        data2 = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        ok_result = TaskResult(
+            task_id=data2["task_id"],
+            worker_type="w1",
+            status=TaskStatus.COMPLETED,
+            output={"result": "success"},
+            processing_time_ms=10,
+        )
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            ok_result.model_dump(mode="json"),
+        )
+
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+        assert final["status"] == TaskStatus.COMPLETED.value
+        assert final["output"]["retry_stage"]["result"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_retry_exhausted_raises_last_error(self, tmp_path):
+        """After exhausting retries, the pipeline fails."""
+        stages = [
+            {
+                "name": "doomed",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+                "max_retries": 1,
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test", context={"x": "val"})
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(
+            orch.handle_message(goal.model_dump(mode="json"))
+        )
+
+        # Both attempts fail.
+        for _ in range(2):
+            data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+            fail_result = TaskResult(
+                task_id=data["task_id"],
+                worker_type="w1",
+                status=TaskStatus.FAILED,
+                error="persistent error",
+                processing_time_ms=10,
+            )
+            await bus.publish(
+                f"loom.results.{goal.goal_id}",
+                fail_result.model_dump(mode="json"),
+            )
+
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+        assert final["status"] == TaskStatus.FAILED.value
+        assert "failed" in final["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_no_retry_on_validation_error(self, tmp_path):
+        """Validation errors are NOT retried — fail immediately."""
+        stages = [
+            {
+                "name": "val_no_retry",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+                "input_schema": {
+                    "type": "object",
+                    "required": ["x"],
+                    "properties": {"x": {"type": "string"}},
+                },
+                "max_retries": 3,  # Should NOT be used for validation errors.
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        # Pass integer — validation fails before dispatch.
+        goal = OrchestratorGoal(instruction="test", context={"x": 42})
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(
+            orch.handle_message(goal.model_dump(mode="json"))
+        )
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        # No tasks should have been dispatched (validation fails before dispatch).
+        # We check by verifying the pipeline failed and no tasks were sent.
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+        assert final["status"] == TaskStatus.FAILED.value
+        assert "input validation failed" in final["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_no_retry_on_mapping_error(self, tmp_path):
+        """Mapping errors are NOT retried — fail immediately."""
+        stages = [
+            {
+                "name": "map_no_retry",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.missing_key"},
+                "max_retries": 3,  # Should NOT be used for mapping errors.
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test", context={"y": "val"})
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(
+            orch.handle_message(goal.model_dump(mode="json"))
+        )
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+        assert final["status"] == TaskStatus.FAILED.value
+        assert "mapping error" in final["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_retry_on_timeout_then_succeed(self, tmp_path):
+        """Timeout on first attempt, success on retry."""
+        stages = [
+            {
+                "name": "timeout_retry",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+                "timeout_seconds": 0.2,
+                "max_retries": 1,
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test", context={"x": "val"})
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(
+            orch.handle_message(goal.model_dump(mode="json"))
+        )
+
+        # First attempt — don't respond (let it time out).
+        await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        # Don't send a result — timeout triggers retry.
+
+        # Second attempt (retry) — respond successfully.
+        data2 = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        ok_result = TaskResult(
+            task_id=data2["task_id"],
+            worker_type="w1",
+            status=TaskStatus.COMPLETED,
+            output={"result": "recovered"},
+            processing_time_ms=10,
+        )
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            ok_result.model_dump(mode="json"),
+        )
+
+        await asyncio.wait_for(pipeline_task, timeout=5)
+
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+        assert final["status"] == TaskStatus.COMPLETED.value
+        assert final["output"]["timeout_retry"]["result"] == "recovered"

@@ -83,6 +83,22 @@ class PipelineStageError(Exception):
         super().__init__(message)
 
 
+class PipelineTimeoutError(PipelineStageError):
+    """Raised when a pipeline stage times out waiting for a result."""
+
+
+class PipelineValidationError(PipelineStageError):
+    """Raised when input or output schema validation fails for a stage."""
+
+
+class PipelineWorkerError(PipelineStageError):
+    """Raised when a worker returns FAILED status for a stage."""
+
+
+class PipelineMappingError(PipelineStageError):
+    """Raised when input_mapping resolution fails for a stage."""
+
+
 class PipelineOrchestrator(BaseActor):
     """
     Pipeline orchestrator with automatic stage parallelism.
@@ -216,8 +232,12 @@ class PipelineOrchestrator(BaseActor):
         Returns ``(stage_name, result_dict)`` on success where result_dict
         has keys ``output``, ``model_used``, ``processing_time_ms``.
 
-        Raises ``PipelineStageError`` on mapping errors, timeouts, or
-        worker failures.
+        Raises typed ``PipelineStageError`` subclasses on failure:
+        ``PipelineMappingError``, ``PipelineValidationError``,
+        ``PipelineTimeoutError``, ``PipelineWorkerError``.
+
+        Retries on ``PipelineWorkerError`` and ``PipelineTimeoutError``
+        up to ``max_retries`` times (from stage config, default 0).
         """
         stage_name = stage["name"]
         stage_log = log.bind(stage=stage_name)
@@ -237,64 +257,82 @@ class PipelineOrchestrator(BaseActor):
         try:
             payload = self._build_stage_payload(stage, context)
         except (KeyError, ValueError) as e:
-            raise PipelineStageError(stage_name, f"Stage '{stage_name}' mapping error: {e}") from e
+            msg = f"Stage '{stage_name}' mapping error: {e}"
+            raise PipelineMappingError(stage_name, msg) from e
 
         # Validate payload against stage's input_schema (if declared).
         stage_input_schema = stage.get("input_schema")
         if stage_input_schema:
             errors = validate_input(payload, stage_input_schema)
             if errors:
-                raise PipelineStageError(
+                raise PipelineValidationError(
                     stage_name,
                     f"Stage '{stage_name}' input validation failed: {errors}",
                 )
 
-        task = TaskMessage(
-            worker_type=stage["worker_type"],
-            payload=payload,
-            model_tier=ModelTier(stage.get("tier", "local")),
-            parent_task_id=goal.goal_id,
-            metadata={
-                "stage_name": stage_name,
-                "model_tier": stage.get("tier", "local"),
-            },
-        )
+        # Dispatch and wait, with optional retry for transient errors.
+        max_retries = stage.get("max_retries", 0)
+        last_error: PipelineStageError | None = None
 
-        stage_log.info("pipeline.stage_dispatching", worker_type=stage["worker_type"])
-        await self.publish("loom.tasks.incoming", task.model_dump(mode="json"))
-
-        # Wait for result.
-        stage_timeout = stage.get("timeout_seconds", timeout)
-        result = await self._wait_for_result(task.task_id, goal.goal_id, stage_timeout)
-
-        if result is None:
-            raise PipelineStageError(
-                stage_name,
-                f"Stage '{stage_name}' timed out after {stage_timeout}s",
-            )
-
-        if result.status == TaskStatus.FAILED:
-            raise PipelineStageError(
-                stage_name,
-                f"Stage '{stage_name}' failed: {result.error}",
-            )
-
-        # Validate result against stage's output_schema (if declared).
-        stage_output_schema = stage.get("output_schema")
-        if stage_output_schema and result.output is not None:
-            output_errors = validate_output(result.output, stage_output_schema)
-            if output_errors:
-                raise PipelineStageError(
-                    stage_name,
-                    f"Stage '{stage_name}' output validation failed: {output_errors}",
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                stage_log.warning(
+                    "pipeline.stage_retry",
+                    attempt=attempt,
+                    max_retries=max_retries,
                 )
 
-        stage_log.info("pipeline.stage_completed", ms=result.processing_time_ms)
-        return stage_name, {
-            "output": result.output,
-            "model_used": result.model_used,
-            "processing_time_ms": result.processing_time_ms,
-        }
+            task = TaskMessage(
+                worker_type=stage["worker_type"],
+                payload=payload,
+                model_tier=ModelTier(stage.get("tier", "local")),
+                parent_task_id=goal.goal_id,
+                metadata={
+                    "stage_name": stage_name,
+                    "model_tier": stage.get("tier", "local"),
+                },
+            )
+
+            stage_log.info("pipeline.stage_dispatching", worker_type=stage["worker_type"])
+            await self.publish("loom.tasks.incoming", task.model_dump(mode="json"))
+
+            # Wait for result.
+            stage_timeout = stage.get("timeout_seconds", timeout)
+            result = await self._wait_for_result(task.task_id, goal.goal_id, stage_timeout)
+
+            if result is None:
+                last_error = PipelineTimeoutError(
+                    stage_name,
+                    f"Stage '{stage_name}' timed out after {stage_timeout}s",
+                )
+                continue
+
+            if result.status == TaskStatus.FAILED:
+                last_error = PipelineWorkerError(
+                    stage_name,
+                    f"Stage '{stage_name}' failed: {result.error}",
+                )
+                continue
+
+            # Validate result against stage's output_schema (if declared).
+            stage_output_schema = stage.get("output_schema")
+            if stage_output_schema and result.output is not None:
+                output_errors = validate_output(result.output, stage_output_schema)
+                if output_errors:
+                    raise PipelineValidationError(
+                        stage_name,
+                        f"Stage '{stage_name}' output validation failed: {output_errors}",
+                    )
+
+            stage_log.info("pipeline.stage_completed", ms=result.processing_time_ms)
+            return stage_name, {
+                "output": result.output,
+                "model_used": result.model_used,
+                "processing_time_ms": result.processing_time_ms,
+            }
+
+        # All retries exhausted — raise the last error.
+        raise last_error  # type: ignore[misc]
 
     # ------------------------------------------------------------------
     # Core message handler
@@ -378,10 +416,15 @@ class PipelineOrchestrator(BaseActor):
                     )
 
         except PipelineStageError as e:
+            # Build a brief input summary for diagnostics.
+            stage_context = context.get("goal", {}).get("context")
+            input_summary = repr(stage_context)[:200] if stage_context else ""
             log.error(
                 "pipeline.stage_failed",
                 stage=e.stage_name,
+                error_type=type(e).__name__,
                 error=str(e),
+                input_summary=input_summary,
             )
             elapsed = int((time.monotonic() - start) * 1000)
             await self._publish_pipeline_result(

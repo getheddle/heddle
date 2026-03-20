@@ -279,6 +279,129 @@ class TestCallPipeline:
 
 
 # ---------------------------------------------------------------------------
+# Error handling
+# ---------------------------------------------------------------------------
+
+
+class TestBridgeErrorHandling:
+    async def test_malformed_worker_result_raises_bridge_error(self, bus, bridge):
+        """Malformed result data (missing required fields) raises BridgeError."""
+        ready = asyncio.Event()
+
+        async def mock_worker():
+            sub = await bus.subscribe("loom.tasks.incoming")
+            ready.set()
+            async for data in sub:
+                parent_id = data["parent_task_id"]
+                # Send malformed result — missing required 'status' and 'worker_type'.
+                await bus.publish(
+                    f"loom.results.{parent_id}",
+                    {"task_id": data["task_id"], "bad_field": "oops"},
+                )
+                await sub.unsubscribe()
+                break
+
+        worker_task = asyncio.create_task(mock_worker())
+        await ready.wait()
+
+        with pytest.raises(BridgeError, match="Malformed result"):
+            await bridge.call_worker(
+                worker_type="summarizer",
+                tier="local",
+                payload={"text": "Hello"},
+                timeout=5,
+            )
+
+        await worker_task
+
+    async def test_malformed_pipeline_result_raises_bridge_error(self, bus, bridge):
+        """Malformed final pipeline result raises BridgeError."""
+        ready = asyncio.Event()
+
+        async def mock_pipeline():
+            sub = await bus.subscribe("loom.goals.incoming")
+            ready.set()
+            async for data in sub:
+                goal_id = data["goal_id"]
+                # Send malformed final result (task_id == goal_id but missing fields).
+                await bus.publish(
+                    f"loom.results.{goal_id}",
+                    {"task_id": goal_id, "not_a_valid_field": True},
+                )
+                await sub.unsubscribe()
+                break
+
+        pipeline_task = asyncio.create_task(mock_pipeline())
+        await ready.wait()
+
+        with pytest.raises(BridgeError, match="Malformed pipeline result"):
+            await bridge.call_pipeline(
+                goal_context={"file_ref": "test.pdf"},
+                timeout=5,
+            )
+
+        await pipeline_task
+
+    async def test_progress_callback_error_is_logged(self, bus, bridge, caplog):
+        """Progress callback exceptions are logged but don't break pipeline."""
+        ready = asyncio.Event()
+
+        async def mock_pipeline():
+            sub = await bus.subscribe("loom.goals.incoming")
+            ready.set()
+            async for data in sub:
+                goal_id = data["goal_id"]
+                # Intermediate stage result.
+                stage_result = TaskResult(
+                    task_id="stage-1-id",
+                    worker_type="extractor",
+                    status=TaskStatus.COMPLETED,
+                    output={"text": "extracted"},
+                )
+                await bus.publish(
+                    f"loom.results.{goal_id}", stage_result.model_dump(mode="json")
+                )
+                await asyncio.sleep(0.01)
+                # Final result.
+                final_result = TaskResult(
+                    task_id=goal_id,
+                    worker_type="pipeline",
+                    status=TaskStatus.COMPLETED,
+                    output={"final": "done"},
+                )
+                await bus.publish(
+                    f"loom.results.{goal_id}", final_result.model_dump(mode="json")
+                )
+                await sub.unsubscribe()
+                break
+
+        pipeline_task = asyncio.create_task(mock_pipeline())
+        await ready.wait()
+
+        def bad_callback(stage_name, stage_idx, total):
+            raise ValueError("callback boom")
+
+        import logging
+
+        import structlog
+
+        # Capture structlog output via stdlib logging.
+        structlog.configure(
+            wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
+        )
+
+        result = await bridge.call_pipeline(
+            goal_context={"file_ref": "test.pdf"},
+            timeout=5,
+            progress_callback=bad_callback,
+        )
+
+        # Pipeline should still complete successfully.
+        assert result == {"final": "done"}
+        await pipeline_task
+
+
+# ---------------------------------------------------------------------------
 # Connection management
 # ---------------------------------------------------------------------------
 
