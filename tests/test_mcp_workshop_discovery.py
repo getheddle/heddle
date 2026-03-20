@@ -4,8 +4,8 @@ from loom.mcp.workshop_discovery import discover_workshop_tools
 
 
 class TestDiscoverWorkshopTools:
-    def test_all_tools_discovered_by_default(self):
-        """Default config enables all tool groups."""
+    def test_default_tools_exclude_deadletter(self):
+        """Default config enables all groups except deadletter (not wired to live NATS)."""
         tools = discover_workshop_tools({})
         names = {t["name"] for t in tools}
 
@@ -16,8 +16,19 @@ class TestDiscoverWorkshopTools:
         assert "workshop.eval.run" in names
         assert "workshop.eval.compare" in names
         assert "workshop.impact.analyze" in names
+        # Dead-letter tools require explicit opt-in.
+        assert "workshop.deadletter.list" not in names
+        assert "workshop.deadletter.replay" not in names
+
+    def test_all_tools_with_explicit_enable(self):
+        """All groups including deadletter when explicitly enabled."""
+        tools = discover_workshop_tools(
+            {"enable": ["worker", "test", "eval", "impact", "deadletter"]}
+        )
+        names = {t["name"] for t in tools}
         assert "workshop.deadletter.list" in names
         assert "workshop.deadletter.replay" in names
+        assert len(tools) == 9
 
     def test_selective_enable(self):
         """Only requested tool groups are included."""
@@ -79,7 +90,8 @@ class TestDiscoverWorkshopTools:
 
     def test_read_only_flags(self):
         """Read-only tools have read_only=True in _loom metadata."""
-        tools = discover_workshop_tools({})
+        all_groups = ["worker", "test", "eval", "impact", "deadletter"]
+        tools = discover_workshop_tools({"enable": all_groups})
         by_name = {t["name"]: t for t in tools}
 
         read_only_tools = [

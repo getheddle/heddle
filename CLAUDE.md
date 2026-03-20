@@ -346,14 +346,16 @@ tools:
   workshop:                       # Optional workshop tools section
     configs_dir: "configs/"       # Worker/pipeline config directory
     apps_dir: "~/.loom/apps/"     # Deployed app bundles (optional)
-    enable:                       # Tool groups to enable (default: all)
+    enable:                       # Tool groups to enable (default: worker,test,eval,impact)
       - worker                    # workshop.worker.{list,get,update}
       - test                      # workshop.worker.test
       - eval                      # workshop.eval.{run,compare}
       - impact                    # workshop.impact.analyze
-      - deadletter                # workshop.deadletter.{list,replay}
+      - deadletter                # workshop.deadletter.{list,replay} — opt-in only (see below)
 ```
 Workshop tools support MCP `ToolAnnotations` — `workshop.deadletter.replay` is marked `destructiveHint: true`.
+
+**Dead-letter tools are opt-in:** The MCP path creates a local in-memory `DeadLetterConsumer` that is **not** subscribed to the live NATS dead-letter stream. Entries only appear if something stores them into that local consumer. Enable `deadletter` explicitly when pairing with a co-located router or for testing workflows.
 
 **Public API:**
 ```python

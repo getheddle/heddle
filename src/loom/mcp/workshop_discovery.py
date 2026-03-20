@@ -28,8 +28,12 @@ def discover_workshop_tools(
     Returns:
         List of tool definition dicts with ``_loom`` metadata.
     """
+    # Dead-letter tools are excluded by default: the MCP path creates a
+    # local in-memory DeadLetterConsumer that is NOT subscribed to the live
+    # NATS dead-letter stream.  Listing/replay only works for entries stored
+    # in that local consumer, which starts empty.  Require explicit opt-in.
     enabled = set(workshop_config.get("enable", [
-        "worker", "test", "eval", "impact", "deadletter",
+        "worker", "test", "eval", "impact",
     ]))
 
     tools: list[dict[str, Any]] = []

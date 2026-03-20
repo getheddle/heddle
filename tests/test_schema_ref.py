@@ -5,14 +5,13 @@ from __future__ import annotations
 import textwrap
 
 import pytest
+from pydantic import BaseModel
 
 from loom.core.config import ConfigValidationError, load_config, resolve_schema_refs
-
 
 # ---------------------------------------------------------------------------
 # A minimal Pydantic model used by the tests (importable from this module)
 # ---------------------------------------------------------------------------
-from pydantic import BaseModel
 
 
 class SampleInput(BaseModel):
