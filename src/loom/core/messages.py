@@ -83,6 +83,7 @@ class TaskMessage(BaseModel):
     max_retries: int = 2  # Max retry attempts before permanent failure
     retry_count: int = 0  # Incremented on each retry by TaskWorker
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    request_id: str | None = None  # Correlates all tasks from the same goal (set by pipeline)
     metadata: dict[str, Any] = Field(default_factory=dict)  # Routing hints, pipeline context
 
 
@@ -122,6 +123,7 @@ class OrchestratorGoal(BaseModel):
     context: dict[str, Any] = Field(
         default_factory=dict
     )  # Domain data (file_ref, categories, etc.)
+    request_id: str | None = None  # Optional correlation ID for tracing goal→task chains
     priority: TaskPriority = TaskPriority.NORMAL
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

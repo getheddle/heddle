@@ -298,10 +298,9 @@ class TaskRouter:
 
         # Step 4: Publish to the resolved worker subject.
         subject = f"loom.tasks.{task.worker_type}.{tier.value}"
-        logger.info(
-            "router.routing",
-            task_id=task.task_id,
-            worker_type=task.worker_type,
+        route_log = logger.bind(task_id=task.task_id, worker_type=task.worker_type)
+        route_log.info(
+            "router.task_routed",
             tier=tier.value,
             subject=subject,
         )

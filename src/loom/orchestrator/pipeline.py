@@ -56,7 +56,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -73,6 +75,16 @@ from loom.core.messages import (
 )
 
 logger = structlog.get_logger()
+
+LOOM_TRACE = bool(os.environ.get("LOOM_TRACE"))
+
+
+def _summarize(data: Any, *, full: bool = LOOM_TRACE) -> str:
+    """Return a repr of *data*, truncated to 200 chars unless *full* is set."""
+    text = repr(data)
+    if full:
+        return text
+    return text[:200]
 
 
 class PipelineStageError(Exception):
@@ -270,6 +282,13 @@ class PipelineOrchestrator(BaseActor):
                     f"Stage '{stage_name}' input validation failed: {errors}",
                 )
 
+        # Log stage input summary for tracing.
+        stage_log.info("pipeline.stage_input", summary=_summarize(payload))
+
+        # Record stage start time for execution timeline.
+        stage_started_at = datetime.now(UTC).isoformat()
+        stage_start_mono = time.monotonic()
+
         # Dispatch and wait, with optional retry for transient errors.
         max_retries = stage.get("max_retries", 0)
         last_error: PipelineStageError | None = None
@@ -287,6 +306,7 @@ class PipelineOrchestrator(BaseActor):
                 payload=payload,
                 model_tier=ModelTier(stage.get("tier", "local")),
                 parent_task_id=goal.goal_id,
+                request_id=goal.goal_id,
                 metadata={
                     "stage_name": stage_name,
                     "model_tier": stage.get("tier", "local"),
@@ -324,11 +344,17 @@ class PipelineOrchestrator(BaseActor):
                         f"Stage '{stage_name}' output validation failed: {output_errors}",
                     )
 
+            stage_log.info("pipeline.stage_output", summary=_summarize(result.output))
+            stage_ended_at = datetime.now(UTC).isoformat()
+            stage_elapsed_ms = int((time.monotonic() - stage_start_mono) * 1000)
             stage_log.info("pipeline.stage_completed", ms=result.processing_time_ms)
             return stage_name, {
                 "output": result.output,
                 "model_used": result.model_used,
                 "processing_time_ms": result.processing_time_ms,
+                "started_at": stage_started_at,
+                "ended_at": stage_ended_at,
+                "wall_time_ms": stage_elapsed_ms,
             }
 
         # All retries exhausted — raise the last error.
@@ -344,7 +370,11 @@ class PipelineOrchestrator(BaseActor):
         stages = self.config["pipeline_stages"]
         timeout = self.config.get("timeout_seconds", 300)
 
-        log = logger.bind(goal_id=goal.goal_id, pipeline=self.config["name"])
+        log = logger.bind(
+            goal_id=goal.goal_id,
+            pipeline=self.config["name"],
+            request_id=goal.request_id or goal.goal_id,
+        )
 
         # Build execution levels from dependency graph.
         deps = self._infer_dependencies(stages)
@@ -459,11 +489,26 @@ class PipelineOrchestrator(BaseActor):
             for name, data in context.items()
             if name != "goal" and isinstance(data, dict) and "output" in data
         }
+
+        # Build execution timeline for observability.
+        timeline = [
+            {
+                "stage": name,
+                "started_at": data.get("started_at"),
+                "ended_at": data.get("ended_at"),
+                "wall_time_ms": data.get("wall_time_ms"),
+                "processing_time_ms": data.get("processing_time_ms"),
+            }
+            for name, data in context.items()
+            if name != "goal" and isinstance(data, dict) and "started_at" in data
+        ]
+
         await self._publish_pipeline_result(
             goal,
             TaskStatus.COMPLETED,
             output=final_output,
             elapsed=elapsed,
+            timeline=timeline,
         )
 
     # ------------------------------------------------------------------
@@ -590,8 +635,18 @@ class PipelineOrchestrator(BaseActor):
         output: dict | None = None,
         error: str | None = None,
         elapsed: int = 0,
+        timeline: list[dict[str, Any]] | None = None,
     ) -> None:
-        """Publish the final pipeline result back to the goal's result subject."""
+        """Publish the final pipeline result back to the goal's result subject.
+
+        When *timeline* is provided, it is included in the output under the
+        ``_timeline`` key so callers (Workshop, MCP bridge) can inspect
+        per-stage timing without changing the result schema.
+        """
+        # Embed timeline in output (if present) for downstream consumers.
+        if timeline and output is not None:
+            output = {**output, "_timeline": timeline}
+
         result = TaskResult(
             task_id=goal.goal_id,
             parent_task_id=None,

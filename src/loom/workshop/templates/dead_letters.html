@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% set active_nav = "dead_letters" %}
+{% block title %}Dead Letters — Loom Workshop{% endblock %}
+{% block content %}
+<hgroup>
+    <h1>Dead Letters</h1>
+    <p>{{ total }} dead-letter entr{{ 'y' if total == 1 else 'ies' }} stored.</p>
+</hgroup>
+
+{% if total > 0 %}
+<form action="/dead-letters/clear" method="post" style="margin-bottom: 1rem;"
+      onsubmit="return confirm('Clear all dead-letter entries?');">
+    <button type="submit" class="secondary outline small">Clear All</button>
+</form>
+{% endif %}
+
+{% if entries %}
+<div class="table-wrap">
+<table>
+    <thead>
+        <tr>
+            <th scope="col">Timestamp</th>
+            <th scope="col">Task ID</th>
+            <th scope="col">Worker Type</th>
+            <th scope="col">Reason</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for entry in entries %}
+        <tr>
+            <td><time>{{ entry.timestamp }}</time></td>
+            <td><code>{{ entry.task_id or '—' }}</code></td>
+            <td><kbd>{{ entry.worker_type or '—' }}</kbd></td>
+            <td>{{ entry.reason }}</td>
+            <td>
+                <form action="/dead-letters/{{ loop.index0 }}/replay" method="post" style="display:inline;">
+                    <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                    <button type="submit" class="outline small">Replay</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% elif total == 0 %}
+<p>No dead-letter entries. Tasks that fail routing will appear here.</p>
+{% endif %}
+{% endblock %}

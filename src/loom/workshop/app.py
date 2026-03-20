@@ -18,6 +18,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from loom.bus.memory import InMemoryBus
+from loom.router.dead_letter import DeadLetterConsumer
 from loom.worker.backends import build_backends_from_env
 from loom.workshop.app_manager import AppManager
 from loom.workshop.config_manager import ConfigManager
@@ -92,6 +94,11 @@ def create_app(  # noqa: PLR0915
     eval_runner = EvalRunner(test_runner, db)
     app_mgr = AppManager(apps_dir=apps_dir)
     config_mgr = ConfigManager(configs_dir, db, extra_config_dirs=_build_extra_config_dirs(app_mgr))
+
+    # Dead-letter consumer — always available for manual entry storage;
+    # NATS subscription is handled externally if needed.
+    dead_letter_consumer = DeadLetterConsumer(bus=InMemoryBus())
+    app.state.dead_letter_consumer = dead_letter_consumer  # type: ignore[attr-defined]
 
     logger.info(
         "workshop.initialized",
@@ -405,5 +412,33 @@ def create_app(  # noqa: PLR0915
         except FileNotFoundError:
             pass
         return RedirectResponse(url="/apps", status_code=303)
+
+    # --- Dead Letters ---
+
+    @app.get("/dead-letters", response_class=HTMLResponse)
+    async def dead_letters_list(request: Request):
+        entries = dead_letter_consumer.list_entries(limit=100)
+        total = dead_letter_consumer.count()
+        return templates.TemplateResponse(
+            "dead_letters.html",
+            {
+                "request": request,
+                "entries": entries,
+                "total": total,
+            },
+        )
+
+    @app.post("/dead-letters/{index}/replay", response_class=RedirectResponse)
+    async def dead_letter_replay(request: Request, index: int):  # noqa: ARG001
+        form = await request.form()
+        entry_id = form.get("entry_id", "")
+        bus = dead_letter_consumer._bus
+        await dead_letter_consumer.replay(str(entry_id), bus)
+        return RedirectResponse(url="/dead-letters", status_code=303)
+
+    @app.post("/dead-letters/clear", response_class=RedirectResponse)
+    async def dead_letters_clear():
+        dead_letter_consumer.clear()
+        return RedirectResponse(url="/dead-letters", status_code=303)
 
     return app

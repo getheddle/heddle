@@ -735,5 +735,44 @@ def mdns(workshop_port: int, nats_port: int, mcp_port: int, host: str | None):
         asyncio.run(_run())
 
 
+# ---------------------------------------------------------------------------
+# dead-letter command group
+# ---------------------------------------------------------------------------
+
+
+@cli.group("dead-letter")
+def dead_letter_group():
+    """Dead-letter queue inspection and monitoring."""
+    pass
+
+
+@dead_letter_group.command("monitor")
+@click.option("--nats-url", default="nats://nats:4222", help="NATS server URL")
+@click.option("--max-size", default=1000, type=int, help="Max entries to retain in memory")
+def dead_letter_monitor(nats_url: str, max_size: int):
+    """Run the dead-letter consumer (subscribe and log).
+
+    Subscribes to loom.tasks.dead_letter and logs each arriving message.
+    Dead-letter entries are stored in memory for inspection. The consumer
+    runs indefinitely until the process is terminated.
+    """
+    from loom.router.dead_letter import DEAD_LETTER_SUBJECT, DeadLetterConsumer
+
+    consumer = DeadLetterConsumer(
+        actor_id="dead-letter-monitor",
+        max_size=max_size,
+        nats_url=nats_url,
+    )
+
+    logger.info(
+        "dead_letter.monitor_starting",
+        nats_url=nats_url,
+        max_size=max_size,
+        subject=DEAD_LETTER_SUBJECT,
+    )
+
+    asyncio.run(consumer.run(DEAD_LETTER_SUBJECT))
+
+
 if __name__ == "__main__":
     cli()

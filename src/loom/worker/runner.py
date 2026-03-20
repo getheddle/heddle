@@ -290,6 +290,15 @@ class LLMWorker(TaskWorker):
         total_prompt_tokens = result["prompt_tokens"]
         total_completion_tokens = result["completion_tokens"]
 
+        # 4b. Log token usage for cost tracking.
+        logger.info(
+            "worker.llm_usage",
+            worker_type=self.config.get("name", "unknown"),
+            model_used=result.get("model", "unknown"),
+            input_tokens=total_prompt_tokens,
+            output_tokens=total_completion_tokens,
+        )
+
         # 5. Parse JSON output — handles markdown fences and preamble text
         if result.get("content") is None:
             raise ValueError("LLM did not produce a text response after tool-use loop")

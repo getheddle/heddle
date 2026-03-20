@@ -1378,3 +1378,264 @@ class TestStageRetry:
         )
         assert final["status"] == TaskStatus.COMPLETED.value
         assert final["output"]["timeout_retry"]["result"] == "recovered"
+
+
+class TestRequestIdPropagation:
+    """Test that request_id propagates from goal to task messages."""
+
+    @pytest.mark.asyncio
+    async def test_request_id_set_on_dispatched_task(self, tmp_path):
+        """Pipeline sets request_id = goal.goal_id on dispatched TaskMessages."""
+        stages = [
+            {
+                "name": "A",
+                "worker_type": "workerA",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test", context={"x": "val"})
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(
+            orch.handle_message(goal.model_dump(mode="json"))
+        )
+
+        # Read the dispatched task and verify request_id.
+        data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        assert data["request_id"] == goal.goal_id
+
+        # Complete the pipeline so it doesn't hang.
+        result = TaskResult(
+            task_id=data["task_id"],
+            worker_type="workerA",
+            status=TaskStatus.COMPLETED,
+            output={"result": "done"},
+            processing_time_ms=10,
+        )
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            result.model_dump(mode="json"),
+        )
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+    @pytest.mark.asyncio
+    async def test_request_id_consistent_across_stages(self, tmp_path):
+        """All stages in a pipeline share the same request_id (the goal_id)."""
+        stages = [
+            {
+                "name": "A",
+                "worker_type": "workerA",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+            },
+            {
+                "name": "B",
+                "worker_type": "workerB",
+                "tier": "local",
+                "input_mapping": {"y": "goal.context.y"},
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test", context={"x": "1", "y": "2"})
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(
+            orch.handle_message(goal.model_dump(mode="json"))
+        )
+
+        # Both independent stages dispatched — collect and verify request_id.
+        dispatched = []
+        for _ in range(2):
+            data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+            dispatched.append(data)
+
+        for data in dispatched:
+            assert data["request_id"] == goal.goal_id
+
+        # Complete both stages.
+        for data in dispatched:
+            result = TaskResult(
+                task_id=data["task_id"],
+                worker_type=data["worker_type"],
+                status=TaskStatus.COMPLETED,
+                output={"result": "done"},
+                processing_time_ms=10,
+            )
+            await bus.publish(
+                f"loom.results.{goal.goal_id}",
+                result.model_dump(mode="json"),
+            )
+        await asyncio.wait_for(pipeline_task, timeout=3)
+
+
+# --- Pipeline execution timeline tests (P2.4) ---
+
+
+class TestPipelineTimeline:
+    """Verify that pipeline results include execution timeline data."""
+
+    @pytest.mark.asyncio
+    async def test_single_stage_timeline(self, tmp_path):
+        """Completed pipeline includes _timeline with stage timing data."""
+        stages = [
+            {
+                "name": "extract",
+                "worker_type": "extractor",
+                "tier": "local",
+                "input_mapping": {"file_ref": "goal.context.file_ref"},
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test timeline", context={"file_ref": "doc.pdf"})
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
+
+        data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            TaskResult(
+                task_id=data["task_id"],
+                worker_type="extractor",
+                status=TaskStatus.COMPLETED,
+                output={"text": "hello"},
+                processing_time_ms=42,
+            ).model_dump(mode="json"),
+        )
+
+        await asyncio.wait_for(pipeline_task, timeout=3)
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+
+        assert final["status"] == TaskStatus.COMPLETED.value
+        assert "_timeline" in final["output"]
+
+        timeline = final["output"]["_timeline"]
+        assert len(timeline) == 1
+        entry = timeline[0]
+        assert entry["stage"] == "extract"
+        assert entry["started_at"] is not None
+        assert entry["ended_at"] is not None
+        assert entry["wall_time_ms"] >= 0
+        assert entry["processing_time_ms"] == 42
+
+    @pytest.mark.asyncio
+    async def test_multi_stage_timeline_ordering(self, tmp_path):
+        """Timeline entries preserve stage execution order."""
+        stages = [
+            {
+                "name": "A",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+            },
+            {
+                "name": "B",
+                "worker_type": "w2",
+                "tier": "local",
+                "input_mapping": {"y": "A.output.y"},
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test", context={"x": "val"})
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
+
+        # Stage A
+        data_a = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            TaskResult(
+                task_id=data_a["task_id"],
+                worker_type="w1",
+                status=TaskStatus.COMPLETED,
+                output={"y": "from_a"},
+                processing_time_ms=10,
+            ).model_dump(mode="json"),
+        )
+
+        # Stage B
+        data_b = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            TaskResult(
+                task_id=data_b["task_id"],
+                worker_type="w2",
+                status=TaskStatus.COMPLETED,
+                output={"z": "from_b"},
+                processing_time_ms=20,
+            ).model_dump(mode="json"),
+        )
+
+        await asyncio.wait_for(pipeline_task, timeout=3)
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+
+        timeline = final["output"]["_timeline"]
+        assert len(timeline) == 2
+        stage_names = [e["stage"] for e in timeline]
+        assert "A" in stage_names
+        assert "B" in stage_names
+
+        # A should have started before B (sequential dependency).
+        a_entry = next(e for e in timeline if e["stage"] == "A")
+        b_entry = next(e for e in timeline if e["stage"] == "B")
+        assert a_entry["ended_at"] <= b_entry["started_at"]
+
+    @pytest.mark.asyncio
+    async def test_failed_pipeline_has_no_timeline(self, tmp_path):
+        """Failed pipelines don't include timeline (output is None)."""
+        stages = [
+            {
+                "name": "A",
+                "worker_type": "w1",
+                "tier": "local",
+                "input_mapping": {"x": "goal.context.x"},
+            },
+        ]
+        orch, bus = _make_pipeline_orchestrator(tmp_path, stages, timeout=5)
+        await bus.connect()
+
+        goal = OrchestratorGoal(instruction="test", context={"x": "val"})
+        task_sub = await bus.subscribe("loom.tasks.incoming")
+        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+
+        pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
+
+        data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
+        await bus.publish(
+            f"loom.results.{goal.goal_id}",
+            TaskResult(
+                task_id=data["task_id"],
+                worker_type="w1",
+                status=TaskStatus.FAILED,
+                error="boom",
+                processing_time_ms=10,
+            ).model_dump(mode="json"),
+        )
+
+        await asyncio.wait_for(pipeline_task, timeout=3)
+        final = await asyncio.wait_for(
+            _wait_for_pipeline_result(result_sub, goal.goal_id), timeout=3
+        )
+
+        assert final["status"] == TaskStatus.FAILED.value
+        # Failed pipeline has no output, so no timeline.
+        assert final.get("output") is None
