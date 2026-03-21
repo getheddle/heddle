@@ -40,8 +40,8 @@ This starts:
 
 ### Access
 
-- Workshop: http://localhost:8080
-- NATS monitoring: http://localhost:8222
+- Workshop: <http://localhost:8080>
+- NATS monitoring: <http://localhost:8222>
 
 ### Add Workers
 
@@ -65,7 +65,7 @@ Uncomment the worker section in `docker-compose.yml` or add:
 
 ### Deploy Apps
 
-Upload app ZIPs through the Workshop at http://localhost:8080/apps.
+Upload app ZIPs through the Workshop at <http://localhost:8080/apps>.
 Deployed apps persist across container restarts via the `loom-apps` volume.
 
 ### LAN Access
