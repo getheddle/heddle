@@ -196,5 +196,22 @@ quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
 
+[tool.rumdl]
+exclude = [".venv", "node_modules", "_build"]
+disable = [
+    "MD013",  # line-length — docs use natural line breaks, not hard-wrapped at 80
+    "MD024",  # duplicate-heading — repeated "Prerequisites", "Troubleshooting" across sections
+    "MD034",  # no-bare-urls — bare URLs in config examples and quick references
+    "MD036",  # no-emphasis-as-heading — bold text as pseudo-headings in some docs
+    "MD041",  # first-line-heading — some reference docs don't start with H1
+    "MD042",  # no-empty-links — status badges use empty link targets
+]
+
+[tool.rumdl.MD004]
+style = "dash"
+
+[tool.rumdl.MD029]
+style = "ordered"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/loom"]

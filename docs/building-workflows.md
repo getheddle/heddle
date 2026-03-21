@@ -17,7 +17,7 @@ There are two kinds of workers:
 
 **The router** sits between orchestrators and workers. It's deterministic (no LLM) — it reads the `worker_type` and `model_tier` from each task message and publishes it to the right NATS subject. It enforces rate limits and sends unroutable tasks to a dead-letter subject.
 
-```
+```text
 Goal → Orchestrator → Router → Worker(s) → Results → Orchestrator → Final answer
 ```
 
@@ -275,7 +275,7 @@ The `input_mapping` wires data between stages:
 
 **Automatic parallelism:** In this example, both `classify` and `summarize` depend only on `extract` (not on each other), so the pipeline automatically runs them concurrently:
 
-```
+```text
 Level 0: extract          (only goal.* deps)
 Level 1: classify + summarize  (both depend on extract, run in parallel)
 ```
@@ -599,7 +599,7 @@ The `silo_updates` field is automatically stripped from the worker output before
 
 Place a `.siloignore` file in any silo folder. It uses gitignore-style patterns to exclude files:
 
-```
+```text
 # .siloignore
 *.pyc
 __pycache__/

@@ -32,6 +32,7 @@ docker compose up -d
 ```
 
 This starts:
+
 - **NATS** message bus (port 4222, monitoring on 8222)
 - **Redis** checkpoint store (port 6379)
 - **Workshop** web UI (port 8080)
@@ -199,11 +200,13 @@ loom mdns --workshop-port 8080 --nats-port 4222
 ### Discovery from clients
 
 **macOS:**
+
 ```bash
 dns-sd -B _http._tcp
 ```
 
 **Linux (Avahi):**
+
 ```bash
 avahi-browse -r _http._tcp
 ```

@@ -16,7 +16,7 @@ publish results back to the orchestrator.
 
 ## Source Tree
 
-```
+```text
 src/loom/
 ├── core/
 │   ├── messages.py      # Pydantic schemas: TaskMessage, TaskResult, OrchestratorGoal, CheckpointState
@@ -221,6 +221,7 @@ are inferred from `input_mapping` paths — if stage B references `"A.output.fie
 then B depends on A. Stages with no inter-stage dependencies run concurrently.
 
 Execution proceeds in levels (Kahn's topological sort):
+
 - Level 0: stages with only `goal.*` dependencies (run first, concurrently)
 - Level 1+: stages whose dependencies are all in earlier levels
 
@@ -258,6 +259,7 @@ Optional dependency: `uv sync --extra scheduler` (for cron support).
 ### Router (`router/router.py`)
 
 Deterministic task dispatch with:
+
 - Worker type → tier resolution from `router_rules.yaml`
 - Token-bucket rate limiting per tier
 - Dead-letter routing for unroutable/rate-limited tasks
@@ -265,6 +267,7 @@ Deterministic task dispatch with:
 ### Message Bus (`bus/`)
 
 Abstracted behind `MessageBus` ABC:
+
 - `InMemoryBus` for unit testing (no infrastructure)
 - `NATSBus` for production
 - `BaseActor` accepts `bus=` kwarg for injection
@@ -339,6 +342,7 @@ loom ui --nats-url nats://localhost:4222
 ```
 
 Four panels:
+
 - **Goals** — active goals with status, subtask count, elapsed time
 - **Tasks** — dispatched tasks with worker type, tier, model, elapsed
 - **Pipeline** — pipeline stage execution with wall time

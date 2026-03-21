@@ -22,7 +22,7 @@ ollama pull nomic-embed-text
 
 ## Architecture
 
-```
+```text
 Telegram JSON ──► TelegramIngestor ──► NormalizedPost[]
                                             │
                       ┌─────────────────────┘
@@ -134,6 +134,7 @@ posts = ingestor.ingest_all()  # list[NormalizedPost]
 ```
 
 Handles:
+
 - Polymorphic text fields (string or list of text/entity objects)
 - Reaction counts (emoji + paid)
 - Forward detection
@@ -315,7 +316,7 @@ The RAG module includes Loom backend wrappers and YAML configs for running as di
 
 Pre-built YAML configs in `configs/workers/`:
 
-```
+```text
 rag_ingestor.yaml       # Telegram ingestion
 rag_mux.yaml            # Stream multiplexing
 rag_chunker.yaml        # Sentence chunking
@@ -350,7 +351,7 @@ loom submit "Ingest telegram export" \
 
 `configs/orchestrators/rag_pipeline.yaml` defines a 3-stage pipeline:
 
-```
+```text
 ingest → chunk → vectorize
 ```
 
@@ -391,6 +392,7 @@ class MyIngestor:
 ```
 
 The ingestor must:
+
 1. Implement `load()` returning `self`
 2. Have `channel_id` and `channel_name` properties
 3. Have `ingest_all()` returning `list[NormalizedPost]`
@@ -426,7 +428,7 @@ python examples/rag_demo.py --embed
 
 ## File Layout
 
-```
+```text
 src/loom/contrib/rag/
   __init__.py
   backends.py                    # Loom SyncProcessingBackend wrappers

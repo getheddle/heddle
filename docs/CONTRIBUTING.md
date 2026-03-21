@@ -22,6 +22,7 @@ the project's ability to offer alternative licensing to organizations that canno
 accept copyleft terms, while keeping the public license open for everyone else.
 
 **What the CLA does:**
+
 - Grants the project the right to sublicense your contribution
 - Does NOT transfer your copyright — you retain full ownership of your work
 - Applies to all future contributions once signed

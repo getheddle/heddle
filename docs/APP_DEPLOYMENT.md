@@ -105,7 +105,7 @@ without restart. This works for:
 If your app includes a `python_package` field in the manifest, the Workshop
 will log a warning after deployment with install instructions:
 
-```
+```text
 This app includes Python package 'docman'.
 Install it manually: pip install -e ~/.loom/apps/docman/src/
 ```
@@ -120,7 +120,7 @@ starting workers that depend on it.
 
 Deployed apps are extracted to `~/.loom/apps/{app_name}/`:
 
-```
+```text
 ~/.loom/apps/
   baft/
     manifest.yaml

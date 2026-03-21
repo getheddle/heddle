@@ -7,22 +7,22 @@
 ## Overview
 
 The Workshop is a FastAPI web application that lets you build, test, evaluate,
-and deploy LLM workers without touching the NATS actor mesh.  It calls LLM
+and deploy LLM workers without touching the NATS actor mesh. It calls LLM
 backends directly, validates I/O contracts, scores outputs against test suites,
 tracks worker config versions in DuckDB, and edits pipeline stages with
 dependency validation.
 
-The key design constraint: **no NATS required**.  The test bench and eval runner
+The key design constraint: **no NATS required**. The test bench and eval runner
 bypass the bus, router, and actor lifecycle entirely — they call
 `execute_with_tools()` on the LLM backend directly and validate the result
-against the worker's I/O contracts.  This makes the Workshop usable as a
+against the worker's I/O contracts. This makes the Workshop usable as a
 standalone development tool even when no infrastructure is running.
 
 ---
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                  FastAPI Application (app.py)               │
 │                                                             │
@@ -74,7 +74,7 @@ standalone development tool even when no infrastructure is running.
 
 ### Dependency flow
 
-```
+```text
 app.py
  ├── WorkerTestRunner(backends)            # needs LLM backends
  ├── EvalRunner(test_runner, db)           # wraps runner + persistence
@@ -84,7 +84,7 @@ app.py
  └── LoomServiceAdvertiser                 # optional mDNS (if zeroconf installed)
 ```
 
-`create_app()` is the composition root.  It creates all components, wires them
+`create_app()` is the composition root. It creates all components, wires them
 together, and defines all routes as closures that capture the shared instances.
 A FastAPI lifespan context manager starts/stops mDNS advertisement when the
 `zeroconf` package is installed.
@@ -93,7 +93,7 @@ A FastAPI lifespan context manager starts/stops mDNS advertisement when the
 
 ## Source files
 
-```
+```text
 src/loom/workshop/
 ├── __init__.py           # Package docstring only
 ├── app.py                # FastAPI app factory (create_app), 22+ route handlers, mDNS lifespan
@@ -131,7 +131,7 @@ src/loom/workshop/
 
 ### WorkerTestRunner (`test_runner.py`)
 
-Executes a worker config against a single payload.  Replicates the full
+Executes a worker config against a single payload. Replicates the full
 `LLMWorker.process()` flow without the actor lifecycle:
 
 1. Validate worker config via `validate_worker_config()`
@@ -161,6 +161,7 @@ Returns a `WorkerTestResult` dataclass:
 | `success` | `bool` (property) | True if no errors and valid output |
 
 **Key design decisions:**
+
 - Calls `execute_with_tools()` directly — this is a module-level function
   extracted from `LLMWorker` specifically for Workshop reuse.
 - Catches all exceptions and returns them in `error` — never raises.
@@ -171,6 +172,7 @@ Returns a `WorkerTestResult` dataclass:
 Runs a list of test cases against a worker config with scoring.
 
 **Inputs:**
+
 - `config`: Worker config dict (same as YAML)
 - `test_suite`: List of `{"name": str, "input": dict, "expected_output": dict}`
 - `tier`: Model tier override
@@ -180,6 +182,7 @@ Runs a list of test cases against a worker config with scoring.
 - `judge_prompt`: Custom system prompt for the judge LLM (optional, uses `DEFAULT_JUDGE_PROMPT` if not provided)
 
 **Execution:**
+
 1. Save worker config version to DB (deduplicates by SHA-256 hash)
 2. Create eval run record in DB (with `scoring_method` in metadata)
 3. Run all test cases concurrently (bounded by `asyncio.Semaphore`)
@@ -225,13 +228,13 @@ DuckDB version tracking.
 | `save_pipeline(name, config)` | Validate via `validate_pipeline_config()`, write YAML |
 
 **File layout convention:** Worker configs live in `configs/workers/{name}.yaml`.
-Pipeline configs live in `configs/orchestrators/{name}.yaml`.  The `configs_dir`
+Pipeline configs live in `configs/orchestrators/{name}.yaml`. The `configs_dir`
 constructor arg points to the parent of both.
 
 ### PipelineEditor (`pipeline_editor.py`)
 
-Stateless operations on pipeline config dicts.  All methods are `@staticmethod`,
-take a config dict, and return a modified deep copy.  No filesystem I/O.
+Stateless operations on pipeline config dicts. All methods are `@staticmethod`,
+take a config dict, and return a modified deep copy. No filesystem I/O.
 
 | Method | What it does |
 |--------|-------------|
@@ -243,13 +246,13 @@ take a config dict, and return a modified deep copy.  No filesystem I/O.
 | `validate(config)` | `validate_pipeline_config()` + cycle detection via `_build_execution_levels()` |
 
 **Dependency validation:** `remove_stage()` checks both `input_mapping` path
-references and explicit `depends_on` lists.  `add_parallel_branch()` rejects
+references and explicit `depends_on` lists. `add_parallel_branch()` rejects
 stages whose `input_mapping` references existing stage names (must reference only
 `goal.*`).
 
 ### Config Impact Analysis (`config_impact.py`)
 
-Reverse-maps worker changes to their pipeline impact.  Used by the worker
+Reverse-maps worker changes to their pipeline impact. Used by the worker
 detail page to show affected pipelines and risk assessment.
 
 | Function | What it does |
@@ -266,12 +269,12 @@ detail page to show affected pipelines and risk assessment.
 | `risk_level` | `str` | `"low"`, `"medium"`, or `"high"` — based on whether the worker has an `output_schema` |
 
 **UI integration:** The worker detail page loads an impact panel asynchronously
-via HTMX (`/workers/{name}/impact-panel`).  A JSON API is also available at
+via HTMX (`/workers/{name}/impact-panel`). A JSON API is also available at
 `/workers/{name}/impact`.
 
 ### WorkshopDB (`db.py`)
 
-DuckDB-backed persistence.  Default path: `~/.loom/workshop.duckdb`.
+DuckDB-backed persistence. Default path: `~/.loom/workshop.duckdb`.
 Use `:memory:` for tests.
 
 **Tables:**
@@ -286,7 +289,7 @@ Use `:memory:` for tests.
 
 **Version deduplication:** `save_worker_version()` hashes the YAML content
 (SHA-256, first 16 chars) and skips insertion if a version with the same
-`(worker_name, config_hash)` already exists.  This means saving an unchanged
+`(worker_name, config_hash)` already exists. This means saving an unchanged
 config is a no-op.
 
 **Comparison:** `compare_eval_runs(run_id_a, run_id_b)` joins results by
@@ -295,8 +298,8 @@ config is a no-op.
 **Baselines:** `promote_baseline(worker_name, run_id)` marks an eval run as the
 golden dataset baseline for a worker (one per worker, upserted).
 `compare_against_baseline(worker_name, run_id)` compares a run against the
-stored baseline.  The eval detail page automatically shows regression/improvement
-when a baseline exists.  `remove_baseline(worker_name)` clears the baseline.
+stored baseline. The eval detail page automatically shows regression/improvement
+when a baseline exists. `remove_baseline(worker_name)` clears the baseline.
 
 ---
 
@@ -346,7 +349,7 @@ when a baseline exists.  `remove_baseline(worker_name)` clears the baseline.
 
 ### HTMX pattern
 
-Only the test bench uses HTMX for partial updates.  The flow:
+Only the test bench uses HTMX for partial updates. The flow:
 
 1. User fills payload JSON and selects tier in `workers/test.html`
 2. Form has `hx-post="/workers/{name}/test/run"` and `hx-target="#test-result"`
@@ -360,7 +363,7 @@ All other forms use standard POST → 303 redirect → GET (PRG pattern).
 
 ### Template hierarchy
 
-```
+```text
 base.html                       # <html>, sticky nav, theme toggle, skip link, <main>, <footer>
 ├── workers/list.html           # Table of workers (with app source labels)
 ├── workers/detail.html         # YAML editor + clone + version history
@@ -378,7 +381,7 @@ partials/
 ```
 
 All full-page templates extend `base.html` and set `active_nav` for nav
-highlighting.  The partial template is standalone (no `{% extends %}`).
+highlighting. The partial template is standalone (no `{% extends %}`).
 
 ---
 
@@ -411,7 +414,7 @@ Backends are resolved from environment variables via `build_backends_from_env()`
 | `FRONTIER_MODEL` | — | Override frontier model (default: `claude-opus-4-20250514`) |
 
 If no env vars are set, `backends` is empty and all test/eval runs will fail
-with "No backend for tier" errors.  The `/health` endpoint reports available
+with "No backend for tier" errors. The `/health` endpoint reports available
 backends.
 
 ---
@@ -420,7 +423,7 @@ backends.
 
 ### DuckDB schema (ER diagram)
 
-```
+```text
 worker_versions           eval_runs                 eval_results
 ─────────────────         ─────────────             ──────────────
 id (PK)                   id (PK)                   id (PK)
@@ -515,7 +518,7 @@ services without running the Workshop itself.
 
 ## Reused Loom internals
 
-The Workshop reuses core Loom functions rather than reimplementing them.  This
+The Workshop reuses core Loom functions rather than reimplementing them. This
 keeps the test bench semantically identical to production worker execution.
 
 | Function / Class | Source | Used by Workshop for |
@@ -542,16 +545,20 @@ keeps the test bench semantically identical to production worker execution.
 ### Adding a new scoring method
 
 1. Write a function in `eval_runner.py` matching the signature:
+
    ```python
    def _score_my_method(expected: dict, actual: dict) -> tuple[float, dict]:
        # Return (score_0_to_1, {"method": "my_method", ...details})
    ```
+
    For async scoring methods (like `_score_llm_judge`), the signature becomes:
+
    ```python
    async def _score_my_method(expected, actual, *, backend, ...) -> tuple[float, dict]:
    ```
 
 2. Add a branch in `EvalRunner.run_suite()`:
+
    ```python
    if scoring == "my_method":
        score_fn = _score_my_method
@@ -586,13 +593,13 @@ Implementation plan:
 
 ### Customizing the LLM judge
 
-The `llm_judge` scoring method is built in.  To customize:
+The `llm_judge` scoring method is built in. To customize:
 
 1. Pass a custom `judge_prompt` to `EvalRunner.run_suite()` or set it in the
-   Workshop eval form.  The default prompt (`DEFAULT_JUDGE_PROMPT`) evaluates
+   Workshop eval form. The default prompt (`DEFAULT_JUDGE_PROMPT`) evaluates
    correctness, completeness, and format compliance.
 2. The judge backend is selected automatically by the Workshop (prefers
-   `standard` tier, falls back to first available).  Programmatically, pass
+   `standard` tier, falls back to first available). Programmatically, pass
    any `LLMBackend` instance as `judge_backend`.
 3. Judge results (score, reasoning, per-criteria scores, token usage) are
    stored in `eval_results.score_details` JSON column.
@@ -636,7 +643,7 @@ Workshop tests are in `tests/`:
 | `test_workshop_app.py` | Workshop HTTP routes (baselines, dead-letter replay, basic routes) |
 | `test_config_impact.py` | Config impact analysis (worker→pipeline reverse mapping) |
 
-All tests use in-memory DuckDB (`:memory:`) and mock LLM backends.  No
+All tests use in-memory DuckDB (`:memory:`) and mock LLM backends. No
 infrastructure needed.
 
 ```bash

@@ -65,7 +65,7 @@ open http://$(minikube ip):30080
 
 ## Manifest Structure
 
-```
+```text
 k8s/
 ├── namespace.yaml              # loom namespace
 ├── nats-deployment.yaml        # NATS server
@@ -126,6 +126,7 @@ Workers with local LLM backends (Ollama) need more resources because they
 proxy API calls. Workers using remote APIs (Anthropic) are lighter.
 
 Example in a deployment spec:
+
 ```yaml
 resources:
   requests:
@@ -221,6 +222,7 @@ spec:
 ```
 
 Mount the PVC in the Redis deployment's pod spec:
+
 ```yaml
 volumes:
   - name: redis-data

@@ -388,7 +388,7 @@ Use **structlog** everywhere. Never use `print()` for operational output.
 
 ### Event naming convention
 
-```
+```text
 {component}.{action}
 ```
 
@@ -506,7 +506,7 @@ worker_type: summarizer
 - **Commit messages:** imperative mood, concise summary line (<72 chars), with
   optional body explaining why:
 
-```
+```text
 Add dependency inference to PipelineOrchestrator
 
 Stages now auto-infer dependencies from input_mapping paths instead of

@@ -8,7 +8,7 @@ The core idea: instead of one big LLM context, split work across narrowly-scoped
 
 ## Project structure
 
-```
+```text
 src/loom/
   core/
     actor.py              # BaseActor — async actor with signal handling, configurable concurrency,
@@ -320,6 +320,7 @@ uv sync --all-extras          # All dependencies including dev/test
 Any LOOM system can become an MCP server with a single YAML config — zero MCP-specific code needed.
 
 **Config structure** (`configs/mcp/docman.yaml`):
+
 ```yaml
 name: "docman"
 nats_url: "nats://localhost:4222"
@@ -346,6 +347,7 @@ resources:
 **Tool discovery flow:** Worker YAML `name` + `input_schema` + `description` → MCP tool definition. Pipeline `input_mapping` `goal.context.*` fields → tool input schema. Query backend `_get_handlers()` → per-action tools with auto-generated schemas.
 
 **Workshop tools** — expose Workshop capabilities (worker CRUD, test bench, eval, impact analysis, dead-letter inspection) as MCP tools under the `workshop.*` namespace. These call Workshop components directly (no NATS required):
+
 ```yaml
 tools:
   workshop:                       # Optional workshop tools section
@@ -358,11 +360,13 @@ tools:
       - impact                    # workshop.impact.analyze
       - deadletter                # workshop.deadletter.{list,replay} — opt-in only (see below)
 ```
+
 Workshop tools support MCP `ToolAnnotations` — `workshop.deadletter.replay` is marked `destructiveHint: true`.
 
 **Dead-letter tools are opt-in:** The MCP path creates a local in-memory `DeadLetterConsumer` that is **not** subscribed to the live NATS dead-letter stream. Entries only appear if something stores them into that local consumer. Enable `deadletter` explicitly when pairing with a co-located router or for testing workflows.
 
 **Public API:**
+
 ```python
 from loom.mcp import create_server, run_stdio, run_streamable_http, MCPGateway
 server, gateway = create_server("configs/mcp/docman.yaml")
@@ -374,12 +378,14 @@ run_stdio(server, gateway)
 The Workshop is a web-based tool for the full worker lifecycle: Define → Test → Evaluate → Compare → Deploy. It runs without NATS — testing and evaluation call LLM backends directly.
 
 **Start the Workshop:**
+
 ```bash
 uv sync --extra workshop
 OLLAMA_URL=http://localhost:11434 uv run loom workshop --port 8080
 ```
 
 **Components:**
+
 - **WorkerTestRunner** (`workshop/test_runner.py`): Execute a worker config against a payload without the actor mesh. Builds the full system prompt (with silo injection), calls the LLM backend directly via `execute_with_tools()`, validates I/O contracts, and returns structured results with timing and token usage.
 - **EvalRunner** (`workshop/eval_runner.py`): Run test suites (list of input/expected_output pairs) against a worker config. Supports `field_match`, `exact_match`, and `llm_judge` scoring (uses a separate LLM call to evaluate output quality on correctness/completeness/format criteria). Results persist to DuckDB for cross-version comparison and regression detection via golden dataset baselines.
 - **ConfigManager** (`workshop/config_manager.py`): CRUD for worker and pipeline YAML configs with hash-based version tracking in DuckDB.
@@ -388,6 +394,7 @@ OLLAMA_URL=http://localhost:11434 uv run loom workshop --port 8080
 - **Web UI** (`workshop/app.py`): FastAPI + HTMX + Jinja2 with Pico CSS. Worker list/editor, interactive test bench, eval dashboard with per-case results, pipeline editor with dependency graph visualization.
 
 **Test suite format** (YAML):
+
 ```yaml
 - name: basic_summarization
   input:
@@ -449,6 +456,7 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 ## Robustness and observability (v0.5.0)
 
 **P1 — Robustness:**
+
 - **Inter-stage contract validation** — pipeline stages can declare `input_schema`/`output_schema` for validation between stages
 - **Typed pipeline errors** — `PipelineStageError` hierarchy: `PipelineTimeoutError`, `PipelineValidationError`, `PipelineWorkerError`, `PipelineMappingError`
 - **Per-stage retry** — configurable `max_retries` per stage (transient errors only: timeout, worker errors)
@@ -457,12 +465,14 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 - **Atomic ZIP deployment** — extracts to temp dir then renames; rejects symlinks and path traversal in config paths
 
 **P2 — Observability:**
+
 - **request_id propagation** — `TaskMessage` and `OrchestratorGoal` carry `request_id` through goal→task→result chain; structured log bindings per goal
 - **I/O tracing** — `LOOM_TRACE=1` env var enables full input/output logging; `_summarize()` helper truncates by default
 - **Dead-letter consumer** — `DeadLetterConsumer` actor with bounded in-memory store (default 1000), list/count/clear/replay via CLI (`loom dead-letter monitor`) and Workshop UI (`/dead-letters`)
 - **Pipeline execution timeline** — each pipeline output includes `_timeline` with per-stage `started_at`, `ended_at`, `wall_time_ms`
 
 **P3 — Developer experience:**
+
 - **CLI pre-flight checks** — `check_nats_connectivity()`, `check_env_vars()`, `check_config_readable()` run before actor startup; skip with `--skip-preflight`
 - **Workshop UI improvements** — worker search/filter, backend availability badges, inline config validation (`/workers/{name}/validate`), deploy spinner, dead-letter inspection page
 - **Config validation** — input_mapping path validation, processing_backend dotted-path format, condition operator strict allowlist
@@ -472,22 +482,26 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 ## Evaluation, tracing, and config tooling (v0.6.0)
 
 **Evaluation framework:**
+
 - **LLM-as-judge scoring** — `EvalRunner.run_suite(scoring="llm_judge")` uses a separate LLM call to evaluate worker output quality on correctness, completeness, and format compliance criteria (0-to-1 scale with reasoning); customizable via `judge_prompt` parameter
 - **Golden dataset regression baselines** — `WorkshopDB.promote_baseline()` marks an eval run as the reference for a worker; `compare_against_baseline()` auto-compares new runs against the baseline; Workshop UI shows regression/improvement per case on the eval detail page
 - **Dead-letter replay audit trail** — `ReplayRecord` tracks all replayed entries with timestamps and original failure reason; `replay_log()`, `replay_count()` on `DeadLetterConsumer`; Workshop dead-letters page shows replay history
 
 **Distributed tracing:**
+
 - **OpenTelemetry integration** — optional `otel` extra (`uv sync --extra otel`); `loom.tracing` module with `get_tracer()`, `init_tracing()`, `inject_trace_context()`, `extract_trace_context()`; graceful no-op when OTel SDK not installed
 - **Span instrumentation** — spans on `BaseActor._process_one()`, `TaskRouter.route()`, `PipelineOrchestrator._execute_stage()`, `MCPBridge._dispatch_and_wait()`, `OrchestratorActor` phases (decompose/dispatch/collect/synthesize), `execute_with_tools()` LLM calls and tool continuations
 - **W3C traceparent propagation** — trace context propagated through NATS messages via `_trace_context` key; spans link across actor boundaries for end-to-end pipeline tracing
 
 **TUI dashboard:**
+
 - **Terminal dashboard** — `loom ui` command launches a Textual-based terminal UI for real-time NATS observation
 - **Four panels** — Goals (status, subtask count, elapsed), Tasks (worker type, tier, model, elapsed), Pipeline (stage execution with wall time), Events (scrolling log of all `loom.>` messages)
 - **Read-only observer** — subscribes to `loom.>` wildcard, never publishes; safe to run alongside production actors
 - **Keybindings** — `q` quit, `c` clear log, `r` refresh tables
 
 **Config tooling:**
+
 - **Config impact analysis** — `workshop/config_impact.py` reverse-maps worker→pipelines/stages, finds transitive downstream dependencies, assesses breaking-change risk based on output_schema presence
 - **Impact panel in Workshop** — HTMX-loaded panel on worker detail page shows affected pipelines, direct stages, downstream stages, risk level; loads async via `/workers/{name}/impact-panel`
 - **JSON API** — `GET /workers/{name}/impact` returns full impact analysis as JSON for programmatic use
@@ -498,6 +512,7 @@ Loom apps (like baft, docman) can be deployed as ZIP bundles via the Workshop UI
 Each bundle contains a `manifest.yaml`, configs, and optional scripts/Python packages.
 
 **Deploy flow:**
+
 1. Build a ZIP: `bash scripts/build-app.sh` (in the app repo)
 2. Upload at Workshop `/apps` page
 3. App configs appear in Workers/Pipelines lists

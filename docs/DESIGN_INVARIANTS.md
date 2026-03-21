@@ -307,6 +307,7 @@ framing into the "neutral" text. Audit nodes then receive text that, while
 superficially generic, carries the structural fingerprint of domain conclusions.
 
 **How it fails:**
+
 - Adding entity registries to the neutralizer shifts it from lexical to
   semantic processing — a different epistemic role.
 - Opaque identifiers (entity codes, reference IDs) must pass through unchanged.
@@ -384,6 +385,7 @@ internally. The pipeline's `input_mapping` is the mechanism for passing context
 through a stateless execution chain.
 
 **How it fails:**
+
 - If an intermediate worker filters context fields from its output, downstream
   workers lose access and cross-cutting concerns (governance audits, session
   tracking) break silently.
