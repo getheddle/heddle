@@ -330,7 +330,7 @@ the actor mesh. Install with `uv sync --extra otel`.
   and tool continuation rounds in `execute_with_tools()`.
 
 LLM call spans follow the **OTel GenAI semantic conventions**
-(https://opentelemetry.io/docs/specs/semconv/gen-ai/):
+(<https://opentelemetry.io/docs/specs/semconv/gen-ai/>):
 
 - `gen_ai.system` — provider identifier (`anthropic`, `ollama`, `openai`)
 - `gen_ai.request.model` / `gen_ai.response.model` — model names

@@ -80,6 +80,7 @@ using the DeepEval framework. These tests use a local Ollama model as a judge an
 auto-skip when DeepEval or Ollama are unavailable, so they never break CI.
 
 Guidelines:
+
 - Use `GEval` with explicit `criteria` for reliable results with local models
 - Keep thresholds moderate (0.6–0.7) — local judge models are less precise than cloud APIs
 - Import `skip_no_deepeval` from `tests.conftest` and apply it alongside the `deepeval` marker
