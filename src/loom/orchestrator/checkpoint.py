@@ -9,11 +9,13 @@ of where things stand.
 Checkpoint trigger: when estimated token count exceeds threshold.
 
 Storage: Pluggable via CheckpointStore (see orchestrator/store.py).
-Keys follow the pattern:
+Keys follow the pattern::
+
     loom:checkpoint:{goal_id}:{checkpoint_number}  — versioned checkpoint
     loom:checkpoint:{goal_id}:latest                — pointer to most recent
 
-The orchestrator workflow with checkpoints:
+The orchestrator workflow with checkpoints::
+
     1. Process goal, accumulate conversation_history
     2. After each worker result: should_checkpoint(conversation_history)
     3. If True: create_checkpoint() → compress state → persist to store
@@ -51,10 +53,10 @@ logger = structlog.get_logger()
 
 
 class CheckpointManager:
-    """
-    Manages orchestrator state compression.
+    """Manages orchestrator state compression.
 
     Workflow:
+
     1. After each worker result, estimate_tokens() checks context size
     2. If threshold exceeded, create_checkpoint() asks a summarizer
        to compress the current state

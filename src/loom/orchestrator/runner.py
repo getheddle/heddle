@@ -177,7 +177,7 @@ class OrchestratorActor(BaseActor):
     checkpoint_store : CheckpointStore | None
         Checkpoint persistence backend.  Pass None to disable checkpointing.
 
-    Example:
+    Example
     -------
     ::
 

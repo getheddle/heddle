@@ -15,9 +15,10 @@ Design:
     - Graceful shutdown cancels the timer loop via _running flag
 
 NATS subjects:
-    Subscribes to: loom.scheduler.{name}  (health checks / future control)
-    Publishes to:  loom.goals.incoming    (for dispatch_type "goal")
-                   loom.tasks.incoming    (for dispatch_type "task")
+
+- Subscribes to: ``loom.scheduler.{name}``  (health checks / future control)
+- Publishes to: ``loom.goals.incoming`` (for dispatch_type "goal")
+  or ``loom.tasks.incoming`` (for dispatch_type "task")
 """
 
 from __future__ import annotations

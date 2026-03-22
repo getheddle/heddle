@@ -13,7 +13,7 @@ The LLM is given the goal instruction, domain context, and a manifest of
 available workers (names, descriptions, and input schemas) so it can make
 informed routing decisions and construct valid payloads.
 
-The decomposition prompt asks the LLM to output structured JSON:
+The decomposition prompt asks the LLM to output structured JSON::
 
     [
         {"worker_type": "extractor", "payload": {...}, "model_tier": "local"},

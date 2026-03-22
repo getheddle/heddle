@@ -137,21 +137,26 @@ class TaskRouter:
     """Deterministic router that dispatches TaskMessages to worker queues.
 
     This is NOT an LLM component. It contains zero inference logic. It reads
-    routing rules from a YAML config and applies them mechanically:
+    routing rules from a YAML config and applies them mechanically.
 
-    .. todo:: Strategy D — Worker-side batching. A batching layer between the
+    .. note::
+
+       **Strategy D -- Worker-side batching.** A batching layer between the
        router and workers could accumulate similar tasks (same worker_type + tier)
        and dispatch them as a single batch to reduce LLM API call overhead.
        This would sit here in the routing pipeline, before the publish step.
+
+    Routing pipeline::
 
         incoming task --> resolve tier --> check rate limit --> publish to worker queue
                                       |                   |
                                       |                   +--> dead-letter (rate limited)
                                       +--> dead-letter (bad tier / validation failure)
 
-    Subscribes to: loom.tasks.incoming
-    Publishes to:  loom.tasks.{worker_type}.{tier}  (normal route)
-                   loom.tasks.dead_letter            (unroutable / rate-limited)
+    Subscribes to: ``loom.tasks.incoming``
+
+    Publishes to:  ``loom.tasks.{worker_type}.{tier}``  (normal route)
+                   ``loom.tasks.dead_letter``            (unroutable / rate-limited)
 
     The router runs as a long-lived async process. After subscribing, it
     processes tasks via NATS async callbacks. The caller (cli/main.py) is
@@ -323,7 +328,8 @@ class TaskRouter:
         via NATS async callbacks. The caller is responsible for keeping the
         event loop alive (e.g., via ``await asyncio.Event().wait()``).
 
-        The CLI command in cli/main.py handles this:
+        The CLI command in cli/main.py handles this::
+
             async def _run():
                 await router.run()
                 await asyncio.Event().wait()

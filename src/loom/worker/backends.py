@@ -55,14 +55,16 @@ class LLMBackend(ABC):
                 provided, overrides ``user_message``.
 
         Returns:
-            {
-                "content": str | None,      # Text response (None if tool_calls)
-                "model": str,               # Model identifier
-                "prompt_tokens": int,
-                "completion_tokens": int,
-                "tool_calls": list | None,  # [{"id": str, "name": str, "arguments": dict}]
-                "stop_reason": str | None,  # "end_turn" | "tool_use"
-            }
+            A dict with the following structure::
+
+                {
+                    "content": str | None,      # Text response (None if tool_calls)
+                    "model": str,               # Model identifier
+                    "prompt_tokens": int,
+                    "completion_tokens": int,
+                    "tool_calls": list | None,  # [{"id": str, "name": str, "arguments": dict}]
+                    "stop_reason": str | None,  # "end_turn" | "tool_use"
+                }
         """
         ...
 

@@ -181,6 +181,7 @@ def validate_worker_config(  # noqa: PLR0912
     """Validate a worker config dict.
 
     Checks for:
+
     - Required keys (name; system_prompt for LLM workers, processing_backend
       for processor workers)
     - Correct types for all known keys

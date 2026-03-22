@@ -16,7 +16,6 @@ release = "0.8.0"
 
 extensions = [
     "sphinx.ext.autodoc",
-    "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",       # Google/NumPy docstring support
     "sphinx.ext.viewcode",       # Source code links
     "sphinx.ext.intersphinx",    # Cross-project links
@@ -45,7 +44,7 @@ autodoc_default_options = {
     "show-inheritance": True,
     "member-order": "bysource",
 }
-autodoc_typehints = "description"
+autodoc_typehints = "signature"
 
 # Mock imports for optional dependencies that may not be installed during
 # docs build.  This prevents ImportError when autodoc tries to import modules
@@ -105,3 +104,39 @@ templates_path = []
 exclude_patterns = ["_build"]
 html_title = "Loom Documentation"
 html_short_title = "Loom"
+
+# Suppress warnings that are expected and non-critical:
+# - "duplicate object description" from autodoc processing dataclass attributes
+#   that appear in both module-level and class-level documentation
+# - myst cross-reference warnings for internal markdown anchor links
+suppress_warnings = [
+    "myst.xref_missing",
+]
+
+# Filter out duplicate object warnings from dataclass attributes.
+# Sphinx's autodoc + napoleon generate attribute entries from BOTH the
+# ``Attributes:`` docstring section AND the class body annotations,
+# producing harmless duplicates that can't be suppressed via
+# suppress_warnings.
+import logging as _logging
+import warnings as _warnings
+
+
+class _SphinxWarningFilter(_logging.Filter):
+    """Filter out known harmless Sphinx warnings that can't be suppressed."""
+
+    _SUPPRESSED = (
+        "duplicate object description",
+        "Failed to get a method signature for",
+    )
+
+    def filter(self, record: _logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(s in msg for s in self._SUPPRESSED)
+
+
+for _logger_name in (
+    "sphinx.sphinx.domains.python",
+    "sphinx.sphinx.ext.autodoc",
+):
+    _logging.getLogger(_logger_name).addFilter(_SphinxWarningFilter())

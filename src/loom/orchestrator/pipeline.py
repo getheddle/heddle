@@ -20,7 +20,7 @@ progress reporting.
 Pipeline definition comes from YAML config with stages, input mappings,
 and optional conditions.
 
-Data flow through the pipeline:
+Data flow through the pipeline::
 
     OrchestratorGoal arrives at handle_message()
         ↓
@@ -38,14 +38,16 @@ Data flow through the pipeline:
         ↓
     Publish final TaskResult with all stage outputs
 
-Input mapping example (from doc_pipeline.yaml):
+Input mapping example (from doc_pipeline.yaml)::
+
     input_mapping:
         text_preview: "extract.output.text_preview"
         metadata: "extract.output.metadata"
 
-    This resolves to:
-        payload["text_preview"] = context["extract"]["output"]["text_preview"]
-        payload["metadata"] = context["extract"]["output"]["metadata"]
+This resolves to::
+
+    payload["text_preview"] = context["extract"]["output"]["text_preview"]
+    payload["metadata"] = context["extract"]["output"]["metadata"]
 
 See Also:
     loom.orchestrator.runner — dynamic LLM-based orchestrator

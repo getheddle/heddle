@@ -60,18 +60,19 @@ class ProcessingBackend(ABC):
 
     @abstractmethod
     async def process(self, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-        """
-        Process a task payload.
+        """Process a task payload.
 
         Args:
             payload: Validated input dict from TaskMessage.
             config: Full worker config dict (for backend-specific settings).
 
         Returns:
-            {
-                "output": dict,           # Structured output matching output_schema
-                "model_used": str | None, # Identifier (e.g., "docling-v2", "ffmpeg-6.1")
-            }
+            A dict with the following structure::
+
+                {
+                    "output": dict,           # Structured output matching output_schema
+                    "model_used": str | None, # Identifier (e.g., "docling-v2", "ffmpeg-6.1")
+                }
         """
         ...
 

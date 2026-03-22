@@ -117,19 +117,20 @@ class TaskWorker(BaseActor):
 
     @abstractmethod
     async def process(self, payload: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
-        """
-        Process a task payload. Subclasses implement this.
+        """Process a task payload. Subclasses implement this.
 
         Args:
             payload: Validated input dict (matches input_schema).
             metadata: Task metadata dict (routing hints, pipeline context, etc.).
 
         Returns:
-            {
-                "output": dict,              # Must match output_schema
-                "model_used": str | None,    # Identifier for what processed this
-                "token_usage": dict | None,  # {"prompt_tokens": int, ...} or empty
-            }
+            A dict with the following structure::
+
+                {
+                    "output": dict,              # Must match output_schema
+                    "model_used": str | None,    # Identifier for what processed this
+                    "token_usage": dict | None,  # {"prompt_tokens": int, ...} or empty
+                }
         """
         ...
 
