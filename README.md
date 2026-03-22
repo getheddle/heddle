@@ -66,6 +66,10 @@ streamable-http transports.
 deploying LLM workers. Interactive test bench, eval suite runner with scoring,
 pipeline stage editor, and worker version tracking. No NATS needed for testing.
 
+**OpenTelemetry distributed tracing with GenAI semantic conventions** — optional
+`otel` extra for end-to-end distributed tracing across actors, with automatic
+LLM call instrumentation following the OpenTelemetry GenAI semantic conventions.
+
 **Contrib Ecosystem** — optional packages for DuckDB (analytics, vector search),
 Valkey (checkpoint persistence), and RAG (ingestion, chunking, embedding, analysis).
 

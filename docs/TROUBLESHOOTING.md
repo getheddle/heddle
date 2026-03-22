@@ -432,3 +432,34 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 **Fix:**
 
 - This is handled automatically. The `loom.tracing` module uses runtime feature detection — if OTel SDK is not installed, all functions become no-ops. No code changes needed. See Design Invariant #9.
+
+### LLM spans missing prompt/completion text
+
+**Symptom:** LLM call spans appear in your tracing backend but contain no prompt or completion content.
+
+**Fix:**
+
+Set the `LOOM_TRACE_CONTENT` environment variable to enable prompt and completion recording:
+
+```bash
+export LOOM_TRACE_CONTENT=1
+```
+
+With this enabled, LLM call spans include two span events:
+
+- `gen_ai.content.prompt` — the full prompt sent to the model
+- `gen_ai.content.completion` — the model's response text
+
+This is disabled by default to avoid storing sensitive data in your tracing backend.
+
+**Note:** Even without `LOOM_TRACE_CONTENT`, all LLM call spans include these `gen_ai.*` attributes per the OpenTelemetry GenAI semantic conventions:
+
+| Attribute | Description |
+|-----------|-------------|
+| `gen_ai.system` | LLM provider (e.g., `anthropic`, `ollama`) |
+| `gen_ai.request.model` | Model requested (e.g., `claude-sonnet-4-20250514`) |
+| `gen_ai.response.model` | Model that served the request |
+| `gen_ai.usage.input_tokens` | Prompt token count |
+| `gen_ai.usage.output_tokens` | Completion token count |
+| `gen_ai.request.temperature` | Sampling temperature |
+| `gen_ai.request.max_tokens` | Max output tokens requested |

@@ -722,6 +722,7 @@ class MyEmbeddingProvider(EmbeddingProvider):
 - **Use local tier for development.** Ollama with a small model (llama3.2:3b or command-r7b) gives fast iteration. Switch to standard/frontier tiers when you need better reasoning.
 - **Schema validation is your safety net.** It catches malformed LLM output before it propagates to downstream stages. Define schemas tightly.
 - **Monitor the dead-letter subject.** Tasks landing on `loom.tasks.dead_letter` indicate routing failures or rate limit hits. Use `nats sub loom.tasks.dead_letter` during development.
+- **LLM calls are auto-instrumented with OTel.** Loom automatically instruments all LLM calls with OpenTelemetry GenAI semantic conventions. Install the `otel` extra (`uv sync --extra otel`) to get distributed tracing across actors. See [Architecture — Distributed Tracing](ARCHITECTURE.md#distributed-tracing) for details.
 
 ## Part 10: DuckDB integration (`loom.contrib.duckdb`)
 

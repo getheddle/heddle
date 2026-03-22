@@ -58,10 +58,15 @@ Uncomment the worker section in `docker-compose.yml` or add:
       - MODEL_TIER=local
       - NATS_URL=nats://nats:4222
       - OLLAMA_URL=http://host.docker.internal:11434
+      # - LOOM_TRACE_CONTENT=1    # Enable prompt/completion logging in OTel spans
     depends_on:
       - nats
       - router
 ```
+
+> **Tracing:** Set `LOOM_TRACE_CONTENT=1` on any worker or orchestrator container
+> to record prompt and completion text as OpenTelemetry span events. Disabled by
+> default to avoid storing sensitive data in your tracing backend.
 
 ### Deploy Apps
 

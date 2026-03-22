@@ -31,6 +31,12 @@ uv sync --extra scheduler     # Cron expression parsing (croniter)
 uv sync --extra mcp           # MCP gateway (Model Context Protocol SDK)
 uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
 uv sync --extra otel          # OpenTelemetry distributed tracing
+```
+
+See [Architecture — Distributed Tracing](ARCHITECTURE.md#distributed-tracing) for
+GenAI semantic conventions and environment variables (`LOOM_TRACE_CONTENT`).
+
+```bash
 uv sync --extra tui           # Terminal dashboard (Textual)
 uv sync --extra mdns          # mDNS/Bonjour service discovery on LAN
 uv sync --extra docs          # Sphinx API documentation generation

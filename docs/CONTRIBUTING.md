@@ -63,6 +63,12 @@ All new functionality must include unit tests. Tests must pass without
 infrastructure (NATS, Valkey, Ollama). Use `InMemoryBus` and
 `InMemoryCheckpointStore` for testing.
 
+**Observability:**
+New code that calls LLM backends should follow the OpenTelemetry GenAI semantic
+conventions for span attributes (`gen_ai.system`, `gen_ai.request.model`,
+`gen_ai.usage.*`, etc.). See [Architecture — Distributed Tracing](ARCHITECTURE.md#distributed-tracing)
+for the full list of required attributes.
+
 **Code style:**
 All contributions must conform to the project's coding standards defined in
 [`CODING_GUIDE.md`](CODING_GUIDE.md). Key requirements: Google-style docstrings,
