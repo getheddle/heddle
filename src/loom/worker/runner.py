@@ -158,9 +158,7 @@ async def execute_with_tools(  # noqa: PLR0915
                 "gen_ai.request.temperature", result["gen_ai_request_temperature"]
             )
         if result.get("gen_ai_request_max_tokens") is not None:
-            llm_span.set_attribute(
-                "gen_ai.request.max_tokens", result["gen_ai_request_max_tokens"]
-            )
+            llm_span.set_attribute("gen_ai.request.max_tokens", result["gen_ai_request_max_tokens"])
 
         # Optional content logging (opt-in via env var — may contain PII)
         if os.environ.get("LOOM_TRACE_CONTENT", "").lower() in ("1", "true"):

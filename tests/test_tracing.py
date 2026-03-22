@@ -452,9 +452,7 @@ class TestGenAISemanticConventions:
         assert prompt_event[1]["gen_ai.prompt"] == "my user message"
 
         # Check completion event content
-        completion_event = next(
-            e for e in recorded_events if e[0] == "gen_ai.content.completion"
-        )
+        completion_event = next(e for e in recorded_events if e[0] == "gen_ai.content.completion")
         assert completion_event[1]["gen_ai.completion"] == '{"result": "ok"}'
 
     @pytest.mark.asyncio
