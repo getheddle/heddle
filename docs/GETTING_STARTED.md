@@ -33,7 +33,7 @@ uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
 uv sync --extra otel          # OpenTelemetry distributed tracing
 ```
 
-See [Architecture — Distributed Tracing](ARCHITECTURE.md#distributed-tracing) for
+See [Architecture — Distributed Tracing](ARCHITECTURE.md#distributed-tracing-tracing) for
 GenAI semantic conventions and environment variables (`LOOM_TRACE_CONTENT`).
 
 ```bash

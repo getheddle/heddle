@@ -66,7 +66,7 @@ infrastructure (NATS, Valkey, Ollama). Use `InMemoryBus` and
 **Observability:**
 New code that calls LLM backends should follow the OpenTelemetry GenAI semantic
 conventions for span attributes (`gen_ai.system`, `gen_ai.request.model`,
-`gen_ai.usage.*`, etc.). See [Architecture — Distributed Tracing](ARCHITECTURE.md#distributed-tracing)
+`gen_ai.usage.*`, etc.). See [Architecture — Distributed Tracing](ARCHITECTURE.md#distributed-tracing-tracing)
 for the full list of required attributes.
 
 **Code style:**
