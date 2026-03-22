@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+import os
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from loom.tracing.otel import (
     _NoOpSpan,
@@ -251,3 +254,299 @@ class TestTracingIntegrationWithActor:
         # Without OTel installed, inject is a no-op, extract returns None
         # Both should be safe to call
         assert ctx is None or ctx is not None  # just verifying no crash
+
+
+class TestGenAISemanticConventions:
+    """Verify that execute_with_tools sets GenAI semantic convention span attributes."""
+
+    @pytest.mark.asyncio
+    async def test_genai_attributes_on_span(self):
+        """execute_with_tools should set gen_ai.* attributes on the llm.call span."""
+        from loom.worker.runner import execute_with_tools
+
+        mock_backend = AsyncMock()
+        mock_backend.complete.return_value = {
+            "content": '{"result": "ok"}',
+            "model": "claude-test",
+            "prompt_tokens": 50,
+            "completion_tokens": 25,
+            "tool_calls": None,
+            "stop_reason": "end_turn",
+            "gen_ai_system": "anthropic",
+            "gen_ai_request_model": "claude-test",
+            "gen_ai_response_model": "claude-test",
+            "gen_ai_request_temperature": 0.5,
+            "gen_ai_request_max_tokens": 2000,
+        }
+
+        # Use a recording span to capture set_attribute calls
+        recorded_attrs = {}
+        recorded_events = []
+
+        class RecordingSpan:
+            def set_attribute(self, key, value):
+                recorded_attrs[key] = value
+
+            def add_event(self, name, attributes=None):
+                recorded_events.append((name, attributes))
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+        class RecordingTracer:
+            def start_as_current_span(self, name, **kwargs):
+                from contextlib import contextmanager
+
+                @contextmanager
+                def _cm():
+                    yield RecordingSpan()
+
+                return _cm()
+
+        with patch("loom.worker.runner._tracer", RecordingTracer()):
+            result = await execute_with_tools(
+                backend=mock_backend,
+                system_prompt="sys",
+                user_message="msg",
+                tool_providers={},
+                tool_defs=None,
+            )
+
+        # Legacy attributes preserved
+        assert recorded_attrs["llm.model"] == "claude-test"
+        assert recorded_attrs["llm.prompt_tokens"] == 50
+        assert recorded_attrs["llm.completion_tokens"] == 25
+
+        # GenAI semantic convention attributes
+        assert recorded_attrs["gen_ai.system"] == "anthropic"
+        assert recorded_attrs["gen_ai.request.model"] == "claude-test"
+        assert recorded_attrs["gen_ai.response.model"] == "claude-test"
+        assert recorded_attrs["gen_ai.usage.input_tokens"] == 50
+        assert recorded_attrs["gen_ai.usage.output_tokens"] == 25
+        assert recorded_attrs["gen_ai.request.temperature"] == 0.5
+        assert recorded_attrs["gen_ai.request.max_tokens"] == 2000
+
+    @pytest.mark.asyncio
+    async def test_genai_optional_temperature_omitted(self):
+        """When gen_ai_request_temperature is None, the attribute should not be set."""
+        from loom.worker.runner import execute_with_tools
+
+        mock_backend = AsyncMock()
+        mock_backend.complete.return_value = {
+            "content": '{"result": "ok"}',
+            "model": "test-model",
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "tool_calls": None,
+            "stop_reason": "end_turn",
+            "gen_ai_system": "ollama",
+            "gen_ai_request_model": "test-model",
+            "gen_ai_response_model": "test-model",
+            "gen_ai_request_temperature": None,
+            "gen_ai_request_max_tokens": None,
+        }
+
+        recorded_attrs = {}
+
+        class RecordingSpan:
+            def set_attribute(self, key, value):
+                recorded_attrs[key] = value
+
+            def add_event(self, name, attributes=None):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+        class RecordingTracer:
+            def start_as_current_span(self, name, **kwargs):
+                from contextlib import contextmanager
+
+                @contextmanager
+                def _cm():
+                    yield RecordingSpan()
+
+                return _cm()
+
+        with patch("loom.worker.runner._tracer", RecordingTracer()):
+            await execute_with_tools(
+                backend=mock_backend,
+                system_prompt="sys",
+                user_message="msg",
+                tool_providers={},
+                tool_defs=None,
+            )
+
+        assert "gen_ai.request.temperature" not in recorded_attrs
+        assert "gen_ai.request.max_tokens" not in recorded_attrs
+
+    @pytest.mark.asyncio
+    async def test_loom_trace_content_env_var(self):
+        """LOOM_TRACE_CONTENT=1 should add prompt/completion span events."""
+        from loom.worker.runner import execute_with_tools
+
+        mock_backend = AsyncMock()
+        mock_backend.complete.return_value = {
+            "content": '{"result": "ok"}',
+            "model": "test-model",
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "tool_calls": None,
+            "stop_reason": "end_turn",
+            "gen_ai_system": "openai",
+            "gen_ai_request_model": "test-model",
+            "gen_ai_response_model": "test-model",
+            "gen_ai_request_temperature": 0.0,
+            "gen_ai_request_max_tokens": 2000,
+        }
+
+        recorded_events = []
+
+        class RecordingSpan:
+            def set_attribute(self, key, value):
+                pass
+
+            def add_event(self, name, attributes=None):
+                recorded_events.append((name, attributes))
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+        class RecordingTracer:
+            def start_as_current_span(self, name, **kwargs):
+                from contextlib import contextmanager
+
+                @contextmanager
+                def _cm():
+                    yield RecordingSpan()
+
+                return _cm()
+
+        with (
+            patch("loom.worker.runner._tracer", RecordingTracer()),
+            patch.dict(os.environ, {"LOOM_TRACE_CONTENT": "1"}),
+        ):
+            await execute_with_tools(
+                backend=mock_backend,
+                system_prompt="sys",
+                user_message="my user message",
+                tool_providers={},
+                tool_defs=None,
+            )
+
+        event_names = [e[0] for e in recorded_events]
+        assert "gen_ai.content.prompt" in event_names
+        assert "gen_ai.content.completion" in event_names
+
+        # Check prompt event content
+        prompt_event = next(e for e in recorded_events if e[0] == "gen_ai.content.prompt")
+        assert prompt_event[1]["gen_ai.prompt"] == "my user message"
+
+        # Check completion event content
+        completion_event = next(
+            e for e in recorded_events if e[0] == "gen_ai.content.completion"
+        )
+        assert completion_event[1]["gen_ai.completion"] == '{"result": "ok"}'
+
+    @pytest.mark.asyncio
+    async def test_loom_trace_content_disabled_by_default(self):
+        """Without LOOM_TRACE_CONTENT, no content events should be added."""
+        from loom.worker.runner import execute_with_tools
+
+        mock_backend = AsyncMock()
+        mock_backend.complete.return_value = {
+            "content": '{"result": "ok"}',
+            "model": "test-model",
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "tool_calls": None,
+            "stop_reason": "end_turn",
+            "gen_ai_system": "openai",
+            "gen_ai_request_model": "test-model",
+            "gen_ai_response_model": "test-model",
+            "gen_ai_request_temperature": 0.0,
+            "gen_ai_request_max_tokens": 2000,
+        }
+
+        recorded_events = []
+
+        class RecordingSpan:
+            def set_attribute(self, key, value):
+                pass
+
+            def add_event(self, name, attributes=None):
+                recorded_events.append((name, attributes))
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+        class RecordingTracer:
+            def start_as_current_span(self, name, **kwargs):
+                from contextlib import contextmanager
+
+                @contextmanager
+                def _cm():
+                    yield RecordingSpan()
+
+                return _cm()
+
+        with (
+            patch("loom.worker.runner._tracer", RecordingTracer()),
+            patch.dict(os.environ, {"LOOM_TRACE_CONTENT": ""}, clear=False),
+        ):
+            await execute_with_tools(
+                backend=mock_backend,
+                system_prompt="sys",
+                user_message="msg",
+                tool_providers={},
+                tool_defs=None,
+            )
+
+        event_names = [e[0] for e in recorded_events]
+        assert "gen_ai.content.prompt" not in event_names
+        assert "gen_ai.content.completion" not in event_names
+
+    @pytest.mark.asyncio
+    async def test_genai_attributes_work_with_noop_tracer(self):
+        """The NoOpTracer/NoOpSpan should silently accept GenAI attributes."""
+        from loom.worker.runner import execute_with_tools
+
+        mock_backend = AsyncMock()
+        mock_backend.complete.return_value = {
+            "content": '{"result": "ok"}',
+            "model": "test-model",
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "tool_calls": None,
+            "stop_reason": "end_turn",
+            "gen_ai_system": "ollama",
+            "gen_ai_request_model": "test-model",
+            "gen_ai_response_model": "test-model",
+            "gen_ai_request_temperature": 0.7,
+            "gen_ai_request_max_tokens": 1000,
+        }
+
+        # Use actual NoOpTracer — should not raise
+        noop_tracer = _NoOpTracer()
+        with patch("loom.worker.runner._tracer", noop_tracer):
+            result = await execute_with_tools(
+                backend=mock_backend,
+                system_prompt="sys",
+                user_message="msg",
+                tool_providers={},
+                tool_defs=None,
+            )
+
+        assert result["content"] == '{"result": "ok"}'

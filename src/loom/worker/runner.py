@@ -11,6 +11,7 @@ produces a final text answer.
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -140,9 +141,38 @@ async def execute_with_tools(
             max_tokens=max_tokens,
             tools=tool_defs,
         )
+        # Legacy attributes (backward compat)
         llm_span.set_attribute("llm.model", result.get("model", "unknown"))
         llm_span.set_attribute("llm.prompt_tokens", result.get("prompt_tokens", 0))
         llm_span.set_attribute("llm.completion_tokens", result.get("completion_tokens", 0))
+
+        # OTel GenAI semantic conventions
+        # See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
+        llm_span.set_attribute("gen_ai.system", result.get("gen_ai_system", "unknown"))
+        llm_span.set_attribute("gen_ai.request.model", result.get("gen_ai_request_model", ""))
+        llm_span.set_attribute("gen_ai.response.model", result.get("gen_ai_response_model", ""))
+        llm_span.set_attribute("gen_ai.usage.input_tokens", result.get("prompt_tokens", 0))
+        llm_span.set_attribute("gen_ai.usage.output_tokens", result.get("completion_tokens", 0))
+        if result.get("gen_ai_request_temperature") is not None:
+            llm_span.set_attribute(
+                "gen_ai.request.temperature", result["gen_ai_request_temperature"]
+            )
+        if result.get("gen_ai_request_max_tokens") is not None:
+            llm_span.set_attribute(
+                "gen_ai.request.max_tokens", result["gen_ai_request_max_tokens"]
+            )
+
+        # Optional content logging (opt-in via env var — may contain PII)
+        if os.environ.get("LOOM_TRACE_CONTENT", "").lower() in ("1", "true"):
+            llm_span.add_event(
+                "gen_ai.content.prompt",
+                {"gen_ai.prompt": user_message},
+            )
+            if result.get("content"):
+                llm_span.add_event(
+                    "gen_ai.content.completion",
+                    {"gen_ai.completion": result["content"]},
+                )
 
     total_prompt_tokens = result.get("prompt_tokens", 0)
     total_completion_tokens = result.get("completion_tokens", 0)

@@ -491,6 +491,7 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 
 - **OpenTelemetry integration** — optional `otel` extra (`uv sync --extra otel`); `loom.tracing` module with `get_tracer()`, `init_tracing()`, `inject_trace_context()`, `extract_trace_context()`; graceful no-op when OTel SDK not installed
 - **Span instrumentation** — spans on `BaseActor._process_one()`, `TaskRouter.route()`, `PipelineOrchestrator._execute_stage()`, `MCPBridge._dispatch_and_wait()`, `OrchestratorActor` phases (decompose/dispatch/collect/synthesize), `execute_with_tools()` LLM calls and tool continuations
+- **GenAI semantic conventions** — LLM call spans include `gen_ai.system`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.request.temperature`, `gen_ai.request.max_tokens` per the OTel GenAI semantic conventions. Legacy `llm.*` attributes preserved. Set `LOOM_TRACE_CONTENT=1` to record prompt/completion text as span events.
 - **W3C traceparent propagation** — trace context propagated through NATS messages via `_trace_context` key; spans link across actor boundaries for end-to-end pipeline tracing
 
 **TUI dashboard:**

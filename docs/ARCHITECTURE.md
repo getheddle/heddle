@@ -329,6 +329,20 @@ the actor mesh. Install with `uv sync --extra otel`.
   orchestrator phases (decompose, dispatch, collect, synthesize), LLM calls
   and tool continuation rounds in `execute_with_tools()`.
 
+LLM call spans follow the **OTel GenAI semantic conventions**
+(https://opentelemetry.io/docs/specs/semconv/gen-ai/):
+
+- `gen_ai.system` — provider identifier (`anthropic`, `ollama`, `openai`)
+- `gen_ai.request.model` / `gen_ai.response.model` — model names
+- `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` — token counts
+- `gen_ai.request.temperature` / `gen_ai.request.max_tokens` — request params
+
+Set `LOOM_TRACE_CONTENT=1` to additionally record prompt and completion text as
+span events (`gen_ai.content.prompt`, `gen_ai.content.completion`). This may
+contain PII — use only in development or secure environments.
+
+Legacy `llm.*` attributes are preserved for backward compatibility.
+
 Use any OTel-compatible backend (Jaeger, Zipkin, Grafana Tempo) to visualize
 traces. Initialize with `init_tracing(service_name="loom")` at startup.
 

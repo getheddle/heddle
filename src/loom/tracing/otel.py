@@ -9,6 +9,24 @@ optional dependency.
 Trace context propagation uses W3C ``traceparent`` format, injected into
 NATS message dicts under the ``_trace_context`` key.
 
+GenAI semantic conventions
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+LLM call spans (``llm.call``) in ``worker/runner.py`` follow the emerging
+OTel GenAI semantic conventions for attribute naming:
+
+- ``gen_ai.system`` — provider identifier (``anthropic``, ``ollama``, ``openai``)
+- ``gen_ai.request.model`` / ``gen_ai.response.model`` — model names
+- ``gen_ai.usage.input_tokens`` / ``gen_ai.usage.output_tokens`` — token counts
+- ``gen_ai.request.temperature`` / ``gen_ai.request.max_tokens`` — request params
+
+When ``LOOM_TRACE_CONTENT=1``, prompt and completion text are recorded as
+span events (``gen_ai.content.prompt``, ``gen_ai.content.completion``).
+
+See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
+
+Legacy ``llm.*`` attributes are preserved for backward compatibility.
+
 Setup::
 
     from loom.tracing import init_tracing

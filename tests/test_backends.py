@@ -262,6 +262,12 @@ class TestAnthropicBackendComplete:
         assert result["completion_tokens"] == 5
         assert result["tool_calls"] is None
         assert result["stop_reason"] == "end_turn"
+        # GenAI semantic convention metadata
+        assert result["gen_ai_system"] == "anthropic"
+        assert result["gen_ai_request_model"] == "claude-test"
+        assert result["gen_ai_response_model"] == "claude-test"
+        assert result["gen_ai_request_temperature"] == 0.0
+        assert result["gen_ai_request_max_tokens"] == 2000
 
     @pytest.mark.asyncio
     async def test_tool_use_response(self, backend):
@@ -384,6 +390,12 @@ class TestOllamaBackendComplete:
         assert result["completion_tokens"] == 8
         assert result["tool_calls"] is None
         assert result["stop_reason"] == "end_turn"
+        # GenAI semantic convention metadata
+        assert result["gen_ai_system"] == "ollama"
+        assert result["gen_ai_request_model"] == "llama3:8b"
+        assert result["gen_ai_response_model"] == "llama3:8b"
+        assert result["gen_ai_request_temperature"] == 0.0
+        assert result["gen_ai_request_max_tokens"] == 2000
 
     @pytest.mark.asyncio
     async def test_tool_calls_response(self, backend):
@@ -496,6 +508,12 @@ class TestOpenAICompatibleBackendComplete:
         assert result["completion_tokens"] == 5
         assert result["tool_calls"] is None
         assert result["stop_reason"] == "end_turn"
+        # GenAI semantic convention metadata
+        assert result["gen_ai_system"] == "openai"
+        assert result["gen_ai_request_model"] == "gpt-test"
+        assert result["gen_ai_response_model"] == "gpt-test"
+        assert result["gen_ai_request_temperature"] == 0.0
+        assert result["gen_ai_request_max_tokens"] == 2000
 
     @pytest.mark.asyncio
     async def test_tool_calls_with_string_arguments(self, backend):
@@ -678,6 +696,43 @@ class TestOpenAICompatibleBackendComplete:
         with patch.object(backend.client, "post", return_value=_mock_response(api_data)):
             result = await backend.complete("sys", "msg")
         assert result["model"] == "gpt-test"
+        assert result["gen_ai_response_model"] == "gpt-test"
+
+    @pytest.mark.asyncio
+    async def test_gen_ai_response_model_from_api(self, backend):
+        """gen_ai_response_model should reflect the actual model from the API."""
+        api_data = {
+            "model": "gpt-4-turbo-actual",
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "ok"},
+                    "finish_reason": "stop",
+                },
+            ],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        }
+        with patch.object(backend.client, "post", return_value=_mock_response(api_data)):
+            result = await backend.complete("sys", "msg")
+        assert result["gen_ai_request_model"] == "gpt-test"
+        assert result["gen_ai_response_model"] == "gpt-4-turbo-actual"
+
+    @pytest.mark.asyncio
+    async def test_gen_ai_custom_temperature_and_max_tokens(self, backend):
+        """gen_ai_request_temperature and gen_ai_request_max_tokens reflect call params."""
+        api_data = {
+            "model": "gpt-test",
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "ok"},
+                    "finish_reason": "stop",
+                },
+            ],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        }
+        with patch.object(backend.client, "post", return_value=_mock_response(api_data)):
+            result = await backend.complete("sys", "msg", max_tokens=500, temperature=0.7)
+        assert result["gen_ai_request_temperature"] == 0.7
+        assert result["gen_ai_request_max_tokens"] == 500
 
     @pytest.mark.asyncio
     async def test_messages_parameter_prepends_system(self, backend):

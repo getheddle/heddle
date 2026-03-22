@@ -155,6 +155,12 @@ class AnthropicBackend(LLMBackend):
             "completion_tokens": data["usage"]["output_tokens"],
             "tool_calls": tool_calls,
             "stop_reason": data.get("stop_reason"),
+            # OTel GenAI semantic convention metadata
+            "gen_ai_system": "anthropic",
+            "gen_ai_request_model": self.model,
+            "gen_ai_response_model": data["model"],
+            "gen_ai_request_temperature": temperature,
+            "gen_ai_request_max_tokens": max_tokens,
         }
 
 
@@ -247,6 +253,12 @@ class OllamaBackend(LLMBackend):
             "completion_tokens": data.get("eval_count", 0),
             "tool_calls": tool_calls,
             "stop_reason": stop_reason,
+            # OTel GenAI semantic convention metadata
+            "gen_ai_system": "ollama",
+            "gen_ai_request_model": self.model,
+            "gen_ai_response_model": self.model,
+            "gen_ai_request_temperature": temperature,
+            "gen_ai_request_max_tokens": max_tokens,
         }
 
 
@@ -345,6 +357,12 @@ class OpenAICompatibleBackend(LLMBackend):
             "completion_tokens": usage.get("completion_tokens", 0),
             "tool_calls": tool_calls,
             "stop_reason": stop_reason,
+            # OTel GenAI semantic convention metadata
+            "gen_ai_system": "openai",
+            "gen_ai_request_model": self.model,
+            "gen_ai_response_model": data.get("model", self.model),
+            "gen_ai_request_temperature": temperature,
+            "gen_ai_request_max_tokens": max_tokens,
         }
 
 
