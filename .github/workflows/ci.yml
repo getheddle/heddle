@@ -46,7 +46,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          uv run pytest tests/ -v -m "not integration" \
+          uv run pytest tests/ -v -m "not integration and not deepeval" \
             --cov --cov-report=term-missing --cov-report=xml
 
       - name: Upload coverage to Codecov
@@ -64,5 +64,5 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --extra docs
       - name: Build API documentation
-        run: uv run sphinx-build -b html docs/ docs/_build/html
+        run: uv run mkdocs build --strict
 

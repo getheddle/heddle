@@ -53,8 +53,7 @@ def relevance_metric(judge_model):
     return GEval(
         name="Response Relevance",
         criteria=(
-            "The output must directly address the input prompt "
-            "and contain relevant information."
+            "The output must directly address the input prompt and contain relevant information."
         ),
         evaluation_params=[
             LLMTestCaseParams.INPUT,
@@ -72,16 +71,20 @@ def test_worker_json_output_structure(judge_model, json_compliance_metric):
 
     test_case = LLMTestCase(
         input="Summarize the key economic indicators for Q1 2026.",
-        actual_output=json.dumps({
-            "summary": "Q1 2026 showed moderate GDP growth of 2.3%.",
-            "key_points": ["GDP growth 2.3%", "Inflation steady at 3.1%"],
-            "confidence": 0.85,
-        }),
-        expected_output=json.dumps({
-            "summary": "...",
-            "key_points": ["..."],
-            "confidence": 0.0,
-        }),
+        actual_output=json.dumps(
+            {
+                "summary": "Q1 2026 showed moderate GDP growth of 2.3%.",
+                "key_points": ["GDP growth 2.3%", "Inflation steady at 3.1%"],
+                "confidence": 0.85,
+            }
+        ),
+        expected_output=json.dumps(
+            {
+                "summary": "...",
+                "key_points": ["..."],
+                "confidence": 0.0,
+            }
+        ),
     )
     assert_test(test_case, [json_compliance_metric])
 
