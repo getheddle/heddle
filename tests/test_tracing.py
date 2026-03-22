@@ -307,7 +307,7 @@ class TestGenAISemanticConventions:
                 return _cm()
 
         with patch("loom.worker.runner._tracer", RecordingTracer()):
-            result = await execute_with_tools(
+            await execute_with_tools(
                 backend=mock_backend,
                 system_prompt="sys",
                 user_message="msg",

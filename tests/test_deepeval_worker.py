@@ -52,7 +52,10 @@ def relevance_metric(judge_model):
 
     return GEval(
         name="Response Relevance",
-        criteria="The output must directly address the input prompt and contain relevant information.",
+        criteria=(
+            "The output must directly address the input prompt "
+            "and contain relevant information."
+        ),
         evaluation_params=[
             LLMTestCaseParams.INPUT,
             LLMTestCaseParams.ACTUAL_OUTPUT,
