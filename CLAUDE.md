@@ -267,8 +267,12 @@ uv run pytest tests/ -v -m "not integration and not deepeval"
 uv run ruff check src/ tests/
 uv run ruff format --check src/ tests/
 
-# Build API documentation (static HTML)
+# Install doc dependencies
+uv sync --extra docs
+
+# Build API documentation locally (static HTML)
 uv run sphinx-build -b html docs/ docs/_build/html
+# NOTE: GitHub Pages auto-deploys on push to main via .github/workflows/docs.yml
 
 # Run a worker locally (needs NATS running)
 uv run loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222

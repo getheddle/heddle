@@ -1,6 +1,7 @@
 # Loom — Lightweight Orchestrated Operational Mesh
 
 [![CI](https://github.com/IranTransitionProject/loom/actions/workflows/ci.yml/badge.svg)](https://github.com/IranTransitionProject/loom/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://irantransitionproject.github.io/loom/)
 [![codecov](https://codecov.io/github/IranTransitionProject/loom/graph/badge.svg?token=4N0F5XBZW9)](https://codecov.io/github/IranTransitionProject/loom)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](LICENSE)

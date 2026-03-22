@@ -1,17 +1,26 @@
 """Sphinx configuration for Loom API documentation."""
 
+import os
+import sys
+
+# -- Path setup ---------------------------------------------------------------
+# Add src/ to sys.path so autodoc can import loom modules.
+sys.path.insert(0, os.path.abspath("../src"))
+
 project = "Loom"
 copyright = "2024, Loom Contributors"
 author = "Loom Contributors"
-release = "0.4.0"
+release = "0.8.0"
 
 # -- Extensions ---------------------------------------------------------------
 
 extensions = [
-    "myst_parser",          # Markdown source support
-    "autodoc2",             # AST-based autodoc (no imports needed)
-    "sphinx.ext.viewcode",  # Add [source] links to generated docs
-    "sphinx.ext.intersphinx",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.napoleon",       # Google/NumPy docstring support
+    "sphinx.ext.viewcode",       # Source code links
+    "sphinx.ext.intersphinx",    # Cross-project links
+    "myst_parser",               # Markdown support for existing .md docs
 ]
 
 # -- MyST (Markdown) settings -------------------------------------------------
@@ -28,34 +37,49 @@ source_suffix = {
     ".md": "markdown",
 }
 
-# -- autodoc2 settings --------------------------------------------------------
-# AST-based: parses source files without importing them.
-# This means docs build without NATS, Valkey, Ollama, or any other infra.
+# -- Autodoc settings ---------------------------------------------------------
 
-autodoc2_packages = [
-    {
-        "path": "../src/loom",
-        "module": "loom",
-        "exclude_dirs": ["__pycache__"],
-    },
+autodoc_default_options = {
+    "members": True,
+    "undoc-members": False,
+    "show-inheritance": True,
+    "member-order": "bysource",
+}
+autodoc_typehints = "description"
+
+# Mock imports for optional dependencies that may not be installed during
+# docs build.  This prevents ImportError when autodoc tries to import modules
+# that depend on these packages.
+autodoc_mock_imports = [
+    "nats",
+    "redis",
+    "ollama",
+    "duckdb",
+    "croniter",
+    "mcp",
+    "fastapi",
+    "uvicorn",
+    "jinja2",
+    "starlette",
+    "multipart",
+    "zeroconf",
+    "opentelemetry",
+    "textual",
+    "deepeval",
+    "docling",
+    "tiktoken",
+    "httpx",
+    "click",
+    "structlog",
+    "pydantic",
+    "yaml",
+    "pydantic_settings",
 ]
 
-autodoc2_render_plugin = "myst"
-autodoc2_hidden_objects = ["private", "dunder"]
-autodoc2_module_all_regexes = []  # Don't require __all__; document all public names
+# -- Napoleon settings (Google-style docstrings) ------------------------------
 
-# -- Theme --------------------------------------------------------------------
-
-html_theme = "sphinx_rtd_theme"
-html_theme_options = {
-    "navigation_depth": 4,
-    "collapse_navigation": False,
-    "sticky_navigation": True,
-    "style_external_links": True,
-}
-
-html_static_path = []
-templates_path = []
+napoleon_google_docstrings = True
+napoleon_numpy_docstrings = True
 
 # -- Intersphinx (cross-link to Python docs) ----------------------------------
 
@@ -64,8 +88,20 @@ intersphinx_mapping = {
     "pydantic": ("https://docs.pydantic.dev/latest/", None),
 }
 
+# -- Theme --------------------------------------------------------------------
+
+html_theme = "furo"
+html_theme_options = {
+    "source_repository": "https://github.com/IranTransitionProject/loom",
+    "source_branch": "main",
+    "source_directory": "docs/",
+}
+
+html_static_path = []
+templates_path = []
+
 # -- General ------------------------------------------------------------------
 
-exclude_patterns = ["_build", "api/.autodoc2"]
+exclude_patterns = ["_build"]
 html_title = "Loom Documentation"
 html_short_title = "Loom"

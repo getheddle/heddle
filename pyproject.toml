@@ -56,10 +56,10 @@ tui = [
     "nats-py>=2.7.0",                     # Direct NATS subscription for live view
 ]
 docs = [
-    "sphinx>=7.0",             # Documentation generator
-    "sphinx-rtd-theme>=2.0",   # Read the Docs theme
-    "myst-parser>=3.0",        # Markdown support in Sphinx
-    "sphinx-autodoc2>=0.5",    # Autodoc from source (AST-based, no import needed)
+    "sphinx>=7.0",                    # Documentation generator
+    "furo>=2024.0",                   # Modern theme (dark mode, clean design)
+    "myst-parser>=3.0",               # Markdown support in Sphinx
+    "sphinx-autodoc-typehints>=2.0",  # Enhanced type hint rendering
 ]
 eval = [
     "deepeval>=3.8.0",         # LLM output quality evaluation (pytest metrics)
@@ -73,10 +73,10 @@ dev = [
     "redis>=5.0.0",            # Needed for contrib/redis tests
     "croniter>=2.0.0",         # Needed for scheduler tests
     "mcp>=1.20.0",             # Needed for MCP gateway tests
-    "sphinx>=7.0",             # Needed for docs build
-    "sphinx-rtd-theme>=2.0",
+    "sphinx>=7.0",                    # Needed for docs build
+    "furo>=2024.0",
     "myst-parser>=3.0",
-    "sphinx-autodoc2>=0.5",
+    "sphinx-autodoc-typehints>=2.0",
     "deepeval>=3.8.0",         # LLM output quality evaluation
 ]
 
