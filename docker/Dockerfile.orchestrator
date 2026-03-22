@@ -2,7 +2,7 @@
 #
 # The orchestrator uses an LLM to decompose high-level goals into subtasks,
 # dispatches them to workers via the router, and synthesizes the results.
-# It requires both NATS (messaging) and Redis (checkpoint state).
+# It requires both NATS (messaging) and Valkey (checkpoint state).
 #
 # Build:  docker build -f docker/Dockerfile.orchestrator -t loom-orchestrator .
 # Run:    docker run -e NATS_URL=nats://nats:4222 -e REDIS_URL=redis://redis:6379 loom-orchestrator

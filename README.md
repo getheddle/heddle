@@ -44,7 +44,7 @@ infrastructure.
 
 **Goal Decomposition and Synthesis** — an LLM-driven orchestrator breaks
 complex goals into subtasks, dispatches them to appropriate workers, collects
-results, and synthesizes final answers. Self-checkpointing to Redis prevents
+results, and synthesizes final answers. Self-checkpointing to Valkey prevents
 context overflow.
 
 **Pipeline Orchestration** — dependency-aware parallel stage execution with
@@ -67,7 +67,7 @@ deploying LLM workers. Interactive test bench, eval suite runner with scoring,
 pipeline stage editor, and worker version tracking. No NATS needed for testing.
 
 **Contrib Ecosystem** — optional packages for DuckDB (analytics, vector search),
-Redis (checkpoint persistence), and RAG (ingestion, chunking, embedding, analysis).
+Valkey (checkpoint persistence), and RAG (ingestion, chunking, embedding, analysis).
 
 ---
 
@@ -99,10 +99,10 @@ that separates concerns across specialized actors.
 | Orchestrator (decompose/dispatch/synthesize) | Complete |
 | Pipeline orchestrator (sequential stages) | Complete |
 | Router (deterministic, rate-limited) | Complete |
-| Checkpoint (Redis + in-memory) | Complete |
+| Checkpoint (Valkey + in-memory) | Complete |
 | Scheduler (cron + interval dispatch) | Complete |
 | MCP gateway (config-driven tool server) | Complete |
-| Contrib: DuckDB, Redis, RAG | Complete |
+| Contrib: DuckDB, Valkey, RAG | Complete |
 | Worker Workshop (web UI) | Complete |
 | Unit tests | 1472 passing, 90% coverage |
 

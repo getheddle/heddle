@@ -101,7 +101,7 @@ system_prompt: |
 #
 # This prevents context window overflow during complex multi-step goals.
 # Checkpoints are stored via CheckpointStore (InMemoryCheckpointStore by default,
-# RedisCheckpointStore for production — see src/loom/contrib/redis/store.py).
+# RedisCheckpointStore for production — see src/loom/contrib/redis/store.py; uses Valkey server).
 #
 # Per-goal isolation (Strategy B): each concurrent goal has its own
 # checkpoint_counter in its GoalState — checkpoints don't interfere.

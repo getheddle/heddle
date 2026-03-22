@@ -9,7 +9,7 @@
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) package manager
 - At least one LLM backend (Ollama recommended to start)
-- NATS and Redis for full infrastructure (not needed for unit tests)
+- NATS and Valkey for full infrastructure (not needed for unit tests)
 
 ---
 
@@ -46,28 +46,28 @@ uv run pytest tests/ -v -m "not integration"
 
 This runs all unit tests (messages, contracts, checkpoint, pipeline, workers,
 processor, tools, tool-use, knowledge silos, embeddings, contrib/duckdb) without
-needing NATS or Redis. The integration test is excluded by marker.
+needing NATS or Valkey. The integration test is excluded by marker.
 
 ---
 
-## 3. Set Up Infrastructure (NATS + Redis)
+## 3. Set Up Infrastructure (NATS + Valkey)
 
-The simplest path — run NATS and Redis locally:
+The simplest path — run NATS and Valkey locally:
 
 ```bash
 # Install via Homebrew (Mac) or use Docker
-brew install nats-server redis
+brew install nats-server valkey
 
 # Start them
 nats-server &
-redis-server &
+valkey-server &
 ```
 
 Or with Docker:
 
 ```bash
 docker run -d --name nats -p 4222:4222 nats:2.10-alpine
-docker run -d --name redis -p 6379:6379 redis:7-alpine
+docker run -d --name valkey -p 6379:6379 valkey/valkey:8-alpine
 ```
 
 ---

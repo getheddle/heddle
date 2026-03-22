@@ -188,7 +188,7 @@ silently removes a stage from execution.
 to serialize calls within a single process. It does NOT protect against
 concurrent writes from multiple instances.
 
-**Why:** Cross-process locking requires external coordination (file locks, Redis
+**Why:** Cross-process locking requires external coordination (file locks, Valkey
 locks) which adds infrastructure dependencies. The design contract is: run
 exactly one processor instance for single-writer backends like DuckDB.
 

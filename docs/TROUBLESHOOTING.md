@@ -295,7 +295,7 @@ choco install nssm
 - Workers are stateless and `reset()` between tasks — check for leaked references
 - DuckDB stores can grow large — monitor disk usage
 - Dead-letter consumer has a bounded store (default 1000 entries) — adjust `max_size` if needed
-- Redis checkpoint store: check TTL settings for expired entries
+- Valkey checkpoint store: check TTL settings for expired entries
 
 ---
 

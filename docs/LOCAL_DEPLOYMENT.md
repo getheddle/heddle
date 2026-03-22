@@ -34,7 +34,7 @@ docker compose up -d
 This starts:
 
 - **NATS** message bus (port 4222, monitoring on 8222)
-- **Redis** checkpoint store (port 6379)
+- **Valkey** checkpoint store (port 6379)
 - **Workshop** web UI (port 8080)
 - **Router** deterministic task router
 

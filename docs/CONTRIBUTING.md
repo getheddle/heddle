@@ -60,7 +60,7 @@ using rules in `configs/router_rules.yaml`. Do not add LLM logic to the router.
 
 **Test coverage:**
 All new functionality must include unit tests. Tests must pass without
-infrastructure (NATS, Redis, Ollama). Use `InMemoryBus` and
+infrastructure (NATS, Valkey, Ollama). Use `InMemoryBus` and
 `InMemoryCheckpointStore` for testing.
 
 **Code style:**

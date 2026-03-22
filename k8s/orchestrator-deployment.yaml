@@ -2,7 +2,7 @@
 #
 # The orchestrator uses an LLM to decompose goals into subtasks, dispatches
 # them to workers via the router, and synthesizes the results. It requires
-# NATS for messaging and Redis for checkpoint state.
+# NATS for messaging and Valkey for checkpoint state.
 #
 # The container CMD (set in Dockerfile.orchestrator) runs:
 #   loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://nats:4222

@@ -718,7 +718,7 @@ class MyEmbeddingProvider(EmbeddingProvider):
 ## Tips
 
 - **Keep workers narrow.** A worker that does one thing well is better than a worker that tries to do everything. If you need multiple capabilities, create multiple workers and wire them with a pipeline.
-- **Test without infrastructure.** All worker logic can be unit-tested without NATS or Redis — mock the `publish` method and call `handle_message()` directly. See `tests/test_worker.py` for examples.
+- **Test without infrastructure.** All worker logic can be unit-tested without NATS or Valkey — mock the `publish` method and call `handle_message()` directly. See `tests/test_worker.py` for examples.
 - **Use local tier for development.** Ollama with a small model (llama3.2:3b or command-r7b) gives fast iteration. Switch to standard/frontier tiers when you need better reasoning.
 - **Schema validation is your safety net.** It catches malformed LLM output before it propagates to downstream stages. Define schemas tightly.
 - **Monitor the dead-letter subject.** Tasks landing on `loom.tasks.dead_letter` indicate routing failures or rate limit hits. Use `nats sub loom.tasks.dead_letter` during development.

@@ -30,7 +30,7 @@ source_suffix = {
 
 # -- autodoc2 settings --------------------------------------------------------
 # AST-based: parses source files without importing them.
-# This means docs build without NATS, Redis, Ollama, or any other infra.
+# This means docs build without NATS, Valkey, Ollama, or any other infra.
 
 autodoc2_packages = [
     {

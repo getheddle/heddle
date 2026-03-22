@@ -1,7 +1,8 @@
 """
-Redis-backed checkpoint store.
+Valkey-backed checkpoint store.
 
-Production implementation of CheckpointStore using redis.asyncio.
+Production implementation of CheckpointStore using redis.asyncio (redis-py).
+The redis-py client library works unchanged with Valkey.
 Install with: pip install loom[redis]
 
 Connection defaults:
@@ -17,10 +18,11 @@ from loom.orchestrator.store import CheckpointStore
 
 
 class RedisCheckpointStore(CheckpointStore):
-    """Redis-backed checkpoint store.
+    """Valkey-backed checkpoint store (via redis-py client).
 
     Thin wrapper around redis.asyncio that implements the CheckpointStore
     interface. Handles connection lifecycle and TTL-based expiry natively.
+    The redis-py client works unchanged with Valkey.
     """
 
     def __init__(self, redis_url: str = "redis://redis:6379") -> None:

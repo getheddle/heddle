@@ -185,8 +185,8 @@ examples/
   rag_demo.py             # End-to-end RAG pipeline demo
 
 docker/                   # Dockerfiles (orchestrator, router, worker, workshop) + entrypoint.sh
-docker-compose.yml        # Local dev stack: NATS + Redis + Workshop + Router
-k8s/                      # Kubernetes manifests (namespace, NATS, Redis, workers, workshop, Kustomize)
+docker-compose.yml        # Local dev stack: NATS + Valkey + Workshop + Router
+k8s/                      # Kubernetes manifests (namespace, NATS, Valkey, workers, workshop, Kustomize)
 deploy/
   macos/                  # launchd plist files + install/uninstall scripts
   windows/                # NSSM-based Windows service install/uninstall scripts
@@ -293,7 +293,7 @@ uv run loom workshop --host 0.0.0.0 --port 8080  # LAN accessible
 uv run loom mdns --workshop-port 8080 --nats-port 4222
 
 # Docker Compose local stack
-docker compose up -d                       # start NATS + Redis + Workshop + Router
+docker compose up -d                       # start NATS + Valkey + Workshop + Router
 docker compose down                        # stop all services
 ```
 

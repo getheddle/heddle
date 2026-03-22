@@ -37,7 +37,7 @@ src/loom/
 │   ├── runner.py        # Orchestrator actor: decompose → dispatch → collect → synthesize (concurrent goals)
 │   ├── stream.py        # ResultStream — async iterator for streaming result collection (Strategy A)
 │   ├── pipeline.py      # Pipeline orchestrator: dependency-aware parallel stage execution
-│   ├── checkpoint.py    # Self-summarization: compresses orchestrator context to Redis snapshots
+│   ├── checkpoint.py    # Self-summarization: compresses orchestrator context to Valkey snapshots
 │   ├── store.py         # CheckpointStore ABC (pluggable persistence backend)
 │   ├── decomposer.py    # LLM-driven goal → subtask decomposition with worker manifest grounding
 │   └── synthesizer.py   # Multi-result aggregation (deterministic merge + LLM synthesis modes)
@@ -90,7 +90,7 @@ src/loom/
 │
 └── contrib/
     ├── duckdb/          # DuckDB tools and backends (optional: uv sync --extra duckdb)
-    ├── redis/           # Redis-backed CheckpointStore (optional: uv sync --extra redis)
+    ├── redis/           # Valkey-backed CheckpointStore (optional: uv sync --extra redis)
     └── rag/             # RAG pipeline: ingestion, chunking, embedding, analysis
 
 configs/
@@ -131,7 +131,7 @@ tests/                    # Unit + integration tests
 5. **The orchestrator** collects results, decides if more subtasks are needed, and eventually produces a final answer
 
 Workers are stateless — they reset after every task. The orchestrator is longer-lived
-but checkpoints itself to Redis when its context grows too large, compressing history
+but checkpoints itself to Valkey when its context grows too large, compressing history
 into a structured summary.
 
 ---
@@ -207,7 +207,7 @@ Full decompose → dispatch → collect → synthesize loop:
 - **ResultStream:** Streaming result collection via async iteration — yields results
   as they arrive rather than blocking for all subtasks (Strategy A)
 - **ResultSynthesizer:** Deterministic merge + optional LLM synthesis modes
-- **CheckpointManager:** Pluggable store (in-memory for testing, Redis for production), configurable TTL
+- **CheckpointManager:** Pluggable store (in-memory for testing, Valkey for production), configurable TTL
 - **Concurrent goals:** Set `max_concurrent_goals: N` in config to process multiple
   goals simultaneously. All mutable state is per-goal inside `GoalState` —
   concurrent goals are fully isolated with no shared mutable data and no locks.
@@ -359,7 +359,7 @@ Optional dependency: `uv sync --extra tui`.
 - **DuckDB** (`contrib/duckdb/`): `DuckDBViewTool` (view-based LLM tool),
   `DuckDBVectorTool` (semantic similarity search), `DuckDBQueryBackend`
   (FTS, filtering, stats, vector search)
-- **Redis** (`contrib/redis/`): `RedisCheckpointStore` for production checkpoint persistence
+- **Valkey** (`contrib/redis/`): `RedisCheckpointStore` for production checkpoint persistence
 - **RAG** (`contrib/rag/`): Telegram ingestion, text normalization, chunking,
   vector storage, LLM analysis actors
 

@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: redis
+  name: valkey
   namespace: loom
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: redis
+      app: valkey
   template:
     metadata:
       labels:
-        app: redis
+        app: valkey
     spec:
       containers:
-        - name: redis
-          image: redis:7-alpine
+        - name: valkey
+          image: valkey/valkey:8-alpine
           ports:
             - containerPort: 6379
           args: ["--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
@@ -34,6 +34,6 @@ metadata:
   namespace: loom
 spec:
   selector:
-    app: redis
+    app: valkey
   ports:
     - port: 6379

@@ -7,7 +7,7 @@
 ## Overview
 
 Loom ships with Kubernetes manifests in `k8s/` that are ready for Minikube.
-The manifests deploy NATS, Redis, the router, an orchestrator, and worker
+The manifests deploy NATS, Valkey, the router, an orchestrator, and worker
 pods into a dedicated `loom` namespace.
 
 ---
@@ -69,7 +69,7 @@ open http://$(minikube ip):30080
 k8s/
 ├── namespace.yaml              # loom namespace
 ├── nats-deployment.yaml        # NATS server
-├── redis-deployment.yaml       # Redis server
+├── redis-deployment.yaml       # Valkey server
 ├── router-deployment.yaml      # Loom router
 ├── orchestrator-deployment.yaml # Loom orchestrator
 ├── worker-deployment.yaml      # Loom worker(s)
@@ -120,7 +120,7 @@ Configure resource requests and limits for each component type:
 | Worker (local) | 200m | 1000m | 256Mi | 512Mi |
 | Worker (standard) | 100m | 500m | 128Mi | 256Mi |
 | NATS | 100m | 500m | 128Mi | 256Mi |
-| Redis | 100m | 500m | 128Mi | 256Mi |
+| Valkey | 100m | 500m | 128Mi | 256Mi |
 
 Workers with local LLM backends (Ollama) need more resources because they
 proxy API calls. Workers using remote APIs (Anthropic) are lighter.
@@ -206,7 +206,7 @@ Pipeline orchestrators also support concurrent goal processing via
 
 ## Persistent Volumes
 
-Redis requires persistent storage for checkpoint data:
+Valkey requires persistent storage for checkpoint data:
 
 ```yaml
 apiVersion: v1
@@ -221,7 +221,7 @@ spec:
       storage: 1Gi
 ```
 
-Mount the PVC in the Redis deployment's pod spec:
+Mount the PVC in the Valkey deployment's pod spec:
 
 ```yaml
 volumes:

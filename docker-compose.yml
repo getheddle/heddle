@@ -6,7 +6,7 @@
 #
 # Services:
 #   - nats:     Message bus (port 4222, monitoring on 8222)
-#   - redis:    Checkpoint persistence (port 6379)
+#   - valkey:   Checkpoint persistence (port 6379)
 #   - workshop: Workshop web UI (port 8080)
 #   - router:   Deterministic task router
 #
@@ -22,12 +22,12 @@ services:
     command: "--http_port 8222"
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
+  valkey:
+    image: valkey/valkey:8-alpine
     ports:
       - "6379:6379"
     volumes:
-      - redis-data:/data
+      - valkey-data:/data
     restart: unless-stopped
 
   workshop:
@@ -70,5 +70,5 @@ services:
   #     - router
 
 volumes:
-  redis-data:
+  valkey-data:
   loom-apps:

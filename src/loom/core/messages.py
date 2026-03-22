@@ -132,7 +132,7 @@ class CheckpointState(BaseModel):
     """Compressed orchestrator state for self-summarization.
 
     When the orchestrator's conversation history exceeds a token threshold,
-    CheckpointManager compresses it into this structure and persists to Redis.
+    CheckpointManager compresses it into this structure and persists to Valkey.
     The orchestrator can then "reboot" with a fresh context containing only
     the checkpoint + a small recent-interactions window.
 
