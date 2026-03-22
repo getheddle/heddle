@@ -178,7 +178,7 @@ remain open; unmodified files can be combined with proprietary code in a
 Larger Work.
 
 Alternative licensing available for organizations with copyleft constraints.
-Contact: <hooman@mac.com>
+Contact: <admin@irantransitionproject.org>
 
 ---
 
