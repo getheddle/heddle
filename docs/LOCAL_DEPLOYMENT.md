@@ -220,4 +220,4 @@ avahi-browse -r _http._tcp
 
 *For Kubernetes deployment, see [KUBERNETES.md](KUBERNETES.md).*
 *For app bundle deployment, see [APP_DEPLOYMENT.md](APP_DEPLOYMENT.md).*
-*For ITP analytical system setup (Baft + Framework), see [baft/docs/SETUP.md](../../baft/docs/SETUP.md).*
+*For ITP analytical system setup (Baft + Framework), see [baft/docs/SETUP.md](https://github.com/IranTransitionProject/baft/blob/main/docs/SETUP.md).*

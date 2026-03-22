@@ -56,10 +56,8 @@ tui = [
     "nats-py>=2.7.0",                     # Direct NATS subscription for live view
 ]
 docs = [
-    "sphinx>=7.0",                    # Documentation generator
-    "furo>=2024.0",                   # Modern theme (dark mode, clean design)
-    "myst-parser>=3.0",               # Markdown support in Sphinx
-    "sphinx-autodoc-typehints>=2.0",  # Enhanced type hint rendering
+    "mkdocs-material>=9.5",           # MkDocs with Material theme
+    "mkdocstrings[python]>=0.24",     # Auto-generate API docs from docstrings
 ]
 eval = [
     "deepeval>=3.8.0",         # LLM output quality evaluation (pytest metrics)
@@ -73,10 +71,8 @@ dev = [
     "redis>=5.0.0",            # Needed for contrib/redis tests
     "croniter>=2.0.0",         # Needed for scheduler tests
     "mcp>=1.20.0",             # Needed for MCP gateway tests
-    "sphinx>=7.0",                    # Needed for docs build
-    "furo>=2024.0",
-    "myst-parser>=3.0",
-    "sphinx-autodoc-typehints>=2.0",
+    "mkdocs-material>=9.5",           # Needed for docs build
+    "mkdocstrings[python]>=0.24",
     "deepeval>=3.8.0",         # LLM output quality evaluation
 ]
 
@@ -202,7 +198,7 @@ indent-style = "space"
 line-ending = "auto"
 
 [tool.rumdl]
-exclude = [".venv", "node_modules", "_build"]
+exclude = [".venv", "node_modules", "site"]
 disable = [
     "MD013",  # line-length — docs use natural line breaks, not hard-wrapped at 80
     "MD024",  # duplicate-heading — repeated "Prerequisites", "Troubleshooting" across sections

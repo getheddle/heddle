@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Loom.
 
 ## Before You Contribute
 
-**Read [`GOVERNANCE.md`](../GOVERNANCE.md) first.** This project has a mission constraint:
+**Read [`GOVERNANCE.md`](https://github.com/IranTransitionProject/loom/blob/main/GOVERNANCE.md) first.** This project has a mission constraint:
 reliable, well-tested, openly available infrastructure for AI workflow orchestration.
 Contributions that compromise the framework's generality, introduce vendor lock-in,
 or bypass architectural invariants will not be merged regardless of their other merits.

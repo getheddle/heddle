@@ -1,0 +1,95 @@
+site_name: Loom
+site_description: Actor-based multi-LLM orchestration framework
+site_url: https://irantransitionproject.github.io/loom/
+repo_url: https://github.com/IranTransitionProject/loom
+repo_name: IranTransitionProject/loom
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
+            docstring_style: google
+            merge_init_into_class: true
+            show_signature_annotations: true
+            separate_signature: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - def_list
+
+nav:
+  - Home: index.md
+  - User Guide:
+    - Getting Started: GETTING_STARTED.md
+    - Building Workflows: building-workflows.md
+    - Architecture: ARCHITECTURE.md
+    - Local Deployment: LOCAL_DEPLOYMENT.md
+    - Application Deployment: APP_DEPLOYMENT.md
+    - Kubernetes: KUBERNETES.md
+    - RAG How-To: rag-howto.md
+    - Workshop: workshop.md
+    - Troubleshooting: TROUBLESHOOTING.md
+  - API Reference:
+    - Core: api/core.md
+    - Message Bus: api/bus.md
+    - Worker: api/worker.md
+    - Orchestrator: api/orchestrator.md
+    - Router: api/router.md
+    - Scheduler: api/scheduler.md
+    - MCP: api/mcp.md
+    - Tracing: api/tracing.md
+    - Contrib: api/contrib.md
+  - Development:
+    - Contributing: CONTRIBUTING.md
+    - Coding Guide: CODING_GUIDE.md
+    - Design Invariants: DESIGN_INVARIANTS.md

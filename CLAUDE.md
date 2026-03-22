@@ -177,9 +177,8 @@ docs/                     # Project documentation
   building-workflows.md   # How to build custom workflows
   rag-howto.md            # RAG pipeline setup guide
   workshop.md             # Workshop web app design, architecture, enhancement guide
-  conf.py                 # Sphinx configuration for API docs
-  index.md                # Sphinx documentation index
-  Makefile                # Sphinx build commands
+  index.md                # MkDocs landing page
+  api/                    # MkDocs API reference pages (mkdocstrings)
 
 examples/
   rag_demo.py             # End-to-end RAG pipeline demo
@@ -270,8 +269,10 @@ uv run ruff format --check src/ tests/
 # Install doc dependencies
 uv sync --extra docs
 
-# Build API documentation locally (static HTML)
-uv run sphinx-build -b html docs/ docs/_build/html
+# Build API documentation locally (static HTML into site/)
+uv run mkdocs build --strict
+# Serve locally with live reload (localhost:8000)
+uv run mkdocs serve
 # NOTE: GitHub Pages auto-deploys on push to main via .github/workflows/docs.yml
 
 # Run a worker locally (needs NATS running)
@@ -324,7 +325,7 @@ uv sync --extra mdns          # mDNS/Bonjour service discovery on LAN (zeroconf)
 uv sync --extra tui           # TUI terminal dashboard (Textual)
 uv sync --extra otel          # OpenTelemetry distributed tracing (spans, OTLP export)
 uv sync --extra eval          # DeepEval LLM output quality evaluation (Ollama judge, no cloud API)
-uv sync --extra docs           # Sphinx API documentation generation
+uv sync --extra docs           # MkDocs-Material API documentation generation
 uv sync --all-extras          # All dependencies including dev/test
 ```
 
