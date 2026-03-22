@@ -100,7 +100,7 @@ def _extract_json(raw: str) -> dict:
     raise ValueError(f"LLM returned non-JSON/YAML: {raw[:200]}")
 
 
-async def execute_with_tools(
+async def execute_with_tools(  # noqa: PLR0915
     backend: LLMBackend,
     system_prompt: str,
     user_message: str,

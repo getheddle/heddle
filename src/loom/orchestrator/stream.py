@@ -125,7 +125,7 @@ class ResultStream:
     on_result : ResultCallback | None
         Optional callback invoked as each result arrives.
 
-    Example
+    Example:
     -------
     ::
 
