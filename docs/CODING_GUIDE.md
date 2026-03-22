@@ -12,14 +12,14 @@ the **what** is acceptable.
 
 ## Table of Contents
 
-1. [Python Version & Language Features](#python-version-language-features)
+1. [Python Version and Language Features](#python-version-and-language-features)
 2. [Code Formatting](#code-formatting)
 3. [Naming Conventions](#naming-conventions)
 4. [Import Style](#import-style)
 5. [Type Annotations](#type-annotations)
 6. [Module Docstrings](#module-docstrings)
 7. [Class Docstrings](#class-docstrings)
-8. [Function & Method Docstrings](#function-method-docstrings)
+8. [Function and Method Docstrings](#function-and-method-docstrings)
 9. [Inline Comments](#inline-comments)
 10. [Error Handling](#error-handling)
 11. [Logging](#logging)
@@ -30,7 +30,7 @@ the **what** is acceptable.
 
 ---
 
-## Python Version & Language Features
+## Python Version and Language Features
 
 - **Python 3.11+** is required. Use modern syntax freely:
   - `X | Y` union syntax (not `Union[X, Y]`)
@@ -240,7 +240,7 @@ class PipelineOrchestrator(BaseActor):
 
 ---
 
-## Function & Method Docstrings
+## Function and Method Docstrings
 
 ### When to write a docstring
 
