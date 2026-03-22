@@ -61,6 +61,9 @@ docs = [
     "myst-parser>=3.0",        # Markdown support in Sphinx
     "sphinx-autodoc2>=0.5",    # Autodoc from source (AST-based, no import needed)
 ]
+eval = [
+    "deepeval>=3.8.0",         # LLM output quality evaluation (pytest metrics)
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -74,6 +77,7 @@ dev = [
     "sphinx-rtd-theme>=2.0",
     "myst-parser>=3.0",
     "sphinx-autodoc2>=0.5",
+    "deepeval>=3.8.0",         # LLM output quality evaluation
 ]
 
 [project.scripts]
@@ -89,6 +93,7 @@ build-backend = "hatchling.build"
 #         pytest tests/ -m integration          (run only integration tests)
 markers = [
     "integration: requires running infrastructure (NATS, workers, Ollama)",
+    "deepeval: LLM output quality evaluation tests (requires Ollama or LLM API)",
 ]
 asyncio_mode = "auto"
 

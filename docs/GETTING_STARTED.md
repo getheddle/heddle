@@ -39,6 +39,7 @@ GenAI semantic conventions and environment variables (`LOOM_TRACE_CONTENT`).
 ```bash
 uv sync --extra tui           # Terminal dashboard (Textual)
 uv sync --extra mdns          # mDNS/Bonjour service discovery on LAN
+uv sync --extra eval          # DeepEval LLM output quality evaluation (uses Ollama judge)
 uv sync --extra docs          # Sphinx API documentation generation
 ```
 

@@ -221,6 +221,8 @@ tests/                    # 68 test files, 1472 unit tests + 1 integration test 
   test_tui.py                                     # TUI dashboard domain models and event handlers
   test_dead_letter.py     test_preflight.py       # Dead-letter consumer, CLI pre-flight checks
   test_integration.py                             # @pytest.mark.integration (needs NATS)
+  test_deepeval_worker.py                         # @pytest.mark.deepeval (DeepEval + Ollama judge)
+  conftest.py                                     # Shared fixtures: skip_no_deepeval, helpers
   contrib/rag/            # 6 RAG test files (backends, chunker, ingestion, mux, schemas, tools)
 ```
 
@@ -254,6 +256,12 @@ uv run pytest tests/ -v -m "not integration"
 
 # Run ALL tests including integration (needs NATS + workers running)
 uv run pytest tests/ -v
+
+# Run DeepEval quality tests (needs Ollama with command-r7b)
+uv run pytest tests/ -v -m deepeval
+
+# Exclude both integration and deepeval tests
+uv run pytest tests/ -v -m "not integration and not deepeval"
 
 # Lint (src + tests)
 uv run ruff check src/ tests/
@@ -311,6 +319,7 @@ uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
 uv sync --extra mdns          # mDNS/Bonjour service discovery on LAN (zeroconf)
 uv sync --extra tui           # TUI terminal dashboard (Textual)
 uv sync --extra otel          # OpenTelemetry distributed tracing (spans, OTLP export)
+uv sync --extra eval          # DeepEval LLM output quality evaluation (Ollama judge, no cloud API)
 uv sync --extra docs           # Sphinx API documentation generation
 uv sync --all-extras          # All dependencies including dev/test
 ```
@@ -486,6 +495,7 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 - **LLM-as-judge scoring** — `EvalRunner.run_suite(scoring="llm_judge")` uses a separate LLM call to evaluate worker output quality on correctness, completeness, and format compliance criteria (0-to-1 scale with reasoning); customizable via `judge_prompt` parameter
 - **Golden dataset regression baselines** — `WorkshopDB.promote_baseline()` marks an eval run as the reference for a worker; `compare_against_baseline()` auto-compares new runs against the baseline; Workshop UI shows regression/improvement per case on the eval detail page
 - **Dead-letter replay audit trail** — `ReplayRecord` tracks all replayed entries with timestamps and original failure reason; `replay_log()`, `replay_count()` on `DeadLetterConsumer`; Workshop dead-letters page shows replay history
+- **DeepEval integration** — optional `eval` extra (`uv sync --extra eval`); standardized LLM quality metrics (GEval, relevance, compliance) in pytest with `@pytest.mark.deepeval` marker; uses Ollama as judge model, no cloud API needed. DeepEval provides standardized quality metrics in pytest; Workshop EvalRunner provides operational regression tracking with golden datasets.
 
 **Distributed tracing:**
 
