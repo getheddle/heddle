@@ -30,14 +30,14 @@ See [Getting Started](GETTING_STARTED.md) for full setup instructions.
 ## Architecture
 
 ```text
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+┌──────────────┐     ┌──────────────┐     ┌─────────────┐
 │ Orchestrator │────▶│  NATS Bus    │────▶│   Workers   │
 │  (decompose) │◀────│  (messages)  │◀────│  (LLM call) │
-└─────────────┘     └──────────────┘     └─────────────┘
+└──────────────┘     └──────────────┘     └─────────────┘
        │                                        │
        ▼                                        ▼
-┌─────────────┐                          ┌─────────────┐
-│   Valkey    │                          │   Ollama /   │
-│ (checkpoint)│                          │  Anthropic   │
-└─────────────┘                          └─────────────┘
+┌─────────────┐                           ┌─────────────┐
+│   Valkey    │                           │   Ollama /  │
+│ (checkpoint)│                           │  Anthropic  │
+└─────────────┘                           └─────────────┘
 ```
