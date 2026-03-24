@@ -1,17 +1,15 @@
-"""
-MCP server assembly — wires config, discovery, bridge, and resources.
+"""MCP server assembly — wires config, discovery, bridge, and resources.
 
-Creates a fully configured ``mcp.server.lowlevel.Server`` from a LOOM
-MCP gateway config YAML.  The server exposes LOOM workers, pipelines,
-query backends, and Workshop operations as MCP tools, and workspace
-files as MCP resources.
+Creates a fully configured ``FastMCP`` server from a LOOM MCP gateway
+config YAML.  The server exposes LOOM workers, pipelines, query backends,
+and Workshop operations as MCP tools, and workspace files as MCP resources.
 
 Usage::
 
     from loom.mcp.server import create_server, run_stdio
 
-    server = create_server("configs/mcp/docman.yaml")
-    run_stdio(server)
+    mcp, gateway = create_server("configs/mcp/docman.yaml")
+    run_stdio(mcp, gateway)
 
 See Also:
     loom.mcp.config              — config loading and validation
@@ -25,18 +23,18 @@ See Also:
 from __future__ import annotations
 
 import asyncio
-import json
-from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable
+    from collections.abc import Callable
+
+    from fastmcp import FastMCP as FastMCPType
 
 import structlog
 
 from loom.bus.nats_adapter import NATSBus
-from loom.mcp.bridge import BridgeError, BridgeTimeoutError, MCPBridge
+from loom.mcp.bridge import BridgeError, MCPBridge
 from loom.mcp.config import load_mcp_config
 from loom.mcp.discovery import (
     discover_pipeline_tools,
@@ -44,7 +42,7 @@ from loom.mcp.discovery import (
     discover_worker_tools,
 )
 from loom.mcp.resources import WorkspaceResources
-from loom.mcp.workshop_bridge import WorkshopBridge, WorkshopBridgeError
+from loom.mcp.workshop_bridge import WorkshopBridge
 from loom.mcp.workshop_discovery import discover_workshop_tools
 
 logger = structlog.get_logger()
@@ -73,15 +71,14 @@ class MCPGateway:
     requires_bus: bool = True
 
 
-def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
-    """Create an MCP Server and MCPGateway from a config file.
+def create_server(config_path: str) -> tuple[FastMCPType, MCPGateway]:
+    """Create a FastMCP server and MCPGateway from a config file.
 
     Returns:
-        Tuple of (mcp.server.lowlevel.Server, MCPGateway).
+        Tuple of (FastMCP, MCPGateway).
         The gateway must be connected before the server can handle calls.
     """
-    from mcp import types
-    from mcp.server.lowlevel import Server
+    from fastmcp import FastMCP
 
     config = load_mcp_config(config_path)
     nats_url = config.get("nats_url", "nats://nats:4222")
@@ -91,12 +88,16 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
     # --- Discover tools ---
     tools_config = config.get("tools", {})
     requires_bus = bool(
-        tools_config.get("workers") or tools_config.get("pipelines") or tools_config.get("queries")
+        tools_config.get("workers")
+        or tools_config.get("pipelines")
+        or tools_config.get("queries")
     )
 
     all_tools: list[dict[str, Any]] = []
     all_tools.extend(discover_worker_tools(tools_config.get("workers", [])))
-    all_tools.extend(discover_pipeline_tools(tools_config.get("pipelines", [])))
+    all_tools.extend(
+        discover_pipeline_tools(tools_config.get("pipelines", []))
+    )
     all_tools.extend(discover_query_tools(tools_config.get("queries", [])))
 
     # Workshop tools (optional — only if tools.workshop is present).
@@ -149,144 +150,162 @@ def create_server(config_path: str) -> tuple[Any, MCPGateway]:  # noqa: PLR0915
         requires_bus=requires_bus,
     )
 
-    # --- Build MCP Server ---
-    server = Server(config["name"])
+    # --- Build FastMCP Server ---
+    mcp = FastMCP(
+        name=config["name"],
+        instructions=config.get("description"),
+    )
 
-    @server.list_tools()
-    async def handle_list_tools() -> list[types.Tool]:
-        """Return all registered MCP tool definitions."""
-        tools = []
-        for t in gateway.tool_defs:
-            tool_kwargs: dict[str, Any] = {
-                "name": t["name"],
-                "description": t.get("description"),
-                "inputSchema": t["inputSchema"],
-            }
-            # Attach annotations from registry metadata.
-            entry = gateway.tool_registry.get(t["name"])
-            if entry:
-                annotations = _build_annotations(entry.loom_meta)
-                if annotations:
-                    tool_kwargs["annotations"] = annotations
-            tools.append(types.Tool(**tool_kwargs))
-        return tools
+    # Register each discovered tool dynamically.
+    for entry in registry.values():
+        _register_tool(mcp, gateway, entry)
 
-    @server.call_tool()
-    async def handle_call_tool(
-        name: str,
-        arguments: dict[str, Any] | None,
-    ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
-        """Dispatch an MCP tool call to the LOOM bridge."""
-        arguments = arguments or {}
-
-        entry = gateway.tool_registry.get(name)
-        if entry is None:
-            return [
-                types.TextContent(
-                    type="text",
-                    text=json.dumps({"error": f"Unknown tool: {name}"}),
-                )
-            ]
-
-        # Snapshot workspace before call (for change detection).
-        if gateway.resources:
-            gateway.resources.snapshot()
-
-        try:
-            ctx = server.request_context
-        except LookupError:
-            ctx = None
-
-        async def progress_callback(_stage_name: str, stage_idx: int, total: int) -> None:
-            if ctx and ctx.meta and ctx.meta.progressToken is not None:
-                await ctx.session.send_progress_notification(
-                    progress_token=ctx.meta.progressToken,
-                    progress=stage_idx,
-                    total=total if total > 0 else None,
-                )
-
-        try:
-            result = await _dispatch_tool(
-                gateway,
-                entry,
-                arguments,
-                progress_callback=progress_callback,
-            )
-        except WorkshopBridgeError as exc:
-            return [
-                types.TextContent(
-                    type="text",
-                    text=json.dumps({"error": str(exc)}),
-                )
-            ]
-        except BridgeTimeoutError as exc:
-            return [
-                types.TextContent(
-                    type="text",
-                    text=json.dumps({"error": f"Timeout: {exc}"}),
-                )
-            ]
-        except BridgeError as exc:
-            return [
-                types.TextContent(
-                    type="text",
-                    text=json.dumps({"error": str(exc)}),
-                )
-            ]
-        except Exception as exc:
-            logger.error("mcp.server.call_error", tool=name, error=str(exc))
-            return [
-                types.TextContent(
-                    type="text",
-                    text=json.dumps({"error": f"Internal error: {exc}"}),
-                )
-            ]
-
-        # Detect workspace changes and notify (best-effort).
-        if gateway.resources:
-            changed = gateway.resources.detect_changes()
-            if changed:
-                logger.info("mcp.server.resources_changed", uris=changed)
-                # MCP resource notifications require a session, which we
-                # don't have access to in the low-level call_tool handler.
-                # The notifications are handled by the transport layer.
-
-        return [
-            types.TextContent(
-                type="text",
-                text=json.dumps(result, default=str),
-            )
-        ]
-
-    # --- Resource handlers ---
+    # Register workspace resources.
     if workspace_resources:
+        _register_resources(mcp, gateway)
 
-        @server.list_resources()
-        async def handle_list_resources() -> list[types.Resource]:
-            """List all workspace files as MCP resources."""
-            items = gateway.resources.list_resources()
-            return [
-                types.Resource(
-                    uri=item["uri"],
-                    name=item["name"],
-                    description=item.get("description"),
-                    mimeType=item.get("mimeType"),
-                )
-                for item in items
-            ]
+    # Health endpoint (available in HTTP transport).
+    _register_health(mcp, gateway)
 
-        @server.read_resource()
-        async def handle_read_resource(
-            uri: str,
-        ) -> list:
-            """Read a workspace resource by URI."""
-            from mcp.server.lowlevel.helper_types import ReadResourceContents
+    return mcp, gateway
 
-            uri_str = str(uri)  # MCP SDK may pass AnyUrl instead of str
-            content, mime = gateway.resources.read_resource(uri_str)
-            return [ReadResourceContents(content=content, mime_type=mime)]
 
-    return server, gateway
+# ---------------------------------------------------------------------------
+# Tool registration
+# ---------------------------------------------------------------------------
+
+
+def _register_tool(
+    mcp: FastMCPType,
+    gateway: MCPGateway,
+    entry: ToolEntry,
+) -> None:
+    """Register a single discovered tool with the FastMCP server.
+
+    Creates a ``FunctionTool`` wrapping the dispatch function with the
+    JSON schema from discovery and annotations from loom metadata.
+    """
+    from fastmcp.tools.function_tool import FunctionTool
+
+    meta = entry.loom_meta
+
+    # Build the dispatch function for this specific entry.
+    # Each tool gets its own closure capturing the gateway and entry.
+    # Errors are caught and returned as JSON dicts (matching old behavior).
+    async def tool_handler(**kwargs: Any) -> dict[str, Any]:
+        return await _safe_dispatch(gateway, entry, kwargs)
+
+    fn = tool_handler
+
+    # Build annotations.
+    annotations = _build_annotations(meta)
+
+    tool = FunctionTool(
+        fn=fn,
+        name=entry.name,
+        description=entry.tool_def.get("description", ""),
+        parameters=entry.tool_def.get("inputSchema", {"type": "object"}),
+        annotations=annotations,
+    )
+    mcp.add_tool(tool)
+
+
+def _build_annotations(loom_meta: dict[str, Any]) -> Any:
+    """Build MCP ToolAnnotations from _loom metadata flags.
+
+    Returns a ``ToolAnnotations`` instance if any flags are set,
+    or ``None`` if no annotations are needed.
+    """
+    from mcp.types import ToolAnnotations
+
+    destructive = loom_meta.get("destructive", False)
+    read_only = loom_meta.get("read_only", False)
+    long_running = loom_meta.get("long_running", False)
+
+    if not (destructive or read_only or long_running):
+        return None
+
+    kwargs: dict[str, Any] = {}
+    if destructive:
+        kwargs["destructiveHint"] = True
+    if read_only:
+        kwargs["readOnlyHint"] = True
+    if long_running:
+        # Eval runs create new DB entries — not idempotent, closed world.
+        kwargs["idempotentHint"] = False
+        kwargs["openWorldHint"] = False
+    return ToolAnnotations(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Resource registration
+# ---------------------------------------------------------------------------
+
+
+def _register_resources(mcp: FastMCPType, gateway: MCPGateway) -> None:
+    """Register workspace files as FastMCP resources."""
+    items = gateway.resources.list_resources()
+    for item in items:
+        uri = item["uri"]
+        name = item["name"]
+        mime = item.get("mimeType")
+
+        # Each resource gets its own closure.
+        def _make_reader(
+            _uri: str = uri,
+        ) -> Any:
+            def read_resource() -> Any:
+                content, _mime = gateway.resources.read_resource(_uri)
+                return content
+
+            return read_resource
+
+        mcp.resource(uri, name=name, mime_type=mime)(_make_reader())
+
+
+def _register_health(mcp: FastMCPType, gateway: MCPGateway) -> None:
+    """Register a /health endpoint (used in HTTP transport)."""
+    try:
+
+        @mcp.custom_route("/health", methods=["GET"])
+        async def health(_request: Any) -> Any:
+            from starlette.responses import JSONResponse
+
+            return JSONResponse(
+                {"status": "ok", "name": gateway.config["name"]}
+            )
+    except Exception:
+        # custom_route may not be available in all transports.
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Tool dispatch
+# ---------------------------------------------------------------------------
+
+
+async def _safe_dispatch(
+    gateway: MCPGateway,
+    entry: ToolEntry,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    """Dispatch with error handling — returns error dicts instead of raising."""
+    from loom.mcp.bridge import BridgeTimeoutError
+    from loom.mcp.workshop_bridge import WorkshopBridgeError
+
+    try:
+        return await _dispatch_tool(gateway, entry, arguments)
+    except WorkshopBridgeError as exc:
+        return {"error": str(exc)}
+    except BridgeTimeoutError as exc:
+        return {"error": f"Timeout: {exc}"}
+    except BridgeError as exc:
+        return {"error": str(exc)}
+    except Exception as exc:
+        logger.error(
+            "mcp.server.call_error", tool=entry.name, error=str(exc)
+        )
+        return {"error": f"Internal error: {exc}"}
 
 
 async def _dispatch_tool(
@@ -330,38 +349,6 @@ async def _dispatch_tool(
         )
 
     raise BridgeError(f"Unknown tool kind: {entry.kind}")
-
-
-# ---------------------------------------------------------------------------
-# Tool annotations
-# ---------------------------------------------------------------------------
-
-
-def _build_annotations(loom_meta: dict[str, Any]) -> Any:
-    """Build MCP ToolAnnotations from _loom metadata flags.
-
-    Returns a ``types.ToolAnnotations`` instance if any flags are set,
-    or ``None`` if no annotations are needed.
-    """
-    from mcp import types
-
-    destructive = loom_meta.get("destructive", False)
-    read_only = loom_meta.get("read_only", False)
-    long_running = loom_meta.get("long_running", False)
-
-    if not (destructive or read_only or long_running):
-        return None
-
-    kwargs: dict[str, Any] = {}
-    if destructive:
-        kwargs["destructiveHint"] = True
-    if read_only:
-        kwargs["readOnlyHint"] = True
-    if long_running:
-        # Eval runs create new DB entries — not idempotent, closed world.
-        kwargs["idempotentHint"] = False
-        kwargs["openWorldHint"] = False
-    return types.ToolAnnotations(**kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +412,9 @@ def _build_workshop_bridge(
         if backends:
             test_runner = WorkerTestRunner(backends)
     except Exception as exc:
-        logger.debug("workshop_bridge.test_runner_skipped", reason=str(exc))
+        logger.debug(
+            "workshop_bridge.test_runner_skipped", reason=str(exc)
+        )
 
     # Set up eval runner if we have both test runner and DB.
     eval_runner = None
@@ -451,28 +440,24 @@ def _build_workshop_bridge(
 # ---------------------------------------------------------------------------
 
 
-def run_stdio(server: Any, gateway: MCPGateway) -> None:
+def run_stdio(server: FastMCPType, gateway: MCPGateway) -> None:
     """Run the MCP server on stdio transport (blocking)."""
 
     async def _run() -> None:
-        import mcp.server.stdio
-
         bridge_connected = False
         if gateway.requires_bus:
             await gateway.bridge.connect()
             bridge_connected = True
-            logger.info("mcp.gateway.connected", nats_url=gateway.config.get("nats_url"))
+            logger.info(
+                "mcp.gateway.connected",
+                nats_url=gateway.config.get("nats_url"),
+            )
 
         if gateway.resources:
             gateway.resources.snapshot()
 
         try:
-            async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-                await server.run(
-                    read_stream,
-                    write_stream,
-                    server.create_initialization_options(),
-                )
+            await server.run_async(transport="stdio")
         finally:
             if bridge_connected:
                 await gateway.bridge.close()
@@ -481,66 +466,35 @@ def run_stdio(server: Any, gateway: MCPGateway) -> None:
 
 
 def run_streamable_http(
-    server: Any,
+    server: FastMCPType,
     gateway: MCPGateway,
     host: str = "127.0.0.1",
     port: int = 8000,
 ) -> None:
     """Run the MCP server on streamable HTTP transport (blocking).
 
-    Requires ``uvicorn`` to be installed.  Uses the MCP SDK's
-    ``StreamableHTTPSessionManager`` to handle MCP protocol messages
-    over HTTP, with a ``/health`` convenience endpoint.
+    FastMCP handles all Starlette/uvicorn setup internally.
     """
 
     async def _run() -> None:
-        import uvicorn
-        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-        from starlette.applications import Starlette
-        from starlette.responses import JSONResponse
-        from starlette.routing import Route
-
         bridge_connected = False
         if gateway.requires_bus:
             await gateway.bridge.connect()
             bridge_connected = True
-            logger.info("mcp.gateway.connected", nats_url=gateway.config.get("nats_url"))
+            logger.info(
+                "mcp.gateway.connected",
+                nats_url=gateway.config.get("nats_url"),
+            )
 
         if gateway.resources:
             gateway.resources.snapshot()
 
-        # Session manager wraps the low-level MCP server and handles
-        # session lifecycle, transport creation, and request dispatch.
-        session_manager = StreamableHTTPSessionManager(
-            app=server,
-            stateless=True,
-        )
-
-        # Thin ASGI callable that delegates to the session manager.
-        async def mcp_asgi_handler(scope: Any, receive: Any, send: Any) -> None:
-            await session_manager.handle_request(scope, receive, send)
-
-        async def health(_request: Any) -> JSONResponse:
-            return JSONResponse({"status": "ok", "name": gateway.config["name"]})
-
-        @asynccontextmanager
-        async def lifespan(_app: Any) -> AsyncIterator[None]:
-            async with session_manager.run():
-                yield
-
-        starlette_app = Starlette(
-            routes=[
-                Route("/health", health),
-                Route("/mcp", endpoint=mcp_asgi_handler, methods=["GET", "POST", "DELETE"]),
-            ],
-            lifespan=lifespan,
-        )
-
-        config = uvicorn.Config(starlette_app, host=host, port=port, log_level="info")
-        uv_server = uvicorn.Server(config)
-
         try:
-            await uv_server.serve()
+            await server.run_async(
+                transport="http",
+                host=host,
+                port=port,
+            )
         finally:
             if bridge_connected:
                 await gateway.bridge.close()

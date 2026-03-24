@@ -1,5 +1,4 @@
-"""
-MCP gateway for LOOM systems.
+"""MCP gateway for LOOM systems.
 
 Exposes LOOM workers, pipelines, and query backends as MCP tools,
 and workspace files as MCP resources.  Any system built on LOOM can
@@ -9,8 +8,8 @@ Usage::
 
     from loom.mcp import create_server, run_stdio
 
-    server, gateway = create_server("configs/mcp/my_system.yaml")
-    run_stdio(server, gateway)
+    mcp, gateway = create_server("configs/mcp/my_system.yaml")
+    run_stdio(mcp, gateway)
 
 See Also:
     loom.mcp.config    — config loading and validation

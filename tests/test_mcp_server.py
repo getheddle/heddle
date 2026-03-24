@@ -1,7 +1,6 @@
 """Tests for loom.mcp.server — MCP server assembly and tool dispatch."""
 
 import asyncio
-import contextlib
 import json
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -17,6 +16,7 @@ from loom.mcp.server import (
     ToolEntry,
     _build_annotations,
     _dispatch_tool,
+    _safe_dispatch,
     create_server,
 )
 from loom.mcp.workshop_bridge import WorkshopBridge, WorkshopBridgeError
@@ -80,29 +80,18 @@ def _make_workshop_only_gateway_config(tmp_path, enable=None):
     return _write_yaml(str(tmp_path), "workshop-gateway.yaml", config)
 
 
-def _unwrap(server_result):
-    """Unwrap MCP ServerResult to get the inner result object."""
-    return server_result.root
-
-
 def _single_worker_cfgs(name="test_worker"):
     """Return a minimal single-worker config dict."""
     return {
         name: {
             "name": name,
             "system_prompt": "Test.",
-            "input_schema": {"type": "object", "properties": {}},
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+            },
         },
     }
-
-
-def _fake_stdio_cm():
-    """Create a fake stdio_server async context manager."""
-
-    async def _gen():
-        yield (MagicMock(), MagicMock())
-
-    return contextlib.asynccontextmanager(_gen)()
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +100,8 @@ def _fake_stdio_cm():
 
 
 class TestCreateServer:
+    """Test that create_server returns (FastMCP, MCPGateway)."""
+
     def test_creates_server_and_gateway(self, tmp_path):
         worker_cfgs = {
             "summarizer": {
@@ -127,6 +118,9 @@ class TestCreateServer:
 
         server, gateway = create_server(config_path)
 
+        from fastmcp import FastMCP
+
+        assert isinstance(server, FastMCP)
         assert gateway.config["name"] == "test-gateway"
         assert "summarizer" in gateway.tool_registry
         assert len(gateway.tool_defs) == 1
@@ -135,6 +129,27 @@ class TestCreateServer:
         config_path = _make_gateway_config(tmp_path)
         server, gateway = create_server(config_path)
         assert len(gateway.tool_registry) == 0
+
+    def test_tools_registered_on_fastmcp(self, tmp_path):
+        """Verify tools are actually registered on the FastMCP instance."""
+        worker_cfgs = {
+            "summarizer": {
+                "name": "summarizer",
+                "system_prompt": "Summarize.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"text": {"type": "string"}},
+                },
+            },
+        }
+        config_path = _make_gateway_config(tmp_path, worker_cfgs=worker_cfgs)
+        server, gateway = create_server(config_path)
+
+        # FastMCP keeps tools in _tool_manager.
+        # list_tools() returns MCP Tool objects.
+        tools = asyncio.run(server.list_tools())
+        names = [t.name for t in tools]
+        assert "summarizer" in names
 
     def test_with_resources(self, tmp_path):
         resources_dir = tmp_path / "workspace"
@@ -170,7 +185,11 @@ class TestToolEntry:
         entry = ToolEntry(
             name="my_tool",
             kind="worker",
-            tool_def={"name": "my_tool", "description": "desc", "inputSchema": {}},
+            tool_def={
+                "name": "my_tool",
+                "description": "desc",
+                "inputSchema": {},
+            },
             loom_meta={"kind": "worker", "worker_type": "my_worker"},
         )
         assert entry.name == "my_tool"
@@ -371,7 +390,7 @@ class TestProgressCallback:
         await bus.close()
 
     async def test_pipeline_receives_progress_callback(self, bus_and_bridge):
-        """_dispatch_tool passes progress_callback to call_pipeline for pipelines."""
+        """_dispatch_tool passes progress_callback for pipelines."""
         bus, bridge = bus_and_bridge
         gateway = MCPGateway(
             config={"name": "test"},
@@ -412,7 +431,7 @@ class TestProgressCallback:
                     f"loom.results.{goal_id}",
                     stage_result.model_dump(mode="json"),
                 )
-                # Small delay to let consumer process intermediate result.
+                # Small delay to let consumer process.
                 await asyncio.sleep(0.01)
                 # Then emit the final result.
                 final = TaskResult(
@@ -487,7 +506,7 @@ class TestProgressCallback:
         worker_task = asyncio.create_task(mock_worker())
         await ready.wait()
 
-        # Passing a callback shouldn't cause errors for non-pipeline tools.
+        # Passing a callback shouldn't cause errors for non-pipelines.
         callback = AsyncMock()
         result = await _dispatch_tool(
             gateway,
@@ -545,45 +564,6 @@ class TestProgressCallback:
         await worker_task
 
 
-class TestServerProgressWiring:
-    """Test that the server's call_tool handler constructs and passes progress_callback."""
-
-    def test_progress_callback_created_for_pipeline_tool(self, tmp_path):
-        """handle_call_tool passes a progress_callback to _dispatch_tool for pipelines."""
-        config_path = _make_gateway_config(tmp_path, worker_cfgs=_single_worker_cfgs("pipe"))
-        server, gateway = create_server(config_path)
-
-        # Re-register the tool as a pipeline kind.
-        gateway.tool_registry["pipe"] = ToolEntry(
-            name="pipe",
-            kind="pipeline",
-            tool_def={"name": "pipe", "inputSchema": {}},
-            loom_meta={"kind": "pipeline", "timeout": 5},
-        )
-
-        with patch("loom.mcp.server._dispatch_tool", new_callable=AsyncMock) as m:
-            m.return_value = {"ok": True}
-
-            from mcp import types
-
-            handler = server.request_handlers[types.CallToolRequest]
-            params = types.CallToolRequestParams(name="pipe", arguments={"file": "x"})
-            request = types.CallToolRequest(method="tools/call", params=params)
-            _unwrap(asyncio.run(handler(request)))
-
-            # Verify _dispatch_tool was called with a progress_callback.
-            assert m.call_count == 1
-            call_kwargs = m.call_args
-            # The progress_callback is the 4th positional arg or keyword.
-            # _dispatch_tool(gateway, entry, arguments, progress_callback=...)
-            if len(call_kwargs[0]) > 3:
-                cb = call_kwargs[0][3]
-            else:
-                cb = call_kwargs[1].get("progress_callback")
-            assert cb is not None
-            assert callable(cb)
-
-
 # ---------------------------------------------------------------------------
 # MCPGateway field tests
 # ---------------------------------------------------------------------------
@@ -619,14 +599,16 @@ class TestMCPGateway:
 
 
 # ---------------------------------------------------------------------------
-# handle_list_tools (line 137)
+# list_tools via FastMCP
 # ---------------------------------------------------------------------------
 
 
 class TestHandleListTools:
-    """Test the server.list_tools() handler registered inside create_server."""
+    """Test tool listing via FastMCP list_tools()."""
 
-    def test_list_tools_returns_mcp_tool_objects(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_tools_returns_tool_objects(self, tmp_path):
+        """list_tools returns MCP Tool objects for registered tools."""
         worker_cfgs = {
             "summarizer": {
                 "name": "summarizer",
@@ -641,176 +623,206 @@ class TestHandleListTools:
         config_path = _make_gateway_config(tmp_path, worker_cfgs=worker_cfgs)
         server, gateway = create_server(config_path)
 
-        from mcp import types
+        tools = await server.list_tools()
 
-        handler = server.request_handlers[types.ListToolsRequest]
-        request = types.ListToolsRequest(method="tools/list")
-        result = _unwrap(asyncio.run(handler(request)))
-
-        assert len(result.tools) == 1
-        tool = result.tools[0]
+        assert len(tools) == 1
+        tool = tools[0]
         assert tool.name == "summarizer"
-        assert tool.inputSchema is not None
+        assert tool.parameters is not None
 
-    def test_list_tools_empty(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_tools_empty(self, tmp_path):
         """list_tools with no tools returns empty list."""
         config_path = _make_gateway_config(tmp_path)
         server, gateway = create_server(config_path)
 
-        from mcp import types
+        tools = await server.list_tools()
 
-        handler = server.request_handlers[types.ListToolsRequest]
-        request = types.ListToolsRequest(method="tools/list")
-        result = _unwrap(asyncio.run(handler(request)))
-
-        assert result.tools == []
+        assert tools == []
 
 
 # ---------------------------------------------------------------------------
-# handle_call_tool (lines 152-201)
+# call_tool via FastMCP (_safe_dispatch behavior)
 # ---------------------------------------------------------------------------
 
 
 class TestHandleCallTool:
-    """Test the server.call_tool() handler registered inside create_server."""
+    """Test tool calling via FastMCP call_tool().
 
-    def _call(self, server, name, arguments=None):
-        """Invoke call_tool handler and return unwrapped result."""
-        from mcp import types
+    Tools are registered with _safe_dispatch which catches errors and
+    returns error dicts instead of raising.
+    """
 
-        handler = server.request_handlers[types.CallToolRequest]
-        params = types.CallToolRequestParams(name=name, arguments=arguments)
-        request = types.CallToolRequest(method="tools/call", params=params)
-        return _unwrap(asyncio.run(handler(request)))
-
-    def test_unknown_tool_returns_error(self, tmp_path):
-        """Line 152-161: unknown tool name returns error JSON."""
+    @pytest.mark.asyncio
+    async def test_unknown_tool_raises(self, tmp_path):
+        """Calling an unknown tool raises an error from FastMCP."""
         config_path = _make_gateway_config(tmp_path)
         server, _gw = create_server(config_path)
 
-        result = self._call(server, "nonexistent_tool", {"x": 1})
+        from fastmcp.exceptions import NotFoundError
 
-        assert len(result.content) == 1
-        data = json.loads(result.content[0].text)
-        assert "error" in data
-        assert "Unknown tool" in data["error"]
+        with pytest.raises(NotFoundError, match="Unknown tool"):
+            await server.call_tool("nonexistent_tool", {"x": 1})
 
-    def test_none_arguments_default_to_empty_dict(self, tmp_path):
-        """Line 152: arguments=None is treated as empty dict."""
-        config_path = _make_gateway_config(tmp_path, worker_cfgs=_single_worker_cfgs())
-        server, _gw = create_server(config_path)
-
-        with patch("loom.mcp.server._dispatch_tool", new_callable=AsyncMock) as m:
-            m.return_value = {"ok": True}
-            result = self._call(server, "test_worker", None)
-            assert m.call_args[0][2] == {}
-            data = json.loads(result.content[0].text)
-            assert data == {"ok": True}
-
-    def test_bridge_timeout_error(self, tmp_path):
-        """Lines 169-175: BridgeTimeoutError returns timeout error JSON."""
+    @pytest.mark.asyncio
+    async def test_bridge_timeout_error_returns_error_dict(self, tmp_path):
+        """BridgeTimeoutError is caught by _safe_dispatch."""
         config_path = _make_gateway_config(tmp_path, worker_cfgs=_single_worker_cfgs("slow"))
         server, _gw = create_server(config_path)
 
-        with patch("loom.mcp.server._dispatch_tool", new_callable=AsyncMock) as m:
+        with patch(
+            "loom.mcp.server._dispatch_tool",
+            new_callable=AsyncMock,
+        ) as m:
             m.side_effect = BridgeTimeoutError("Timed out after 5s")
-            result = self._call(server, "slow", {})
+            result = await server.call_tool("slow", {})
             data = json.loads(result.content[0].text)
             assert "Timeout" in data["error"]
 
-    def test_bridge_error(self, tmp_path):
-        """Lines 176-182: BridgeError returns error JSON."""
+    @pytest.mark.asyncio
+    async def test_bridge_error_returns_error_dict(self, tmp_path):
+        """BridgeError is caught by _safe_dispatch."""
         config_path = _make_gateway_config(tmp_path, worker_cfgs=_single_worker_cfgs("bad"))
         server, _gw = create_server(config_path)
 
-        with patch("loom.mcp.server._dispatch_tool", new_callable=AsyncMock) as m:
+        with patch(
+            "loom.mcp.server._dispatch_tool",
+            new_callable=AsyncMock,
+        ) as m:
             m.side_effect = BridgeError("Connection lost")
-            result = self._call(server, "bad", {})
+            result = await server.call_tool("bad", {})
             data = json.loads(result.content[0].text)
             assert data["error"] == "Connection lost"
 
-    def test_generic_exception(self, tmp_path):
-        """Lines 183-190: generic Exception returns internal error JSON."""
+    @pytest.mark.asyncio
+    async def test_generic_exception_returns_internal_error(self, tmp_path):
+        """Generic Exception is caught by _safe_dispatch."""
         config_path = _make_gateway_config(tmp_path, worker_cfgs=_single_worker_cfgs("crash"))
         server, _gw = create_server(config_path)
 
-        with patch("loom.mcp.server._dispatch_tool", new_callable=AsyncMock) as m:
+        with patch(
+            "loom.mcp.server._dispatch_tool",
+            new_callable=AsyncMock,
+        ) as m:
             m.side_effect = RuntimeError("kaboom")
-            result = self._call(server, "crash", {})
+            result = await server.call_tool("crash", {})
             data = json.loads(result.content[0].text)
             assert "Internal error" in data["error"]
             assert "kaboom" in data["error"]
 
-    def test_successful_call_returns_result(self, tmp_path):
-        """Lines 201-206: successful dispatch returns serialized result."""
+    @pytest.mark.asyncio
+    async def test_successful_call_returns_result(self, tmp_path):
+        """Successful dispatch returns serialized result."""
         config_path = _make_gateway_config(tmp_path, worker_cfgs=_single_worker_cfgs("good"))
         server, _gw = create_server(config_path)
 
-        with patch("loom.mcp.server._dispatch_tool", new_callable=AsyncMock) as m:
+        with patch(
+            "loom.mcp.server._dispatch_tool",
+            new_callable=AsyncMock,
+        ) as m:
             m.return_value = {"summary": "test", "score": 0.9}
-            result = self._call(server, "good", {"text": "hello"})
+            result = await server.call_tool("good", {"text": "hello"})
             data = json.loads(result.content[0].text)
             assert data == {"summary": "test", "score": 0.9}
 
-    def test_workspace_snapshot_and_change_detection(self, tmp_path):
-        """Lines 164-200: workspace snapshot before call, change detection after."""
-        resources_dir = tmp_path / "workspace"
-        resources_dir.mkdir()
-        (resources_dir / "file.txt").write_text("content")
 
-        config_path = _make_gateway_config(
-            tmp_path,
-            worker_cfgs=_single_worker_cfgs("fw"),
-            resources_dir=resources_dir,
+# ---------------------------------------------------------------------------
+# _safe_dispatch unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestSafeDispatch:
+    """Test _safe_dispatch error handling directly."""
+
+    @pytest.mark.asyncio
+    async def test_workshop_bridge_error_caught(self):
+        """WorkshopBridgeError returns error dict."""
+        gateway = MagicMock()
+        entry = ToolEntry(
+            name="ws_tool",
+            kind="workshop",
+            tool_def={},
+            loom_meta={"kind": "workshop", "action": "worker.list"},
         )
-        server, gateway = create_server(config_path)
 
-        mock_res = MagicMock()
-        mock_res.snapshot = MagicMock()
-        mock_res.detect_changes = MagicMock(return_value=["workspace:///file.txt"])
-        gateway.resources = mock_res
+        with patch(
+            "loom.mcp.server._dispatch_tool",
+            new_callable=AsyncMock,
+        ) as m:
+            m.side_effect = WorkshopBridgeError("ConfigManager not configured")
+            result = await _safe_dispatch(gateway, entry, {})
+            assert "ConfigManager not configured" in result["error"]
 
-        with patch("loom.mcp.server._dispatch_tool", new_callable=AsyncMock) as m:
-            m.return_value = {"ok": True}
-            result = self._call(server, "fw", {})
-            mock_res.snapshot.assert_called_once()
-            mock_res.detect_changes.assert_called_once()
-            data = json.loads(result.content[0].text)
-            assert data == {"ok": True}
-
-    def test_workspace_no_changes(self, tmp_path):
-        """Lines 193-200: workspace with no changes after tool call."""
-        resources_dir = tmp_path / "workspace"
-        resources_dir.mkdir()
-
-        config_path = _make_gateway_config(
-            tmp_path,
-            worker_cfgs=_single_worker_cfgs("noop"),
-            resources_dir=resources_dir,
+    @pytest.mark.asyncio
+    async def test_bridge_timeout_caught(self):
+        """BridgeTimeoutError returns timeout error dict."""
+        gateway = MagicMock()
+        entry = ToolEntry(
+            name="slow",
+            kind="worker",
+            tool_def={},
+            loom_meta={"kind": "worker"},
         )
-        server, gateway = create_server(config_path)
 
-        mock_res = MagicMock()
-        mock_res.snapshot = MagicMock()
-        mock_res.detect_changes = MagicMock(return_value=[])
-        gateway.resources = mock_res
+        with patch(
+            "loom.mcp.server._dispatch_tool",
+            new_callable=AsyncMock,
+        ) as m:
+            m.side_effect = BridgeTimeoutError("5s")
+            result = await _safe_dispatch(gateway, entry, {})
+            assert "Timeout" in result["error"]
 
-        with patch("loom.mcp.server._dispatch_tool", new_callable=AsyncMock) as m:
-            m.return_value = {"ok": True}
-            self._call(server, "noop", {})
-            mock_res.detect_changes.assert_called_once()
+    @pytest.mark.asyncio
+    async def test_bridge_error_caught(self):
+        """BridgeError returns error dict."""
+        gateway = MagicMock()
+        entry = ToolEntry(
+            name="bad",
+            kind="worker",
+            tool_def={},
+            loom_meta={"kind": "worker"},
+        )
+
+        with patch(
+            "loom.mcp.server._dispatch_tool",
+            new_callable=AsyncMock,
+        ) as m:
+            m.side_effect = BridgeError("Connection lost")
+            result = await _safe_dispatch(gateway, entry, {})
+            assert result["error"] == "Connection lost"
+
+    @pytest.mark.asyncio
+    async def test_generic_exception_caught(self):
+        """Generic Exception returns internal error dict."""
+        gateway = MagicMock()
+        entry = ToolEntry(
+            name="crash",
+            kind="worker",
+            tool_def={},
+            loom_meta={"kind": "worker"},
+        )
+
+        with patch(
+            "loom.mcp.server._dispatch_tool",
+            new_callable=AsyncMock,
+        ) as m:
+            m.side_effect = RuntimeError("kaboom")
+            result = await _safe_dispatch(gateway, entry, {})
+            assert "Internal error" in result["error"]
+            assert "kaboom" in result["error"]
 
 
 # ---------------------------------------------------------------------------
-# Resource handlers (lines 214-215, 230-235)
+# Resource handlers via FastMCP
 # ---------------------------------------------------------------------------
 
 
 class TestResourceHandlers:
-    """Test list_resources and read_resource handlers."""
+    """Test list_resources and read_resource via FastMCP API."""
 
-    def test_list_resources_handler(self, tmp_path):
-        """Lines 214-215: list_resources returns MCP Resource objects."""
+    @pytest.mark.asyncio
+    async def test_list_resources(self, tmp_path):
+        """list_resources returns registered workspace resources."""
         resources_dir = tmp_path / "workspace"
         resources_dir.mkdir()
         (resources_dir / "doc.txt").write_text("hello")
@@ -819,144 +831,42 @@ class TestResourceHandlers:
         config_path = _make_gateway_config(tmp_path, resources_dir=resources_dir)
         server, gateway = create_server(config_path)
 
-        from mcp import types
+        resources = await server.list_resources()
 
-        handler = server.request_handlers[types.ListResourcesRequest]
-        request = types.ListResourcesRequest(method="resources/list")
-        result = _unwrap(asyncio.run(handler(request)))
-
-        assert len(result.resources) >= 1
-        names = [r.name for r in result.resources]
+        assert len(resources) >= 1
+        names = [r.name for r in resources]
         assert "doc.txt" in names or "data.json" in names
 
-    def test_read_resource_text_via_mock(self, tmp_path):
-        """Lines 230-234: read_resource for text MIME returns TextResourceContents.
-
-        Mocks gateway.resources to test the server.py handler logic (lines 230-234)
-        without hitting the AnyUrl/str mismatch in resources.py._from_uri().
-        """
+    @pytest.mark.asyncio
+    async def test_read_resource_text(self, tmp_path):
+        """read_resource returns text content for text files."""
         resources_dir = tmp_path / "workspace"
         resources_dir.mkdir()
+        (resources_dir / "readme.txt").write_text("hello workspace")
 
         config_path = _make_gateway_config(tmp_path, resources_dir=resources_dir)
         server, gateway = create_server(config_path)
 
-        from mcp import types
+        content = await server.read_resource("workspace:///readme.txt")
+        # FastMCP returns the content directly (str or bytes).
+        assert "hello workspace" in str(content)
 
-        mock_res = MagicMock()
-        mock_res.list_resources = MagicMock(return_value=[])
-        mock_res.read_resource = MagicMock(return_value=("hello world", "text/plain"))
-        gateway.resources = mock_res
-
-        # Reproduce the handler logic (lines 230-235) directly.
-        async def _test():
-            content, mime = gateway.resources.read_resource("workspace:///readme.txt")
-            if mime and (
-                mime.startswith("text/") or mime in ("application/json", "application/xml")
-            ):
-                return types.TextResourceContents(
-                    uri="workspace:///readme.txt", text=content, mimeType=mime
-                )
-            return types.BlobResourceContents(
-                uri="workspace:///readme.txt", blob=content, mimeType=mime
-            )
-
-        item = asyncio.run(_test())
-        assert isinstance(item, types.TextResourceContents)
-        assert item.text == "hello world"
-
-    def test_read_resource_json_via_mock(self, tmp_path):
-        """Lines 230-234: application/json is treated as text content."""
+    @pytest.mark.asyncio
+    async def test_read_resource_json(self, tmp_path):
+        """read_resource returns content for JSON files."""
         resources_dir = tmp_path / "workspace"
         resources_dir.mkdir()
+        (resources_dir / "data.json").write_text('{"key": "value"}')
+
         config_path = _make_gateway_config(tmp_path, resources_dir=resources_dir)
         server, gateway = create_server(config_path)
 
-        from mcp import types
-
-        mock_res = MagicMock()
-        mock_res.read_resource = MagicMock(return_value=('{"key": "value"}', "application/json"))
-        gateway.resources = mock_res
-
-        async def _test():
-            content, mime = gateway.resources.read_resource("workspace:///data.json")
-            if mime and (
-                mime.startswith("text/") or mime in ("application/json", "application/xml")
-            ):
-                return types.TextResourceContents(
-                    uri="workspace:///data.json", text=content, mimeType=mime
-                )
-            return types.BlobResourceContents(
-                uri="workspace:///data.json", blob=content, mimeType=mime
-            )
-
-        item = asyncio.run(_test())
-        assert isinstance(item, types.TextResourceContents)
-        assert item.mimeType == "application/json"
-
-    def test_read_resource_blob_via_mock(self, tmp_path):
-        """Line 235: non-text MIME returns BlobResourceContents."""
-        resources_dir = tmp_path / "workspace"
-        resources_dir.mkdir()
-        config_path = _make_gateway_config(tmp_path, resources_dir=resources_dir)
-        server, gateway = create_server(config_path)
-
-        from mcp import types
-
-        mock_res = MagicMock()
-        import base64
-
-        blob_b64 = base64.b64encode(b"\x89PNG\r\n").decode("ascii")
-        mock_res.read_resource = MagicMock(return_value=(blob_b64, "image/png"))
-        gateway.resources = mock_res
-
-        async def _test():
-            content, mime = gateway.resources.read_resource("workspace:///image.png")
-            if mime and (
-                mime.startswith("text/") or mime in ("application/json", "application/xml")
-            ):
-                return types.TextResourceContents(
-                    uri="workspace:///image.png", text=content, mimeType=mime
-                )
-            return types.BlobResourceContents(
-                uri="workspace:///image.png", blob=content, mimeType=mime
-            )
-
-        item = asyncio.run(_test())
-        assert isinstance(item, types.BlobResourceContents)
-        assert item.mimeType == "image/png"
-
-    def test_read_resource_xml_via_mock(self, tmp_path):
-        """Line 232: application/xml is treated as text content."""
-        resources_dir = tmp_path / "workspace"
-        resources_dir.mkdir()
-        config_path = _make_gateway_config(tmp_path, resources_dir=resources_dir)
-        server, gateway = create_server(config_path)
-
-        from mcp import types
-
-        mock_res = MagicMock()
-        mock_res.read_resource = MagicMock(return_value=("<root/>", "application/xml"))
-        gateway.resources = mock_res
-
-        async def _test():
-            content, mime = gateway.resources.read_resource("workspace:///data.xml")
-            if mime and (
-                mime.startswith("text/") or mime in ("application/json", "application/xml")
-            ):
-                return types.TextResourceContents(
-                    uri="workspace:///data.xml", text=content, mimeType=mime
-                )
-            return types.BlobResourceContents(
-                uri="workspace:///data.xml", blob=content, mimeType=mime
-            )
-
-        item = asyncio.run(_test())
-        assert isinstance(item, types.TextResourceContents)
+        content = await server.read_resource("workspace:///data.json")
+        assert "key" in str(content)
 
 
 # ---------------------------------------------------------------------------
-# run_stdio (lines 284-303)
+# run_stdio
 # ---------------------------------------------------------------------------
 
 
@@ -964,36 +874,32 @@ class TestRunStdio:
     """Test run_stdio transport runner."""
 
     def test_run_stdio_connects_and_closes_bridge(self, tmp_path):
-        """Lines 284-303: run_stdio connects bridge, runs server, closes bridge."""
+        """run_stdio connects bridge, runs server, closes bridge."""
         config_path = _make_gateway_config(
             tmp_path,
             worker_cfgs=_single_worker_cfgs("summarizer"),
         )
-        _server, gateway = create_server(config_path)
+        server, gateway = create_server(config_path)
 
         gateway.bridge = MagicMock()
         gateway.bridge.connect = AsyncMock()
         gateway.bridge.close = AsyncMock()
 
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock()
-        mock_server.create_initialization_options = MagicMock(return_value={})
+        with patch.object(server, "run_async", new_callable=AsyncMock) as mock_run:
+            from loom.mcp.server import run_stdio
 
-        from loom.mcp.server import run_stdio
-
-        with patch("mcp.server.stdio.stdio_server", return_value=_fake_stdio_cm()):
-            run_stdio(mock_server, gateway)
+            run_stdio(server, gateway)
 
         gateway.bridge.connect.assert_awaited_once()
-        mock_server.run.assert_awaited_once()
+        mock_run.assert_awaited_once_with(transport="stdio")
         gateway.bridge.close.assert_awaited_once()
 
     def test_run_stdio_with_resources_snapshots(self, tmp_path):
-        """Lines 290-291: run_stdio snapshots resources if present."""
+        """run_stdio snapshots resources if present."""
         resources_dir = tmp_path / "workspace"
         resources_dir.mkdir()
         config_path = _make_gateway_config(tmp_path, resources_dir=resources_dir)
-        _server, gateway = create_server(config_path)
+        server, gateway = create_server(config_path)
 
         gateway.bridge = MagicMock()
         gateway.bridge.connect = AsyncMock()
@@ -1003,67 +909,54 @@ class TestRunStdio:
         mock_resources.snapshot = MagicMock()
         gateway.resources = mock_resources
 
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock()
-        mock_server.create_initialization_options = MagicMock(return_value={})
+        with patch.object(server, "run_async", new_callable=AsyncMock):
+            from loom.mcp.server import run_stdio
 
-        from loom.mcp.server import run_stdio
-
-        with patch("mcp.server.stdio.stdio_server", return_value=_fake_stdio_cm()):
-            run_stdio(mock_server, gateway)
+            run_stdio(server, gateway)
 
         mock_resources.snapshot.assert_called_once()
 
     def test_run_stdio_closes_bridge_on_error(self, tmp_path):
-        """Lines 300-301: bridge.close() is called even if server.run raises."""
+        """bridge.close() is called even if server.run_async raises."""
         config_path = _make_gateway_config(
             tmp_path,
             worker_cfgs=_single_worker_cfgs("summarizer"),
         )
-        _server, gateway = create_server(config_path)
+        server, gateway = create_server(config_path)
 
         gateway.bridge = MagicMock()
         gateway.bridge.connect = AsyncMock()
         gateway.bridge.close = AsyncMock()
 
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock(side_effect=RuntimeError("server crash"))
-        mock_server.create_initialization_options = MagicMock(return_value={})
-
         from loom.mcp.server import run_stdio
 
-        with (
-            pytest.raises(RuntimeError, match="server crash"),
-            patch("mcp.server.stdio.stdio_server", return_value=_fake_stdio_cm()),
-        ):
-            run_stdio(mock_server, gateway)
+        server.run_async = AsyncMock(side_effect=RuntimeError("server crash"))
+        with pytest.raises(RuntimeError, match="server crash"):
+            run_stdio(server, gateway)
 
         gateway.bridge.close.assert_awaited_once()
 
-    def test_run_stdio_skips_bridge_connect_for_workshop_only_gateway(self, tmp_path):
+    def test_run_stdio_skips_bridge_for_workshop_only(self, tmp_path):
+        """Workshop-only gateway skips bridge connect/close."""
         config_path = _make_workshop_only_gateway_config(tmp_path)
-        _server, gateway = create_server(config_path)
+        server, gateway = create_server(config_path)
 
         gateway.bridge = MagicMock()
         gateway.bridge.connect = AsyncMock()
         gateway.bridge.close = AsyncMock()
 
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock()
-        mock_server.create_initialization_options = MagicMock(return_value={})
+        with patch.object(server, "run_async", new_callable=AsyncMock) as mock_run:
+            from loom.mcp.server import run_stdio
 
-        from loom.mcp.server import run_stdio
-
-        with patch("mcp.server.stdio.stdio_server", return_value=_fake_stdio_cm()):
-            run_stdio(mock_server, gateway)
+            run_stdio(server, gateway)
 
         gateway.bridge.connect.assert_not_awaited()
         gateway.bridge.close.assert_not_awaited()
-        mock_server.run.assert_awaited_once()
+        mock_run.assert_awaited_once_with(transport="stdio")
 
 
 # ---------------------------------------------------------------------------
-# run_streamable_http (lines 319-366)
+# run_streamable_http
 # ---------------------------------------------------------------------------
 
 
@@ -1071,7 +964,7 @@ class TestRunStreamableHTTP:
     """Test run_streamable_http transport runner."""
 
     def test_run_streamable_http_connects_and_closes(self, tmp_path):
-        """Lines 319-366: streamable HTTP connects bridge, starts uvicorn."""
+        """Streamable HTTP connects bridge, runs server, closes bridge."""
         config_path = _make_gateway_config(
             tmp_path,
             worker_cfgs=_single_worker_cfgs("summarizer"),
@@ -1082,20 +975,17 @@ class TestRunStreamableHTTP:
         gateway.bridge.connect = AsyncMock()
         gateway.bridge.close = AsyncMock()
 
-        from loom.mcp.server import run_streamable_http
+        with patch.object(server, "run_async", new_callable=AsyncMock) as mock_run:
+            from loom.mcp.server import run_streamable_http
 
-        mock_uv = MagicMock()
-        mock_uv.serve = AsyncMock()
-
-        with patch("uvicorn.Config"), patch("uvicorn.Server", return_value=mock_uv):
             run_streamable_http(server, gateway, host="127.0.0.1", port=9999)
 
         gateway.bridge.connect.assert_awaited_once()
-        mock_uv.serve.assert_awaited_once()
+        mock_run.assert_awaited_once_with(transport="http", host="127.0.0.1", port=9999)
         gateway.bridge.close.assert_awaited_once()
 
     def test_run_streamable_http_with_resources(self, tmp_path):
-        """Lines 329-330: streamable HTTP snapshots resources if present."""
+        """Streamable HTTP snapshots resources if present."""
         resources_dir = tmp_path / "workspace"
         resources_dir.mkdir()
         config_path = _make_gateway_config(tmp_path, resources_dir=resources_dir)
@@ -1109,18 +999,15 @@ class TestRunStreamableHTTP:
         mock_resources.snapshot = MagicMock()
         gateway.resources = mock_resources
 
-        from loom.mcp.server import run_streamable_http
+        with patch.object(server, "run_async", new_callable=AsyncMock):
+            from loom.mcp.server import run_streamable_http
 
-        mock_uv = MagicMock()
-        mock_uv.serve = AsyncMock()
-
-        with patch("uvicorn.Config"), patch("uvicorn.Server", return_value=mock_uv):
             run_streamable_http(server, gateway)
 
         mock_resources.snapshot.assert_called_once()
 
     def test_run_streamable_http_closes_on_error(self, tmp_path):
-        """Lines 363-364: bridge.close() called even if uvicorn raises."""
+        """bridge.close() called even if run_async raises."""
         config_path = _make_gateway_config(
             tmp_path,
             worker_cfgs=_single_worker_cfgs("summarizer"),
@@ -1133,19 +1020,14 @@ class TestRunStreamableHTTP:
 
         from loom.mcp.server import run_streamable_http
 
-        mock_uv = MagicMock()
-        mock_uv.serve = AsyncMock(side_effect=RuntimeError("port in use"))
-
-        with (
-            pytest.raises(RuntimeError, match="port in use"),
-            patch("uvicorn.Config"),
-            patch("uvicorn.Server", return_value=mock_uv),
-        ):
+        server.run_async = AsyncMock(side_effect=RuntimeError("port in use"))
+        with pytest.raises(RuntimeError, match="port in use"):
             run_streamable_http(server, gateway)
 
         gateway.bridge.close.assert_awaited_once()
 
-    def test_run_streamable_http_skips_bridge_connect_for_workshop_only_gateway(self, tmp_path):
+    def test_run_streamable_http_skips_bridge_for_workshop_only(self, tmp_path):
+        """Workshop-only gateway skips bridge connect/close."""
         config_path = _make_workshop_only_gateway_config(tmp_path)
         server, gateway = create_server(config_path)
 
@@ -1153,21 +1035,18 @@ class TestRunStreamableHTTP:
         gateway.bridge.connect = AsyncMock()
         gateway.bridge.close = AsyncMock()
 
-        from loom.mcp.server import run_streamable_http
+        with patch.object(server, "run_async", new_callable=AsyncMock) as mock_run:
+            from loom.mcp.server import run_streamable_http
 
-        mock_uv = MagicMock()
-        mock_uv.serve = AsyncMock()
-
-        with patch("uvicorn.Config"), patch("uvicorn.Server", return_value=mock_uv):
             run_streamable_http(server, gateway)
 
         gateway.bridge.connect.assert_not_awaited()
         gateway.bridge.close.assert_not_awaited()
-        mock_uv.serve.assert_awaited_once()
+        mock_run.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
-# _build_annotations (lines 333-357)
+# _build_annotations
 # ---------------------------------------------------------------------------
 
 
@@ -1238,7 +1117,10 @@ class TestDispatchToolWorkshop:
             name="workshop.worker.list",
             kind="workshop",
             tool_def={},
-            loom_meta={"kind": "workshop", "action": "worker.list"},
+            loom_meta={
+                "kind": "workshop",
+                "action": "worker.list",
+            },
         )
 
         result = await _dispatch_tool(gateway, entry, {})
@@ -1263,42 +1145,54 @@ class TestDispatchToolWorkshop:
             name="workshop.worker.list",
             kind="workshop",
             tool_def={},
-            loom_meta={"kind": "workshop", "action": "worker.list"},
+            loom_meta={
+                "kind": "workshop",
+                "action": "worker.list",
+            },
         )
 
         with pytest.raises(BridgeError, match="Workshop tools are not configured"):
             await _dispatch_tool(gateway, entry, {})
 
 
+# ---------------------------------------------------------------------------
+# Workshop error handling via _safe_dispatch
+# ---------------------------------------------------------------------------
+
+
 class TestHandleCallToolWorkshopError:
-    """Test that WorkshopBridgeError is caught by handle_call_tool."""
+    """Test that WorkshopBridgeError is caught by _safe_dispatch."""
 
-    def _call(self, server, name, arguments=None):
-        from mcp import types
-
-        handler = server.request_handlers[types.CallToolRequest]
-        params = types.CallToolRequestParams(name=name, arguments=arguments)
-        request = types.CallToolRequest(method="tools/call", params=params)
-        return _unwrap(asyncio.run(handler(request)))
-
-    def test_workshop_bridge_error_returns_json(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_workshop_bridge_error_returns_json(self, tmp_path):
+        """WorkshopBridgeError is caught and returned as error dict."""
         config_path = _make_gateway_config(
             tmp_path,
             worker_cfgs=_single_worker_cfgs("ws_tool"),
         )
         server, gateway = create_server(config_path)
 
-        with patch("loom.mcp.server._dispatch_tool", new_callable=AsyncMock) as m:
+        with patch(
+            "loom.mcp.server._dispatch_tool",
+            new_callable=AsyncMock,
+        ) as m:
             m.side_effect = WorkshopBridgeError("ConfigManager not configured")
-            result = self._call(server, "ws_tool", {})
+            result = await server.call_tool("ws_tool", {})
             data = json.loads(result.content[0].text)
             assert "ConfigManager not configured" in data["error"]
 
 
-class TestHandleListToolsAnnotations:
-    """Test that handle_list_tools attaches annotations from registry metadata."""
+# ---------------------------------------------------------------------------
+# list_tools annotations via FastMCP
+# ---------------------------------------------------------------------------
 
-    def test_annotations_attached_to_tools(self, tmp_path):
+
+class TestHandleListToolsAnnotations:
+    """Test that list_tools returns annotations from registry metadata."""
+
+    @pytest.mark.asyncio
+    async def test_annotations_attached_to_tools(self, tmp_path):
+        """Tools with annotation flags have annotations attached."""
         config_path = _make_gateway_config(
             tmp_path,
             worker_cfgs=_single_worker_cfgs("annotated"),
@@ -1309,107 +1203,37 @@ class TestHandleListToolsAnnotations:
         entry = gateway.tool_registry["annotated"]
         entry.loom_meta["read_only"] = True
 
-        from mcp import types
+        # Re-register the tool with updated annotations.
+        from loom.mcp.server import _register_tool
 
-        handler = server.request_handlers[types.ListToolsRequest]
-        request = types.ListToolsRequest(method="tools/list")
-        result = _unwrap(asyncio.run(handler(request)))
+        # Remove old tool registration and re-register.
+        if hasattr(server, "_tool_manager"):
+            server._tool_manager._tools.pop("annotated", None)
+        _register_tool(server, gateway, entry)
 
-        tool = result.tools[0]
+        tools = await server.list_tools()
+
+        tool = next(t for t in tools if t.name == "annotated")
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
 
-    def test_no_annotations_when_no_flags(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_no_annotations_when_no_flags(self, tmp_path):
+        """Tools without annotation flags have no annotations."""
         config_path = _make_gateway_config(
             tmp_path,
             worker_cfgs=_single_worker_cfgs("plain"),
         )
         server, gateway = create_server(config_path)
 
-        from mcp import types
+        tools = await server.list_tools()
 
-        handler = server.request_handlers[types.ListToolsRequest]
-        request = types.ListToolsRequest(method="tools/list")
-        result = _unwrap(asyncio.run(handler(request)))
-
-        tool = result.tools[0]
+        tool = next(t for t in tools if t.name == "plain")
         assert tool.annotations is None
 
 
 # ---------------------------------------------------------------------------
-# handle_read_resource error path (lines 283-287)
-# ---------------------------------------------------------------------------
-
-
-class TestReadResourceHandler:
-    """Test the read_resource handler registered inside create_server."""
-
-    def test_read_resource_returns_read_resource_contents(self, tmp_path):
-        """Lines 283-287: handle_read_resource calls gateway.resources.read_resource
-        and wraps result in ReadResourceContents (MCP SDK may convert to TextResourceContents)."""
-        resources_dir = tmp_path / "workspace"
-        resources_dir.mkdir()
-        (resources_dir / "readme.txt").write_text("hello workspace")
-
-        config_path = _make_gateway_config(tmp_path, resources_dir=resources_dir)
-        server, gateway = create_server(config_path)
-
-        from mcp import types
-
-        # Snapshot first so the resource is known.
-        gateway.resources.snapshot()
-
-        mock_res = MagicMock()
-        mock_res.read_resource = MagicMock(return_value=("hello workspace", "text/plain"))
-        gateway.resources = mock_res
-
-        handler = server.request_handlers[types.ReadResourceRequest]
-        params = types.ReadResourceRequestParams(uri="workspace:///readme.txt")
-        request = types.ReadResourceRequest(method="resources/read", params=params)
-        result = _unwrap(asyncio.run(handler(request)))
-
-        # The handler calls read_resource and the MCP SDK converts the result.
-        mock_res.read_resource.assert_called_once()
-        assert len(result.contents) == 1
-        # MCP SDK converts ReadResourceContents to TextResourceContents for text/* MIME.
-        item = result.contents[0]
-        assert hasattr(item, "text") or hasattr(item, "content")
-        # Verify the text content is present.
-        text = getattr(item, "text", None) or getattr(item, "content", None)
-        assert text == "hello workspace"
-
-    def test_read_resource_uri_coerced_to_str(self, tmp_path):
-        """Line 285: uri is coerced to str (MCP SDK may pass AnyUrl)."""
-        resources_dir = tmp_path / "workspace"
-        resources_dir.mkdir()
-
-        config_path = _make_gateway_config(tmp_path, resources_dir=resources_dir)
-        server, gateway = create_server(config_path)
-
-        from mcp import types
-
-        captured_uris = []
-
-        def capturing_read(uri):
-            captured_uris.append(uri)
-            return ("content", "text/plain")
-
-        mock_res = MagicMock()
-        mock_res.read_resource = capturing_read
-        gateway.resources = mock_res
-
-        handler = server.request_handlers[types.ReadResourceRequest]
-        params = types.ReadResourceRequestParams(uri="workspace:///doc.txt")
-        request = types.ReadResourceRequest(method="resources/read", params=params)
-        _unwrap(asyncio.run(handler(request)))
-
-        # URI passed to read_resource should be a str.
-        assert len(captured_uris) == 1
-        assert isinstance(captured_uris[0], str)
-
-
-# ---------------------------------------------------------------------------
-# _build_workshop_bridge apps_dir edge cases (lines 395-401)
+# _build_workshop_bridge apps_dir edge cases
 # ---------------------------------------------------------------------------
 
 
@@ -1417,7 +1241,7 @@ class TestBuildWorkshopBridgeAppsDir:
     """Test _build_workshop_bridge with apps_dir configuration."""
 
     def test_apps_dir_nonexistent_is_skipped(self, tmp_path):
-        """Lines 393-401: non-existent apps_dir produces empty extra_config_dirs."""
+        """Non-existent apps_dir produces empty extra_config_dirs."""
         from loom.mcp.server import _build_workshop_bridge
 
         workshop_config = {
@@ -1425,11 +1249,11 @@ class TestBuildWorkshopBridgeAppsDir:
             "apps_dir": str(tmp_path / "nonexistent_apps"),
         }
         bridge = _build_workshop_bridge(workshop_config)
-        # Should succeed without error even when apps_dir doesn't exist.
+        # Should succeed without error.
         assert bridge is not None
 
     def test_apps_dir_with_app_configs_subdir(self, tmp_path):
-        """Lines 395-401: app subdirs with configs/ are added to extra_config_dirs."""
+        """App subdirs with configs/ are added to extra_config_dirs."""
         from loom.mcp.server import _build_workshop_bridge
 
         # Set up a fake apps directory with one deployed app.
@@ -1438,7 +1262,7 @@ class TestBuildWorkshopBridgeAppsDir:
         app_dir = apps_dir / "myapp"
         app_dir.mkdir()
         (app_dir / "configs").mkdir()
-        # Create a dummy worker config inside the app's configs dir.
+        # Create a dummy worker config.
         (app_dir / "configs" / "worker.yaml").write_text(
             "name: myapp_worker\nsystem_prompt: test\n"
         )
@@ -1451,7 +1275,7 @@ class TestBuildWorkshopBridgeAppsDir:
         assert bridge is not None
 
     def test_apps_dir_app_without_configs_subdir_skipped(self, tmp_path):
-        """Lines 398-401: app subdirs without configs/ are not added."""
+        """App subdirs without configs/ are not added."""
         from loom.mcp.server import _build_workshop_bridge
 
         apps_dir = tmp_path / "apps"
@@ -1465,81 +1289,3 @@ class TestBuildWorkshopBridgeAppsDir:
         }
         bridge = _build_workshop_bridge(workshop_config)
         assert bridge is not None
-
-
-# ---------------------------------------------------------------------------
-# run_streamable_http inner functions (lines 521, 524, 528-529)
-# ---------------------------------------------------------------------------
-
-
-class TestRunStreamableHTTPInternals:
-    """Test the inner functions (mcp_asgi_handler, health, lifespan) that are
-    defined inside run_streamable_http but are only exercised when uvicorn
-    drives the Starlette app.  We extract them by capturing the Starlette app
-    at construction time."""
-
-    def _capture_starlette_app(self, tmp_path, *, requires_workers=False):
-        """Build a gateway and capture the Starlette app built inside run_streamable_http."""
-        if requires_workers:
-            config_path = _make_gateway_config(
-                tmp_path, worker_cfgs=_single_worker_cfgs("summarizer")
-            )
-        else:
-            config_path = _make_workshop_only_gateway_config(tmp_path)
-
-        server, gateway = create_server(config_path)
-
-        gateway.bridge = MagicMock()
-        gateway.bridge.connect = AsyncMock()
-        gateway.bridge.close = AsyncMock()
-
-        from loom.mcp.server import run_streamable_http
-
-        captured = {}
-
-        class CapturingServer:
-            def __init__(self, config):
-                captured["config"] = config
-
-            async def serve(self):
-                pass  # no-op — we just want the app
-
-        with (
-            patch("uvicorn.Config", side_effect=lambda app, **kw: captured.update({"app": app})),
-            patch("uvicorn.Server", side_effect=CapturingServer),
-        ):
-            run_streamable_http(server, gateway)
-
-        return captured.get("app"), gateway
-
-    def test_health_endpoint_returns_ok(self, tmp_path):
-        """Line 524: health() returns {"status": "ok", "name": ...}."""
-        app, gateway = self._capture_starlette_app(tmp_path)
-
-        # Find the health route handler.
-        health_route = None
-        for route in app.routes:
-            if hasattr(route, "path") and route.path == "/health":
-                health_route = route
-                break
-        assert health_route is not None, "No /health route found"
-
-        from starlette.testclient import TestClient
-
-        client = TestClient(app)
-        response = client.get("/health")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "ok"
-        assert "name" in data
-
-    def test_mcp_asgi_handler_route_registered(self, tmp_path):
-        """Line 521: /mcp route with mcp_asgi_handler is registered."""
-        app, _gateway = self._capture_starlette_app(tmp_path)
-
-        mcp_route = None
-        for route in app.routes:
-            if hasattr(route, "path") and route.path == "/mcp":
-                mcp_route = route
-                break
-        assert mcp_route is not None, "No /mcp route found"

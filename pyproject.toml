@@ -34,7 +34,7 @@ scheduler = [
     "croniter>=2.0.0",         # Cron expression parsing for scheduled dispatch
 ]
 mcp = [
-    "mcp>=1.20.0",             # Model Context Protocol SDK
+    "fastmcp>=3.1",            # FastMCP — high-level MCP server/client framework
 ]
 workshop = [
     "fastapi>=0.110.0",        # Web framework for Workshop UI
@@ -70,7 +70,7 @@ dev = [
     "duckdb>=1.0.0",
     "redis>=5.0.0",            # Needed for contrib/redis tests
     "croniter>=2.0.0",         # Needed for scheduler tests
-    "mcp>=1.20.0",             # Needed for MCP gateway tests
+    "fastmcp>=3.1",            # Needed for MCP gateway tests
     "mkdocs-material>=9.5",           # Needed for docs build
     "mkdocstrings[python]>=0.24",
     "deepeval>=3.8.0",         # LLM output quality evaluation
