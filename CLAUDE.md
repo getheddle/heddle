@@ -77,12 +77,16 @@ src/loom/
                           #   Pydantic ValidationError catching, progress callback error logging
     resources.py          # WorkspaceResources — workspace files as MCP resources (workspace:/// URIs)
     server.py             # create_server(), MCPGateway, run_stdio(), run_streamable_http()
-                          #   MCP progress notifications wired to pipeline stage callbacks
-                          #   Workshop tool dispatch, ToolAnnotations (destructiveHint)
-    workshop_discovery.py # Workshop MCP tool definitions (workshop.* namespace)
-                          #   worker CRUD, test bench, eval, impact, dead-letter tools
+                          #   FastMCP 3.x server with dynamic FunctionTool registration
+                          #   Tool dispatch, ToolAnnotations, /health endpoint
+    workshop_discovery.py # Workshop + session MCP tool definitions
+                          #   workshop.* namespace: worker CRUD, test bench, eval, impact, dead-letter
+                          #   session.* namespace: start, end, status, sync_check, sync
     workshop_bridge.py    # WorkshopBridge — direct Workshop component calls (no NATS)
                           #   ConfigManager, WorkerTestRunner, EvalRunner, DeadLetterConsumer
+    session_bridge.py     # SessionBridge — session lifecycle dispatch (git ops, no NATS)
+                          #   start, end, status, sync_check, sync actions
+    session_registry.py   # File-based session markers (~/.loom/sessions/), compatible with baft.sessions
 
   tracing/
     __init__.py           # Public API: get_tracer, init_tracing, inject/extract_trace_context
@@ -190,7 +194,7 @@ deploy/
   macos/                  # launchd plist files + install/uninstall scripts
   windows/                # NSSM-based Windows service install/uninstall scripts
 
-tests/                    # 68 test files, 1472 unit tests + 1 integration test (90% coverage)
+tests/                    # 69 test files, 1491 unit tests + 1 integration test (90% coverage)
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -203,8 +207,8 @@ tests/                    # 68 test files, 1472 unit tests + 1 integration test 
   test_cli.py             test_redis_store.py     test_extract_json_extended.py
   test_contrib_duckdb_query.py  test_contrib_duckdb_vector.py  test_contrib_duckdb_view.py
   test_mcp_config.py      test_mcp_discovery.py   test_mcp_bridge.py
-  test_mcp_resources.py   test_mcp_server.py
-  test_mcp_workshop_discovery.py  test_mcp_workshop_bridge.py  # Workshop MCP tools
+  test_mcp_resources.py   test_mcp_server.py      test_mcp_session_bridge.py
+  test_mcp_workshop_discovery.py  test_mcp_workshop_bridge.py  # Workshop + session MCP tools
   test_bus_memory.py      test_e2e_operations.py  # InMemoryBus E2E (happy path)
   test_e2e_advanced.py                            # E2E failure paths, timeouts, diamonds
   test_workshop_runner.py test_workshop_db.py     test_workshop_eval.py
@@ -319,7 +323,7 @@ uv sync --extra docproc       # Docling for document extraction (PDF, DOCX)
 uv sync --extra duckdb        # DuckDB embedded analytics
 uv sync --extra rag           # RAG pipeline (DuckDB + requests for Ollama)
 uv sync --extra scheduler     # Cron expression parsing (croniter)
-uv sync --extra mcp           # MCP gateway (Model Context Protocol SDK)
+uv sync --extra mcp           # MCP gateway (FastMCP 3.x — high-level MCP framework)
 uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
 uv sync --extra mdns          # mDNS/Bonjour service discovery on LAN (zeroconf)
 uv sync --extra tui           # TUI terminal dashboard (Textual)
@@ -331,7 +335,7 @@ uv sync --all-extras          # All dependencies including dev/test
 
 ## MCP gateway
 
-Any LOOM system can become an MCP server with a single YAML config — zero MCP-specific code needed.
+Any LOOM system can become an MCP server with a single YAML config — zero MCP-specific code needed. The gateway uses **FastMCP 3.x** (`fastmcp>=3.1`) for the server layer — tools are registered dynamically as `FunctionTool` objects with JSON schemas from YAML config discovery. FastMCP handles both stdio and streamable-HTTP transports natively.
 
 **Config structure** (`configs/mcp/docman.yaml`):
 
@@ -379,12 +383,28 @@ Workshop tools support MCP `ToolAnnotations` — `workshop.deadletter.replay` is
 
 **Dead-letter tools are opt-in:** The MCP path creates a local in-memory `DeadLetterConsumer` that is **not** subscribed to the live NATS dead-letter stream. Entries only appear if something stores them into that local consumer. Enable `deadletter` explicitly when pairing with a co-located router or for testing workflows.
 
+**Session tools** — session lifecycle management under the `session.*` namespace. Configured via `tools.session` in the gateway YAML. These dispatch through `SessionBridge` (subprocess git ops, file checks — no NATS required):
+
+```yaml
+tools:
+  session:
+    framework_dir: /path/to/framework  # defaults to $ITP_ROOT/framework
+    workspace_dir: /path/to/workspace  # defaults to $BAFT_WORKSPACE
+    baft_dir: /path/to/baft            # optional, for DuckDB import
+    enable: [start, end, status, sync_check, sync]
+```
+
+Session markers are stored in `~/.loom/sessions/` as JSON files (shared with `baft.sessions` module).
+
 **Public API:**
 
 ```python
 from loom.mcp import create_server, run_stdio, run_streamable_http, MCPGateway
-server, gateway = create_server("configs/mcp/docman.yaml")
-run_stdio(server, gateway)
+
+# create_server returns (FastMCP, MCPGateway)
+mcp, gateway = create_server("configs/mcp/docman.yaml")
+run_stdio(mcp, gateway)           # stdio transport
+run_streamable_http(mcp, gateway)  # HTTP transport (FastMCP handles uvicorn)
 ```
 
 ## Worker Workshop

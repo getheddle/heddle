@@ -106,10 +106,10 @@ that separates concerns across specialized actors.
 | Router (deterministic, rate-limited) | Complete |
 | Checkpoint (Valkey + in-memory) | Complete |
 | Scheduler (cron + interval dispatch) | Complete |
-| MCP gateway (config-driven tool server) | Complete |
+| MCP gateway (FastMCP 3.x, session tools) | Complete |
 | Contrib: DuckDB, Valkey, RAG | Complete |
 | Worker Workshop (web UI) | Complete |
-| Unit tests | 1472 passing, 90% coverage |
+| Unit tests | 1491 passing, 90% coverage |
 
 ---
 
@@ -148,6 +148,10 @@ For the full 7-step setup with infrastructure and LLM backends, see
   container builds, environment variables
 - **[Coding Guide](docs/CODING_GUIDE.md)** — Coding, documentation, and commenting standards for contributors
 - **[Contributing](docs/CONTRIBUTING.md)** — CLA, technical standards, PR process
+
+> **Deploying apps (baft, docman)?** Application repos ship their own Helm
+> charts and Dockerfiles. See the app's `charts/` directory for Kubernetes
+> deployment.
 
 ---
 
