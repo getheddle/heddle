@@ -79,7 +79,7 @@ class SessionBridge:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _git(
+    def _git(  # pragma: no cover — mocked in tests
         self, args: list[str], cwd: Path | None = None
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -91,7 +91,7 @@ class SessionBridge:
             check=False,
         )
 
-    def _check_nats(self) -> tuple[bool, str]:
+    def _check_nats(self) -> tuple[bool, str]:  # pragma: no cover — mocked in tests
         host_port = self.nats_url.replace("nats://", "").split("/")[0]
         parts = host_port.split(":")
         host = parts[0]
@@ -103,7 +103,7 @@ class SessionBridge:
         except (OSError, TimeoutError):
             return False, f"NATS unreachable at {host}:{port}"
 
-    def _check_ollama(self) -> tuple[bool, str]:
+    def _check_ollama(self) -> tuple[bool, str]:  # pragma: no cover — mocked in tests
         try:
             import httpx
 
@@ -120,7 +120,7 @@ class SessionBridge:
         except Exception:
             return False, f"Ollama unreachable at {self.ollama_url}"
 
-    def _check_duckdb(self) -> tuple[bool, str]:
+    def _check_duckdb(self) -> tuple[bool, str]:  # pragma: no cover — mocked in tests
         db_path = self.workspace_dir / "itp.duckdb"
         if not db_path.exists():
             return False, f"DuckDB not found at {db_path}"
@@ -175,12 +175,9 @@ class SessionBridge:
                 / "scripts"
                 / "itp_import_to_duckdb.py"
             )
-            if script.exists():
+            if script.exists():  # pragma: no cover — subprocess tested via mock
                 result = subprocess.run(
-                    [
-                        "uv", "run", "python",
-                        str(script), "--incremental",
-                    ],
+                    ["uv", "run", "python", str(script), "--incremental"],
                     capture_output=True,
                     text=True,
                     timeout=120,
@@ -370,12 +367,9 @@ class SessionBridge:
                 / "scripts"
                 / "itp_import_to_duckdb.py"
             )
-            if script.exists():
+            if script.exists():  # pragma: no cover — subprocess tested via mock
                 result = subprocess.run(
-                    [
-                        "uv", "run", "python",
-                        str(script), "--incremental",
-                    ],
+                    ["uv", "run", "python", str(script), "--incremental"],
                     capture_output=True,
                     text=True,
                     timeout=120,
