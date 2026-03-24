@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..schemas.embedding import EmbeddedChunk, SimilarityResult
+from .base import VectorStore
 
 if TYPE_CHECKING:
     from ..schemas.chunk import TextChunk
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class DuckDBVectorStore:
+class DuckDBVectorStore(VectorStore):
     """
     Embedded vector store backed by DuckDB.
 

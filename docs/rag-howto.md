@@ -9,10 +9,14 @@ It is designed for Persian/RTL text but works with any language.
 ## Installation
 
 ```bash
-uv sync --extra rag
+uv sync --extra rag              # DuckDB vector store backend
+uv sync --extra lancedb          # LanceDB vector store backend (ANN search)
+uv sync --extra telegram         # Live Telegram capture via Telethon
 ```
 
 Dependencies added by `[rag]`: `duckdb>=1.0.0`, `requests>=2.31.0`.
+Dependencies added by `[lancedb]`: `lancedb>=0.15.0`, `pyarrow>=15.0.0`.
+Dependencies added by `[telegram]`: `telethon>=1.36.0`.
 
 For embedding generation you also need a running Ollama server with `nomic-embed-text` (or another model):
 
@@ -23,9 +27,11 @@ ollama pull nomic-embed-text
 ## Architecture
 
 ```text
-Telegram JSON ──► TelegramIngestor ──► NormalizedPost[]
-                                            │
-                      ┌─────────────────────┘
+                    ┌── Telegram JSON ──► TelegramIngestor ──┐
+                    │                                        ├──► NormalizedPost[]
+                    └── Telegram Live ──► TelegramLiveIngestor┘
+                         (Telethon)              │
+                      ┌──────────────────────────┘
                       ▼
                   StreamMux ──────────────► MuxedStream
                   (chronological merge       (entries sorted by timestamp,
@@ -36,10 +42,14 @@ Telegram JSON ──► TelegramIngestor ──► NormalizedPost[]
                       │
               ┌───────┴───────┐
               ▼               ▼
-        DuckDBVectorStore   LLM Analysis Actors
-        (embed + store)     (TrendAnalyzer, CorroborationFinder,
-                             AnomalyDetector, DataExtractor)
+     VectorStore (ABC)      LLM Analysis Actors
+     ├─ DuckDBVectorStore   (TrendAnalyzer, CorroborationFinder,
+     └─ LanceDBVectorStore   AnomalyDetector, DataExtractor)
 ```
+
+All ingestors extend the `Ingestor` ABC (`ingestion/base.py`). All vector stores
+extend the `VectorStore` ABC (`vectorstore/base.py`). Backends are configurable
+via `ingestor_class` and `store_class` parameters.
 
 ## Quick Start (Standalone Python)
 
@@ -114,6 +124,17 @@ All data models are Pydantic v2 BaseModels.
 | `ExtractedData` | `schemas.analysis` | Structured data extraction results |
 
 ### Ingestion (`loom.contrib.rag.ingestion`)
+
+**Ingestor ABC** — All ingestors extend `Ingestor` from `ingestion/base.py`:
+
+```python
+from loom.contrib.rag.ingestion.base import Ingestor
+
+class MyIngestor(Ingestor):
+    def load(self) -> "MyIngestor": ...
+    def ingest(self) -> Generator[NormalizedPost, None, None]: ...
+    # ingest_all() is provided by the base class
+```
 
 **TelegramIngestor** — Parses Telegram Desktop JSON exports.
 
@@ -265,6 +286,61 @@ store.close()
 
 Uses `list_cosine_similarity` (not `array_cosine_similarity`) because DuckDB `FLOAT[]` is variable-length.
 
+**LanceDBVectorStore** — ANN vector database (faster search for large datasets):
+
+```python
+from loom.contrib.lancedb.store import LanceDBVectorStore
+
+store = LanceDBVectorStore(
+    db_path="/tmp/rag.lance",
+    embedding_model="nomic-embed-text",
+    ollama_url="http://localhost:11434",
+).initialize()
+
+# Same API as DuckDBVectorStore — both extend VectorStore ABC
+count = store.add_chunks(text_chunks, batch_size=64)
+results = store.search("earthquake reports", limit=10)
+store.close()
+```
+
+Install: `uv sync --extra lancedb`
+
+**VectorStore ABC** — Both stores implement `VectorStore` from `vectorstore/base.py`. Use the `store_class` parameter on `VectorStoreBackend` to switch:
+
+```yaml
+# In worker YAML config
+backend_config:
+  store_class: "loom.contrib.lancedb.store.LanceDBVectorStore"
+  db_path: "/tmp/rag-vectors.lance"
+```
+
+### Live Telegram Capture (`loom.contrib.rag.ingestion.telegram_live`)
+
+**TelegramLiveIngestor** — Monitors Telegram channels in real-time via Telethon:
+
+```python
+from loom.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
+
+ingestor = TelegramLiveIngestor(
+    channels=["@farsna", "@IranIntl_Fa"],
+    api_id=12345,
+    api_hash="your_api_hash",
+)
+await ingestor.start()
+
+# Posts are buffered; drain with ingest()
+for post in ingestor.ingest():
+    process(post)
+
+# Check status
+print(ingestor.status())
+
+await ingestor.stop()
+```
+
+Requires: `uv sync --extra telegram` and Telegram API credentials
+(`TELEGRAM_API_ID`, `TELEGRAM_API_HASH` env vars).
+
 ### Analysis Actors (`loom.contrib.rag.analysis`)
 
 LLM-powered analysis actors for trend detection, cross-channel corroboration, anomaly detection, and data extraction.
@@ -307,10 +383,10 @@ The RAG module includes Loom backend wrappers and YAML configs for running as di
 
 | Backend | Worker Type | Wraps |
 |---------|------------|-------|
-| `IngestorBackend` | processor | TelegramIngestor |
+| `IngestorBackend` | processor | Any `Ingestor` subclass (default: TelegramIngestor, configurable via `ingestor_class`) |
 | `MuxBackend` | processor | StreamMux |
 | `ChunkerBackend` | processor | SentenceChunker |
-| `VectorStoreBackend` | processor | DuckDBVectorStore |
+| `VectorStoreBackend` | processor | Any `VectorStore` subclass (default: DuckDBVectorStore, configurable via `store_class`) |
 
 ### Worker Configs
 
@@ -320,7 +396,8 @@ Pre-built YAML configs in `configs/workers/`:
 rag_ingestor.yaml       # Telegram ingestion
 rag_mux.yaml            # Stream multiplexing
 rag_chunker.yaml        # Sentence chunking
-rag_vectorstore.yaml    # Vector store operations
+rag_vectorstore.yaml         # Vector store operations (DuckDB)
+rag_vectorstore_lance.yaml   # Vector store operations (LanceDB)
 rag_trend_analyzer.yaml # LLM trend analysis
 ```
 
@@ -359,12 +436,13 @@ Each stage maps outputs to the next stage's inputs via `input_mapping`.
 
 ## Adding a New Source (non-Telegram)
 
-To support a new data source, create an ingestor that produces `NormalizedPost` objects:
+To support a new data source, extend the `Ingestor` ABC:
 
 ```python
+from loom.contrib.rag.ingestion.base import Ingestor
 from loom.contrib.rag.schemas.post import NormalizedPost, Language
 
-class MyIngestor:
+class MyIngestor(Ingestor):
     def __init__(self, source_path: str):
         self._path = source_path
         self._posts: list[NormalizedPost] = []
@@ -383,21 +461,27 @@ class MyIngestor:
             ))
         return self
 
+    def ingest(self):
+        yield from self._posts
+
     @property
     def channel_id(self) -> int: ...
     @property
     def channel_name(self) -> str: ...
-    def ingest_all(self) -> list[NormalizedPost]:
-        return list(self._posts)
 ```
 
-The ingestor must:
+The `Ingestor` ABC requires:
 
-1. Implement `load()` returning `self`
-2. Have `channel_id` and `channel_name` properties
-3. Have `ingest_all()` returning `list[NormalizedPost]`
+1. `load()` — parse source, return `self`
+2. `ingest()` — yield `NormalizedPost` objects
+3. `ingest_all()` is provided by the base class
 
-Then use it with `merge_from_ingestors()` just like `TelegramIngestor`.
+Use with `IngestorBackend` by setting `ingestor_class` in the worker config:
+
+```yaml
+backend_config:
+  ingestor_class: "mypackage.my_ingestor.MyIngestor"
+```
 
 ## Testing
 
@@ -405,16 +489,24 @@ Then use it with `merge_from_ingestors()` just like `TelegramIngestor`.
 # Run all RAG tests
 uv run pytest tests/contrib/rag/ -v
 
+# Run LanceDB tests (requires lancedb installed)
+uv run pytest tests/contrib/lancedb/ -v
+
+# Run RAG Workshop tests
+uv run pytest tests/test_workshop_rag.py -v
+
 # Run specific module tests
 uv run pytest tests/contrib/rag/test_schemas.py -v
 uv run pytest tests/contrib/rag/test_ingestion.py -v
+uv run pytest tests/contrib/rag/test_abstractions.py -v
+uv run pytest tests/contrib/rag/test_telegram_live.py -v
 uv run pytest tests/contrib/rag/test_mux.py -v
 uv run pytest tests/contrib/rag/test_chunker.py -v
 uv run pytest tests/contrib/rag/test_tools.py -v
 uv run pytest tests/contrib/rag/test_backends.py -v
 ```
 
-All tests run without infrastructure (no NATS, no Ollama, no DuckDB server). DuckDB runs in-memory for tests.
+All tests run without infrastructure (no NATS, no Ollama, no DuckDB server). DuckDB runs in-memory for tests. LanceDB tests are skipped if `lancedb` is not installed.
 
 ## Demo
 
@@ -431,7 +523,7 @@ python examples/rag_demo.py --embed
 ```text
 src/loom/contrib/rag/
   __init__.py
-  backends.py                    # Loom SyncProcessingBackend wrappers
+  backends.py                    # Loom SyncProcessingBackend wrappers (configurable classes)
   schemas/
     __init__.py                  # Re-exports all public schemas
     post.py                      # NormalizedPost, Language, ChannelBias
@@ -442,7 +534,10 @@ src/loom/contrib/rag/
     analysis.py                  # TrendSignal, AnomalyFlag, ExtractedData, etc.
   ingestion/
     __init__.py
-    telegram_ingestor.py         # TelegramIngestor + DEFAULT_PROFILES
+    base.py                      # Ingestor ABC
+    telegram_ingestor.py         # TelegramIngestor(Ingestor) + DEFAULT_PROFILES
+    telegram_live.py             # TelegramLiveIngestor(Ingestor) — Telethon live capture
+    normalize.py                 # Shared normalization utilities
   mux/
     __init__.py
     stream_mux.py                # StreamMux, merge_from_ingestors
@@ -451,7 +546,8 @@ src/loom/contrib/rag/
     sentence_chunker.py          # ChunkConfig, chunk_post, chunk_mux_entry
   vectorstore/
     __init__.py
-    duckdb_store.py              # DuckDBVectorStore
+    base.py                      # VectorStore ABC
+    duckdb_store.py              # DuckDBVectorStore(VectorStore) — exact cosine similarity
   analysis/
     __init__.py
     llm_analyzers.py             # LLMBackend, TrendAnalyzer, etc.
@@ -459,4 +555,9 @@ src/loom/contrib/rag/
     __init__.py
     rtl_normalizer.py            # normalize(), Persian/RTL text processing
     temporal_batcher.py          # tumbling_windows, sliding_windows, daily_windows
+
+src/loom/contrib/lancedb/
+  __init__.py
+  store.py                       # LanceDBVectorStore(VectorStore) — ANN search
+  tool.py                        # LanceDBVectorTool — LLM function-calling tool
 ```

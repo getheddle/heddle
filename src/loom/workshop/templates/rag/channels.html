@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set active_nav = "rag" %}
+{% block title %}Channels — Loom Workshop{% endblock %}
+{% block content %}
+<hgroup>
+    <h1>Telegram Channels</h1>
+    <p>{{ channels | length }} registered channel{{ 's' if channels | length != 1 else '' }}.</p>
+</hgroup>
+
+<input type="search" id="channel-search" placeholder="Filter channels by name, handle, or faction..."
+       aria-label="Filter channels" oninput="filterChannels(this.value)">
+
+<div class="table-wrap">
+<table>
+    <thead>
+        <tr>
+            <th scope="col">Handle</th>
+            <th scope="col">Name</th>
+            <th scope="col">Faction</th>
+            <th scope="col">Tier</th>
+            <th scope="col">Priority</th>
+            <th scope="col">Status</th>
+        </tr>
+    </thead>
+    <tbody id="channel-table-body">
+        {% for ch in channels %}
+        <tr data-search="{{ ch.handle | lower }} {{ ch.name_en | lower }} {{ ch.faction | lower }}">
+            <td><code>{{ ch.handle }}</code></td>
+            <td>
+                {{ ch.name_en }}
+                {% if ch.name_fa %}<br><small>{{ ch.name_fa }}</small>{% endif %}
+            </td>
+            <td><kbd>{{ ch.faction }}</kbd></td>
+            <td>{{ ch.source_tier }}</td>
+            <td>
+                {% if ch.monitoring_priority == 'critical' %}
+                <mark>{{ ch.monitoring_priority }}</mark>
+                {% elif ch.monitoring_priority == 'high' %}
+                <strong>{{ ch.monitoring_priority }}</strong>
+                {% else %}
+                {{ ch.monitoring_priority }}
+                {% endif %}
+            </td>
+            <td>
+                {% if ch.status == 'verified' %}
+                <ins>verified</ins>
+                {% else %}
+                <del>{{ ch.status }}</del>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No channels registered. Configure a channel registry path.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<p><a href="/rag">&larr; Back to RAG Dashboard</a></p>
+
+<script>
+function filterChannels(query) {
+    var q = query.toLowerCase().trim();
+    var rows = document.querySelectorAll('#channel-table-body tr[data-search]');
+    for (var i = 0; i < rows.length; i++) {
+        var text = rows[i].getAttribute('data-search');
+        rows[i].style.display = (!q || text.indexOf(q) !== -1) ? '' : 'none';
+    }
+}
+</script>
+{% endblock %}

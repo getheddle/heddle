@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 from ..schemas.post import ChannelBias, ChannelEditorProfile, Language, NormalizedPost
 from ..schemas.telegram import RawTelegramMessage, TelegramChannel
 from ..tools.rtl_normalizer import extract_links_from_entities, normalize
+from .base import Ingestor
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -73,7 +74,7 @@ DEFAULT_PROFILES: dict[int, ChannelEditorProfile] = {
 }
 
 
-class TelegramIngestor:
+class TelegramIngestor(Ingestor):
     """
     Reads a Telegram JSON export and yields NormalizedPost objects.
 

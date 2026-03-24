@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% set active_nav = "rag" %}
+{% block title %}RAG Dashboard — Loom Workshop{% endblock %}
+{% block content %}
+<hgroup>
+    <h1>RAG Pipeline</h1>
+    <p>Vector store status, channel monitoring, and semantic search.</p>
+</hgroup>
+
+<div class="grid">
+    <article>
+        <header>Vector Store</header>
+        <div id="store-stats"
+             hx-get="/rag/store/stats"
+             hx-trigger="load"
+             hx-swap="innerHTML">
+            <small aria-busy="true">Loading stats...</small>
+        </div>
+    </article>
+
+    <article>
+        <header>Channels</header>
+        <p><strong>{{ channel_count }}</strong> registered
+        ({{ verified_count }} verified)</p>
+        {% if faction_groups %}
+        <ul>
+            {% for faction, channels in faction_groups.items() %}
+            <li><kbd>{{ faction }}</kbd> — {{ channels | length }} channel{{ 's' if channels | length != 1 else '' }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        <footer>
+            <a href="/rag/channels" role="button" class="outline small">View All Channels</a>
+        </footer>
+    </article>
+</div>
+
+<article>
+    <header>Quick Search</header>
+    <form hx-post="/rag/search/run"
+          hx-target="#search-results"
+          hx-swap="innerHTML"
+          hx-indicator="#search-spinner">
+        <div class="grid">
+            <input type="text" name="query" placeholder="Enter a search query..."
+                   aria-label="Search query" required>
+            <input type="number" name="limit" value="5" min="1" max="50"
+                   aria-label="Max results" style="max-width: 80px;">
+            <button type="submit">Search</button>
+        </div>
+    </form>
+    <small id="search-spinner" class="htmx-indicator" aria-busy="true">Searching...</small>
+    <div id="search-results"></div>
+</article>
+{% endblock %}

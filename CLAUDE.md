@@ -110,8 +110,9 @@ src/loom/
 
   workshop/               # LLM Worker Workshop — web-based worker builder, test bench, eval tool
     config_impact.py      # Config impact analysis — reverse-map worker→pipelines, downstream stages, risk
-    app.py                # FastAPI + HTMX + Jinja2 web application (27 routes, mDNS lifespan)
+    app.py                # FastAPI + HTMX + Jinja2 web application (34 routes, mDNS lifespan)
                           #   Dead-letter inspection UI, backend detection, worker validation endpoint
+                          #   RAG dashboard (vector store stats, channel registry, semantic search)
     app_manager.py        # AppManager — deploy/list/remove app bundles (ZIP upload, reload notify)
                           #   Atomic deployment (temp dir + rename), symlink rejection, path traversal validation
     test_runner.py        # WorkerTestRunner — execute worker configs directly against LLM backends
@@ -120,7 +121,8 @@ src/loom/
     eval_runner.py        # EvalRunner — systematic test suite execution with field_match/exact_match/llm_judge scoring
     config_manager.py     # ConfigManager — CRUD for worker/pipeline YAML configs with versioning + multi-dir
     pipeline_editor.py    # PipelineEditor — insert/swap/branch/remove pipeline stages with dep validation
-    templates/            # Jinja2 templates: workers, pipelines, apps, dead_letters (list, detail, deploy)
+    rag_manager.py        # RAGManager — vector store + channel registry for RAG dashboard
+    templates/            # Jinja2 templates: workers, pipelines, apps, dead_letters, rag (list, detail, deploy)
     static/               # CSS (Pico CSS + custom styles)
 
   contrib/                # Optional integrations (Django-style contrib namespace)
@@ -128,19 +130,26 @@ src/loom/
       query_backend.py    # DuckDBQueryBackend — action-dispatch query (FTS, filter, stats, get, vector)
       view_tool.py        # DuckDBViewTool — read-only view as LLM-callable tool
       vector_tool.py      # DuckDBVectorTool — semantic similarity search via embeddings
+    lancedb/
+      store.py            # LanceDBVectorStore — ANN vector storage via LanceDB
+      tool.py             # LanceDBVectorTool — semantic similarity search via LanceDB
     redis/
       store.py            # RedisCheckpointStore — production checkpoint persistence
     rag/
       backends.py         # Processor backends: IngestorBackend, MuxBackend, ChunkerBackend,
-                          #   VectorStoreBackend
+                          #   VectorStoreBackend (configurable store_class / ingestor_class)
       ingestion/
-        telegram_ingestor.py  # TelegramIngestor — parse Telegram JSON exports
+        base.py           # Ingestor ABC — platform-agnostic ingestion interface
+        telegram_ingestor.py  # TelegramIngestor(Ingestor) — parse Telegram JSON exports
+        telegram_live.py  # TelegramLiveIngestor(Ingestor) — live Telegram monitoring via Telethon
+        normalize.py      # Shared normalization utilities (extracted from TelegramIngestor)
       mux/
         stream_mux.py     # StreamMux — merge multi-channel posts with time windows
       chunker/
         sentence_chunker.py   # ChunkConfig, sentence-level text chunking
       vectorstore/
-        duckdb_store.py   # DuckDBVectorStore — vector storage and cosine similarity search
+        base.py           # VectorStore ABC — common vector store interface
+        duckdb_store.py   # DuckDBVectorStore(VectorStore) — exact cosine similarity search
       analysis/
         llm_analyzers.py  # TrendAnalyzer, CorroborationFinder, AnomalyDetector, DataExtractor
       schemas/            # Pydantic schemas: post, telegram, mux, chunk, embedding, analysis
@@ -156,7 +165,8 @@ configs/
     rag_ingestor.yaml     #   source_path → posts (processor, local)
     rag_mux.yaml          #   posts_by_channel → muxed windows (processor, local)
     rag_chunker.yaml      #   posts → chunks (processor, local)
-    rag_vectorstore.yaml  #   action + chunks/query → store/search results (processor, local)
+    rag_vectorstore.yaml  #   action + chunks/query → store/search results (processor, local, DuckDB)
+    rag_vectorstore_lance.yaml  # action + chunks/query → store/search results (processor, local, LanceDB)
     rag_trend_analyzer.yaml   # posts + window_id → trend analysis (LLM, standard)
     _template.yaml        #   template for new workers
   orchestrators/
@@ -226,7 +236,8 @@ tests/                    # 69 test files, 1491 unit tests + 1 integration test 
   test_integration.py                             # @pytest.mark.integration (needs NATS)
   test_deepeval_worker.py                         # @pytest.mark.deepeval (DeepEval + Ollama judge)
   conftest.py                                     # Shared fixtures: skip_no_deepeval, helpers
-  contrib/rag/            # 6 RAG test files (backends, chunker, ingestion, mux, schemas, tools)
+  contrib/rag/            # 8 RAG test files (abstractions, backends, chunker, ingestion, mux, schemas, telegram_live, tools)
+  contrib/lancedb/        # LanceDB store tests
 ```
 
 ## Key design rules
@@ -322,6 +333,8 @@ uv sync --extra local         # Ollama client for local models
 uv sync --extra docproc       # Docling for document extraction (PDF, DOCX)
 uv sync --extra duckdb        # DuckDB embedded analytics
 uv sync --extra rag           # RAG pipeline (DuckDB + requests for Ollama)
+uv sync --extra lancedb       # LanceDB embedded vector database (ANN search)
+uv sync --extra telegram      # Telegram live capture via Telethon (MTProto client)
 uv sync --extra scheduler     # Cron expression parsing (croniter)
 uv sync --extra mcp           # MCP gateway (FastMCP 3.x — high-level MCP framework)
 uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)

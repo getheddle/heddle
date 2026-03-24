@@ -81,6 +81,7 @@ app.py
  ├── AppManager(apps_dir)                  # ZIP deploy, list, remove
  ├── ConfigManager(configs_dir, db, extra) # filesystem + version tracking + app dirs
  ├── PipelineEditor                        # stateless, no constructor
+ ├── RAGManager(store, registry)           # vector store + channel registry for RAG dashboard
  └── LoomServiceAdvertiser                 # optional mDNS (if zeroconf installed)
 ```
 
@@ -96,12 +97,13 @@ A FastAPI lifespan context manager starts/stops mDNS advertisement when the
 ```text
 src/loom/workshop/
 ├── __init__.py           # Package docstring only
-├── app.py                # FastAPI app factory (create_app), 22+ route handlers, mDNS lifespan
+├── app.py                # FastAPI app factory (create_app), 34 route handlers, mDNS lifespan
 ├── app_manager.py        # AppManager — ZIP deploy, list, remove app bundles
 ├── test_runner.py        # WorkerTestRunner — single-payload LLM execution
 ├── eval_runner.py        # EvalRunner — batch test suite with scoring
 ├── config_manager.py     # ConfigManager — CRUD for YAML configs + multi-dir scanning
 ├── pipeline_editor.py    # PipelineEditor — stateless pipeline manipulation
+├── rag_manager.py        # RAGManager — vector store + channel registry for RAG dashboard
 ├── db.py                 # WorkshopDB — DuckDB storage
 ├── templates/
 │   ├── base.html         # Layout: sticky nav, theme toggle, skip link, Pico CSS, HTMX
@@ -114,11 +116,17 @@ src/loom/workshop/
 │   ├── pipelines/
 │   │   ├── list.html     # Pipeline table with app source labels
 │   │   └── editor.html   # Dependency graph + stage operation forms
+│   ├── rag/
+│   │   ├── dashboard.html    # RAG overview: store stats, channel summary, quick search
+│   │   ├── channels.html     # Channel grid with trust/bias badges, filterable
+│   │   └── search.html       # Full semantic search interface
 │   ├── apps/
 │   │   ├── list.html     # Deployed apps table + ZIP upload form
 │   │   └── detail.html   # App manifest viewer + entry configs + remove
 │   └── partials/
-│       └── test_result.html  # HTMX fragment: test bench result card
+│       ├── test_result.html       # HTMX fragment: test bench result card
+│       ├── rag_stats.html         # HTMX fragment: vector store statistics
+│       └── rag_search_result.html # HTMX fragment: search results list
 └── static/
     └── workshop.css      # Pico CSS v2 overrides: dark mode, responsive,
                           #   accessibility (skip link, focus-visible, reduced motion,
@@ -343,6 +351,11 @@ when a baseline exists. `remove_baseline(worker_name)` clears the baseline.
 | GET | `/apps/{name}` | `app_detail` | `apps/detail.html` | App manifest viewer |
 | POST | `/apps/deploy` | `app_deploy` | — | Upload ZIP bundle (redirect 303) |
 | POST | `/apps/{name}/remove` | `app_remove` | — | Remove deployed app (redirect 303) |
+| GET | `/rag` | `rag_dashboard` | `rag/dashboard.html` | RAG overview: store stats, channels, quick search |
+| GET | `/rag/channels` | `rag_channels` | `rag/channels.html` | Channel grid with metadata + filtering |
+| GET | `/rag/search` | `rag_search` | `rag/search.html` | Full semantic search interface |
+| POST | `/rag/search/run` | `rag_search_run` | `partials/rag_search_result.html` | HTMX: execute vector search |
+| GET | `/rag/store/stats` | `rag_store_stats` | `partials/rag_stats.html` | HTMX: vector store statistics |
 | GET | `/dead-letters` | `dead_letters_list` | `dead_letters.html` | Dead-letter entries + replay audit log |
 | POST | `/dead-letters/{index}/replay` | `dead_letter_replay` | — | Replay entry to incoming (redirect 303) |
 | POST | `/dead-letters/clear` | `dead_letters_clear` | — | Clear all entries (redirect 303) |
@@ -372,12 +385,17 @@ base.html                       # <html>, sticky nav, theme toggle, skip link, <
 ├── workers/eval_detail.html    # Per-case results + expandable details
 ├── pipelines/list.html         # Table of pipelines (with app source labels)
 ├── pipelines/editor.html       # Dep graph + 4 stage operation forms
+├── rag/dashboard.html          # RAG overview: store stats, channels, quick search
+├── rag/channels.html           # Channel grid with trust/bias badges
+├── rag/search.html             # Full semantic search interface
 ├── apps/list.html              # Deployed apps table + ZIP upload form
 ├── apps/detail.html            # App manifest viewer + entry configs + remove
 └── dead_letters.html           # Dead-letter entries + replay audit log
 
 partials/
-└── test_result.html            # HTMX fragment (no base.html extends)
+├── test_result.html            # HTMX fragment (no base.html extends)
+├── rag_stats.html              # HTMX fragment: vector store statistics
+└── rag_search_result.html      # HTMX fragment: search results list
 ```
 
 All full-page templates extend `base.html` and set `active_nav` for nav
@@ -399,6 +417,9 @@ uv run loom workshop [OPTIONS]
 | `--db-path` | `~/.loom/workshop.duckdb` | DuckDB database path |
 | `--nats-url` | None | NATS URL for live metrics (optional) |
 | `--apps-dir` | `~/.loom/apps` | Root directory for deployed app bundles |
+| `--rag-db-path` | None | Vector store path for RAG dashboard (e.g. `/tmp/rag.duckdb`) |
+| `--rag-store-class` | None | Vector store class (e.g. `loom.contrib.lancedb.store.LanceDBVectorStore`) |
+| `--rag-channel-registry` | None | Path to channel registry YAML (e.g. `itp_telegram_channels.yaml`) |
 
 The CLI command creates the app via `create_app()` and runs it under Uvicorn.
 
@@ -641,6 +662,7 @@ Workshop tests are in `tests/`:
 | `test_app_manifest.py` | `AppManifest` validation, loading, error cases |
 | `test_app_manager.py` | `AppManager` ZIP deploy, list, remove, reload notification |
 | `test_workshop_app.py` | Workshop HTTP routes (baselines, dead-letter replay, basic routes) |
+| `test_workshop_rag.py` | RAGManager (channels, search, registry loading) + RAG HTTP routes |
 | `test_config_impact.py` | Config impact analysis (worker→pipeline reverse mapping) |
 
 All tests use in-memory DuckDB (`:memory:`) and mock LLM backends. No

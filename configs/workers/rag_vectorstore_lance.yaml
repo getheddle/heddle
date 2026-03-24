@@ -1,0 +1,80 @@
+# =============================================================================
+# RAG Vector Store Worker Configuration — LanceDB Backend (Processor)
+# =============================================================================
+#
+# LanceDB-backed embedding storage and similarity search. Supports the same
+# three actions as the DuckDB variant: store, search, stats.
+#
+# LanceDB provides Approximate Nearest Neighbor (ANN) indexing for faster
+# search over large vector collections compared to DuckDB's exact search.
+#
+# Component:  Processor worker (worker_kind: "processor")
+# Backend:    src/loom/contrib/rag/backends.py (VectorStoreBackend)
+# Engine:     src/loom/contrib/lancedb/store.py (LanceDBVectorStore)
+# Embeddings: src/loom/worker/embeddings.py (OllamaEmbeddingProvider)
+#
+# Prerequisites:
+#   - pip install loom[lancedb]
+#   - Ollama running with the embedding model pulled:
+#     ollama pull nomic-embed-text
+#
+# Run with:
+#   loom processor --config configs/workers/rag_vectorstore_lance.yaml
+#
+# NATS subject:  loom.tasks.rag_vectorstore_lance.local
+# =============================================================================
+
+name: "rag_vectorstore_lance"
+
+description: "LanceDB vector store for embedding storage and ANN semantic search."
+
+worker_kind: "processor"
+
+processing_backend: "loom.contrib.rag.backends.VectorStoreBackend"
+
+backend_config:
+  db_path: "/tmp/rag-vectors.lance"
+  embedding_model: "nomic-embed-text"
+  ollama_url: "http://localhost:11434"
+  store_class: "loom.contrib.lancedb.store.LanceDBVectorStore"
+
+input_schema:
+  type: object
+  required: [action]
+  properties:
+    action:
+      type: string
+      enum: [store, search, stats]
+    chunks:
+      type: array
+      items:
+        type: object
+      description: "TextChunk dicts (for 'store' action)."
+    query:
+      type: string
+      description: "Search query (for 'search' action)."
+    limit:
+      type: integer
+      default: 10
+    channel_ids:
+      type: array
+      items:
+        type: integer
+
+output_schema:
+  type: object
+  properties:
+    stored_count:
+      type: integer
+    total:
+      type: integer
+    results:
+      type: array
+      items:
+        type: object
+    count:
+      type: integer
+
+default_model_tier: "local"
+reset_after_task: true
+timeout_seconds: 300

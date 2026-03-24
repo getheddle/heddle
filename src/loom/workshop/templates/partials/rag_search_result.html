@@ -1,0 +1,30 @@
+{% if error %}
+<article aria-label="Error">
+    <p><strong>Error:</strong> {{ error }}</p>
+</article>
+{% elif results %}
+<p><small>{{ results | length }} result{{ 's' if results | length != 1 else '' }} found.</small></p>
+{% for r in results %}
+<article>
+    <header>
+        <span class="score-badge" title="Similarity score">{{ "%.3f" | format(r.score) }}</span>
+        <code>{{ r.chunk_id }}</code>
+        {% if r.metadata and r.metadata.source_channel_name %}
+        — <small>{{ r.metadata.source_channel_name }}</small>
+        {% endif %}
+    </header>
+    <p dir="auto">{{ r.text }}</p>
+    <footer>
+        <small>
+            Source: <code>{{ r.source_global_id }}</code>
+            | Channel ID: {{ r.source_channel_id }}
+            {% if r.metadata and r.metadata.timestamp_unix %}
+            | Timestamp: {{ r.metadata.timestamp_unix }}
+            {% endif %}
+        </small>
+    </footer>
+</article>
+{% endfor %}
+{% else %}
+<p><small>No results found. Try a different query or lower the minimum score.</small></p>
+{% endif %}

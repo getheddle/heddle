@@ -27,10 +27,14 @@ from loom.worker.processor import SyncProcessingBackend
 
 
 class IngestorBackend(SyncProcessingBackend):
-    """Loom backend for Telegram JSON ingestion.
+    """Loom backend for ingestion (Telegram JSON by default, configurable).
 
     Payload keys:
-        source_path (str): Path to the Telegram JSON export file.
+        source_path (str): Path to the source file.
+
+    Config keys:
+        ingestor_class (str): Dotted path to an Ingestor subclass.
+            Default: ``loom.contrib.rag.ingestion.telegram_ingestor.TelegramIngestor``
 
     Output:
         posts (list[dict]): List of NormalizedPost dicts.
@@ -39,26 +43,39 @@ class IngestorBackend(SyncProcessingBackend):
         post_count (int): Number of posts produced.
     """
 
-    def __init__(self, source_path: str | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self, source_path: str | None = None, ingestor_class: str | None = None, **kwargs: Any,
+    ) -> None:
         self._default_source = source_path
+        self._ingestor_class_path = ingestor_class
+
+    def _resolve_ingestor_class(self) -> type:
+        """Resolve ingestor class from dotted path or return default."""
+        if not self._ingestor_class_path:
+            return TelegramIngestor
+        import importlib
+        module_path, class_name = self._ingestor_class_path.rsplit(".", 1)
+        mod = importlib.import_module(module_path)
+        return getattr(mod, class_name)
 
     def process_sync(self, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-        """Ingest a Telegram JSON export and return normalized posts."""
+        """Ingest a source file and return normalized posts."""
         source = payload.get("source_path") or self._default_source
         if not source:
             raise ValueError("source_path is required")
 
-        ingestor = TelegramIngestor(source).load()
+        ingestor_cls = self._resolve_ingestor_class()
+        ingestor = ingestor_cls(source).load()
         posts = ingestor.ingest_all()
 
         return {
             "output": {
                 "posts": [p.model_dump(mode="json") for p in posts],
-                "channel_id": ingestor.channel_id,
-                "channel_name": ingestor.channel_name,
+                "channel_id": getattr(ingestor, "channel_id", None),
+                "channel_name": getattr(ingestor, "channel_name", None),
                 "post_count": len(posts),
             },
-            "model_used": "telegram-ingestor",
+            "model_used": getattr(ingestor, "__class__", type(ingestor)).__name__,
         }
 
 
@@ -168,6 +185,10 @@ class VectorStoreBackend(SyncProcessingBackend):
         For "stats":
             (no additional keys)
 
+    Config keys:
+        store_class (str): Dotted path to a VectorStore subclass.
+            Default: ``loom.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore``
+
     Output varies by action.
     """
 
@@ -176,25 +197,39 @@ class VectorStoreBackend(SyncProcessingBackend):
         db_path: str = "/tmp/rag-vectors.duckdb",
         embedding_model: str = "nomic-embed-text",
         ollama_url: str = "http://localhost:11434",
+        store_class: str | None = None,
         **kwargs: Any,
     ) -> None:
         self._db_path = db_path
         self._embedding_model = embedding_model
         self._ollama_url = ollama_url
+        self._store_class_path = store_class
+
+    def _resolve_store_class(self) -> type:
+        """Resolve store class from dotted path or return default."""
+        if not self._store_class_path:
+            from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+            return DuckDBVectorStore
+        import importlib
+        module_path, class_name = self._store_class_path.rsplit(".", 1)
+        mod = importlib.import_module(module_path)
+        return getattr(mod, class_name)
 
     def process_sync(self, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
         """Execute a vector store operation (store, search, or stats)."""
         from loom.contrib.rag.schemas.chunk import TextChunk
-        from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
 
         action = payload.get("action", "")
         db_path = config.get("db_path", self._db_path)
 
-        store = DuckDBVectorStore(
+        store_cls = self._resolve_store_class()
+        store = store_cls(
             db_path=db_path,
             embedding_model=self._embedding_model,
             ollama_url=self._ollama_url,
         ).initialize()
+
+        store_name = store_cls.__name__.replace("VectorStore", "").lower() or "vector"
 
         try:
             if action == "store":
@@ -202,7 +237,7 @@ class VectorStoreBackend(SyncProcessingBackend):
                 count = store.add_chunks(chunks)
                 return {
                     "output": {"stored_count": count, "total": store.count()},
-                    "model_used": f"duckdb+{self._embedding_model}",
+                    "model_used": f"{store_name}+{self._embedding_model}",
                 }
 
             if action == "search":
@@ -215,13 +250,13 @@ class VectorStoreBackend(SyncProcessingBackend):
                         "results": [r.model_dump(mode="json") for r in results],
                         "count": len(results),
                     },
-                    "model_used": f"duckdb+{self._embedding_model}",
+                    "model_used": f"{store_name}+{self._embedding_model}",
                 }
 
             if action == "stats":
                 return {
                     "output": store.stats(),
-                    "model_used": "duckdb",
+                    "model_used": store_name,
                 }
 
             raise ValueError(f"Unknown action '{action}'. Supported: store, search, stats")

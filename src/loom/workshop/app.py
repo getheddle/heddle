@@ -28,6 +28,7 @@ from loom.workshop.config_manager import ConfigManager
 from loom.workshop.db import WorkshopDB
 from loom.workshop.eval_runner import EvalRunner
 from loom.workshop.pipeline_editor import PipelineEditor
+from loom.workshop.rag_manager import RAGManager
 from loom.workshop.test_runner import WorkerTestRunner
 
 logger = structlog.get_logger()
@@ -69,6 +70,9 @@ def create_app(  # noqa: PLR0915
     db_path: str = "~/.loom/workshop.duckdb",
     nats_url: str | None = None,  # noqa: ARG001
     apps_dir: str = "~/.loom/apps",
+    rag_db_path: str | None = None,
+    rag_store_class: str | None = None,
+    rag_channel_registry: str | None = None,
 ) -> FastAPI:
     """Create the Workshop FastAPI application.
 
@@ -77,6 +81,9 @@ def create_app(  # noqa: PLR0915
         db_path: DuckDB database path (``~`` is expanded).
         nats_url: Optional NATS URL for live metrics (reserved for future use).
         apps_dir: Root directory for deployed app bundles.
+        rag_db_path: Optional vector store path for the RAG dashboard.
+        rag_store_class: Optional dotted path to a VectorStore subclass.
+        rag_channel_registry: Optional path to a channel registry YAML file.
     """
     # mDNS service discovery (optional — only if zeroconf is installed)
     _mdns_advertiser = None
@@ -119,6 +126,26 @@ def create_app(  # noqa: PLR0915
     app.state.dead_letter_consumer = dead_letter_consumer  # type: ignore[attr-defined]
     app.state.db = db  # type: ignore[attr-defined]
 
+    # RAG manager — optional vector store + channel registry for RAG dashboard
+    rag_store = None
+    if rag_db_path:
+        try:
+            if rag_store_class:
+                import importlib
+                mod_path, cls_name = rag_store_class.rsplit(".", 1)
+                store_cls = getattr(importlib.import_module(mod_path), cls_name)
+            else:
+                from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+                store_cls = DuckDBVectorStore
+            rag_store = store_cls(db_path=rag_db_path).initialize()
+        except Exception as exc:
+            logger.warning("workshop.rag_store_init_failed", error=str(exc))
+
+    rag_mgr = RAGManager(
+        store=rag_store,
+        channel_registry_path=rag_channel_registry,
+    )
+
     logger.info(
         "workshop.initialized",
         configs_dir=configs_dir,
@@ -126,6 +153,8 @@ def create_app(  # noqa: PLR0915
         apps_dir=apps_dir,
         backends=list(backends.keys()),
         deployed_apps=len(app_mgr.list_apps()),
+        rag_store=rag_db_path or "none",
+        rag_channels=rag_mgr.channel_count(),
     )
 
     # ------------------------------------------------------------------
@@ -504,6 +533,81 @@ def create_app(  # noqa: PLR0915
         except FileNotFoundError:
             pass
         return RedirectResponse(url="/apps", status_code=303)
+
+    # --- RAG ---
+
+    @app.get("/rag", response_class=HTMLResponse)
+    async def rag_dashboard(request: Request):
+        stats = rag_mgr.get_store_stats()
+        faction_groups = rag_mgr.get_channels_by_faction()
+        return templates.TemplateResponse(
+            request,
+            "rag/dashboard.html",
+            {
+                "stats": stats,
+                "channel_count": rag_mgr.channel_count(),
+                "verified_count": rag_mgr.verified_channel_count(),
+                "faction_groups": faction_groups,
+            },
+        )
+
+    @app.get("/rag/channels", response_class=HTMLResponse)
+    async def rag_channels(request: Request):
+        return templates.TemplateResponse(
+            request,
+            "rag/channels.html",
+            {"channels": rag_mgr.channels},
+        )
+
+    @app.get("/rag/search", response_class=HTMLResponse)
+    async def rag_search(request: Request):
+        return templates.TemplateResponse(
+            request,
+            "rag/search.html",
+            {},
+        )
+
+    @app.post("/rag/search/run", response_class=HTMLResponse)
+    async def rag_search_run(request: Request):
+        form = await request.form()
+        query = form.get("query", "").strip()
+        if not query:
+            return templates.TemplateResponse(
+                request,
+                "partials/rag_search_result.html",
+                {"results": [], "error": "Query is required."},
+            )
+
+        limit = int(form.get("limit", 10))
+        min_score = float(form.get("min_score", 0.0))
+
+        channel_ids_raw = form.get("channel_ids", "").strip()
+        channel_ids = None
+        if channel_ids_raw:
+            try:
+                channel_ids = [int(x.strip()) for x in channel_ids_raw.split(",") if x.strip()]
+            except ValueError:
+                return templates.TemplateResponse(
+                    request,
+                    "partials/rag_search_result.html",
+                    {"results": [], "error": "Invalid channel IDs format."},
+                )
+
+        results = rag_mgr.search(query, limit=limit, min_score=min_score, channel_ids=channel_ids)
+        return templates.TemplateResponse(
+            request,
+            "partials/rag_search_result.html",
+            {"results": results, "error": None},
+        )
+
+    @app.get("/rag/store/stats", response_class=HTMLResponse)
+    async def rag_store_stats(request: Request):
+        stats = rag_mgr.get_store_stats()
+        return templates.TemplateResponse(
+            request,
+            "partials/rag_stats.html",
+            {"stats": stats},
+        )
 
     # --- Dead Letters ---
 

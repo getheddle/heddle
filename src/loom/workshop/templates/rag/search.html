@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% set active_nav = "rag" %}
+{% block title %}RAG Search — Loom Workshop{% endblock %}
+{% block content %}
+<hgroup>
+    <h1>Semantic Search</h1>
+    <p>Search embedded chunks using vector similarity.</p>
+</hgroup>
+
+<article>
+    <form hx-post="/rag/search/run"
+          hx-target="#search-results"
+          hx-swap="innerHTML"
+          hx-indicator="#search-spinner">
+        <label for="query">Query</label>
+        <textarea id="query" name="query" rows="3"
+                  placeholder="Enter a natural language query..."
+                  required></textarea>
+
+        <div class="grid">
+            <label>
+                Max results
+                <input type="number" name="limit" value="10" min="1" max="50">
+            </label>
+            <label>
+                Min score
+                <input type="number" name="min_score" value="0.0" min="0" max="1" step="0.05">
+            </label>
+            <label>
+                Channel IDs (comma-separated, optional)
+                <input type="text" name="channel_ids" placeholder="e.g. 1098179827,1008727276">
+            </label>
+        </div>
+
+        <button type="submit">Search</button>
+    </form>
+    <small id="search-spinner" class="htmx-indicator" aria-busy="true">Searching...</small>
+</article>
+
+<div id="search-results"></div>
+
+<p><a href="/rag">&larr; Back to RAG Dashboard</a></p>
+{% endblock %}

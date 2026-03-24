@@ -1,0 +1,24 @@
+{% if stats.total_chunks > 0 %}
+<dl>
+    <dt>Total chunks</dt>
+    <dd><strong>{{ stats.total_chunks }}</strong></dd>
+    {% if stats.unique_posts is defined %}
+    <dt>Unique posts</dt>
+    <dd>{{ stats.unique_posts }}</dd>
+    {% endif %}
+    {% if stats.unique_channels is defined %}
+    <dt>Channels</dt>
+    <dd>{{ stats.unique_channels }}</dd>
+    {% endif %}
+    {% if stats.db_path is defined %}
+    <dt>Store path</dt>
+    <dd><code>{{ stats.db_path }}</code></dd>
+    {% endif %}
+</dl>
+{% elif stats.status == 'not_configured' %}
+<p><small>No vector store configured. Set <code>rag_db_path</code> when starting the workshop.</small></p>
+{% elif stats.error is defined %}
+<p><small>Error: {{ stats.error }}</small></p>
+{% else %}
+<p><small>Vector store is empty. Ingest some data first.</small></p>
+{% endif %}
