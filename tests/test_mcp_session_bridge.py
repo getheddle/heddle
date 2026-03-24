@@ -9,7 +9,7 @@ import pytest
 from loom.mcp.session_bridge import SessionBridge, SessionBridgeError
 
 
-@pytest.fixture()
+@pytest.fixture
 def bridge(tmp_path):
     """Create a SessionBridge with temp dirs."""
     fw = tmp_path / "framework"
@@ -31,12 +31,12 @@ def bridge(tmp_path):
 class TestDispatch:
     """Test dispatch routing."""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_unknown_action_raises(self, bridge):
         with pytest.raises(SessionBridgeError, match="Unknown session action"):
             await bridge.dispatch("nonexistent", {})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_known_actions_dispatch(self, bridge):
         """All 5 actions are routable."""
         for action in ("start", "end", "status", "sync_check", "sync"):
@@ -46,7 +46,7 @@ class TestDispatch:
 class TestSessionStart:
     """Tests for session.start."""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_start_returns_session_id(self, bridge):
         with patch.object(bridge, "_git") as mock_git, \
              patch.object(bridge, "_check_nats", return_value=(True, "ok")), \
@@ -60,7 +60,7 @@ class TestSessionStart:
         assert "session_id" in result
         assert result["status"] == "active"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_start_with_explicit_id(self, bridge):
         with patch.object(bridge, "_git") as mock_git, \
              patch.object(bridge, "_check_nats", return_value=(True, "ok")), \
@@ -75,7 +75,7 @@ class TestSessionStart:
 
         assert result["session_id"] == "my-sess"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_start_pull_failure_returns_error(self, bridge):
         with patch.object(bridge, "_git") as mock_git:
             mock_git.return_value = MagicMock(
@@ -86,7 +86,7 @@ class TestSessionStart:
         assert "error" in result
         assert "pull failed" in result["error"].lower()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_start_nats_unreachable_returns_error(self, bridge):
         with patch.object(bridge, "_git") as mock_git, \
              patch.object(
@@ -107,7 +107,7 @@ class TestSessionStart:
 class TestSessionEnd:
     """Tests for session.end."""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_end_with_changes(self, bridge):
         def mock_git_fn(args, cwd=None):
             m = MagicMock(returncode=0, stderr="")
@@ -128,7 +128,7 @@ class TestSessionEnd:
         assert result["status"] == "ended"
         assert result["committed"] is True
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_end_no_active_sessions(self, bridge):
         with patch(
             "loom.mcp.session_registry.get_active_sessions",
@@ -142,7 +142,7 @@ class TestSessionEnd:
 class TestSessionStatus:
     """Tests for session.status."""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_status_returns_structure(self, bridge):
         with patch(
             "loom.mcp.session_registry.get_active_sessions",
@@ -171,7 +171,7 @@ class TestSessionStatus:
 class TestSyncCheck:
     """Tests for session.sync_check."""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_sync_check_current(self, bridge):
         def mock_git_fn(args, cwd=None):
             m = MagicMock(returncode=0, stderr="")
@@ -186,7 +186,7 @@ class TestSyncCheck:
 
         assert result["status"] == "current"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_sync_check_behind(self, bridge):
         def mock_git_fn(args, cwd=None):
             m = MagicMock(returncode=0, stderr="")
@@ -208,7 +208,7 @@ class TestSyncCheck:
 class TestSync:
     """Tests for session.sync."""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_sync_pulls_and_reports_commit(self, bridge):
         def mock_git_fn(args, cwd=None):
             m = MagicMock(returncode=0, stderr="")
@@ -224,7 +224,7 @@ class TestSync:
         assert result["status"] == "synced"
         assert result["commit"] == "def5678"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_sync_pull_conflict_returns_error(self, bridge):
         with patch.object(bridge, "_git") as mock_git:
             mock_git.return_value = MagicMock(
