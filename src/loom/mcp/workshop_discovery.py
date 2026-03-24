@@ -342,8 +342,7 @@ def discover_session_tools(
     if "end" in enabled:
         tool = make_tool(
             "session.end",
-            "End an analytical session: commit framework changes, push, "
-            "unregister session.",
+            "End an analytical session: commit framework changes, push, unregister session.",
             {
                 "type": "object",
                 "properties": {
@@ -391,8 +390,7 @@ def discover_session_tools(
     if "sync" in enabled:
         tool = make_tool(
             "session.sync",
-            "Pull framework updates (fast-forward) and run incremental "
-            "DuckDB import.",
+            "Pull framework updates (fast-forward) and run incremental DuckDB import.",
             {"type": "object", "properties": {}},
         )
         tool["_loom"] = {"kind": "session", "action": "sync"}

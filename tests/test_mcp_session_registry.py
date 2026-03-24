@@ -42,9 +42,7 @@ class TestSessionRegistry:
 
     def test_get_active_sessions_returns_fresh(self, tmp_path):
         marker = tmp_path / "s1.json"
-        marker.write_text(
-            json.dumps({"session_id": "s1", "last_active": time.time()})
-        )
+        marker.write_text(json.dumps({"session_id": "s1", "last_active": time.time()}))
 
         with patch("loom.mcp.session_registry._SESSION_DIR", tmp_path):
             active = get_active_sessions()
@@ -54,9 +52,7 @@ class TestSessionRegistry:
 
     def test_get_active_sessions_skips_stale(self, tmp_path):
         marker = tmp_path / "old.json"
-        marker.write_text(
-            json.dumps({"session_id": "old", "last_active": time.time() - 7200})
-        )
+        marker.write_text(json.dumps({"session_id": "old", "last_active": time.time() - 7200}))
 
         with patch("loom.mcp.session_registry._SESSION_DIR", tmp_path):
             active = get_active_sessions()

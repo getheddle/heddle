@@ -91,16 +91,12 @@ def create_server(config_path: str) -> tuple[FastMCPType, MCPGateway]:
     # --- Discover tools ---
     tools_config = config.get("tools", {})
     requires_bus = bool(
-        tools_config.get("workers")
-        or tools_config.get("pipelines")
-        or tools_config.get("queries")
+        tools_config.get("workers") or tools_config.get("pipelines") or tools_config.get("queries")
     )
 
     all_tools: list[dict[str, Any]] = []
     all_tools.extend(discover_worker_tools(tools_config.get("workers", [])))
-    all_tools.extend(
-        discover_pipeline_tools(tools_config.get("pipelines", []))
-    )
+    all_tools.extend(discover_pipeline_tools(tools_config.get("pipelines", [])))
     all_tools.extend(discover_query_tools(tools_config.get("queries", [])))
 
     # Workshop tools (optional — only if tools.workshop is present).
@@ -297,9 +293,7 @@ def _register_health(mcp: FastMCPType, gateway: MCPGateway) -> None:
         async def health(_request: Any) -> Any:
             from starlette.responses import JSONResponse
 
-            return JSONResponse(
-                {"status": "ok", "name": gateway.config["name"]}
-            )
+            return JSONResponse({"status": "ok", "name": gateway.config["name"]})
     except Exception:
         # custom_route may not be available in all transports.
         pass
@@ -329,9 +323,7 @@ async def _safe_dispatch(
     except BridgeError as exc:
         return {"error": str(exc)}
     except Exception as exc:
-        logger.error(
-            "mcp.server.call_error", tool=entry.name, error=str(exc)
-        )
+        logger.error("mcp.server.call_error", tool=entry.name, error=str(exc))
         return {"error": f"Internal error: {exc}"}
 
 
@@ -447,9 +439,7 @@ def _build_workshop_bridge(
         if backends:
             test_runner = WorkerTestRunner(backends)
     except Exception as exc:
-        logger.debug(
-            "workshop_bridge.test_runner_skipped", reason=str(exc)
-        )
+        logger.debug("workshop_bridge.test_runner_skipped", reason=str(exc))
 
     # Set up eval runner if we have both test runner and DB.
     eval_runner = None

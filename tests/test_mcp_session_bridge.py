@@ -48,13 +48,13 @@ class TestSessionStart:
 
     @pytest.mark.asyncio
     async def test_start_returns_session_id(self, bridge):
-        with patch.object(bridge, "_git") as mock_git, \
-             patch.object(bridge, "_check_nats", return_value=(True, "ok")), \
-             patch.object(bridge, "_check_ollama", return_value=(True, "ok")), \
-             patch("loom.mcp.session_registry.register_session"):
-            mock_git.return_value = MagicMock(
-                returncode=0, stdout="abc1234\n", stderr=""
-            )
+        with (
+            patch.object(bridge, "_git") as mock_git,
+            patch.object(bridge, "_check_nats", return_value=(True, "ok")),
+            patch.object(bridge, "_check_ollama", return_value=(True, "ok")),
+            patch("loom.mcp.session_registry.register_session"),
+        ):
+            mock_git.return_value = MagicMock(returncode=0, stdout="abc1234\n", stderr="")
             result = await bridge.dispatch("start", {})
 
         assert "session_id" in result
@@ -62,25 +62,21 @@ class TestSessionStart:
 
     @pytest.mark.asyncio
     async def test_start_with_explicit_id(self, bridge):
-        with patch.object(bridge, "_git") as mock_git, \
-             patch.object(bridge, "_check_nats", return_value=(True, "ok")), \
-             patch.object(bridge, "_check_ollama", return_value=(True, "ok")), \
-             patch("loom.mcp.session_registry.register_session"):
-            mock_git.return_value = MagicMock(
-                returncode=0, stdout="abc1234\n", stderr=""
-            )
-            result = await bridge.dispatch(
-                "start", {"session_id": "my-sess"}
-            )
+        with (
+            patch.object(bridge, "_git") as mock_git,
+            patch.object(bridge, "_check_nats", return_value=(True, "ok")),
+            patch.object(bridge, "_check_ollama", return_value=(True, "ok")),
+            patch("loom.mcp.session_registry.register_session"),
+        ):
+            mock_git.return_value = MagicMock(returncode=0, stdout="abc1234\n", stderr="")
+            result = await bridge.dispatch("start", {"session_id": "my-sess"})
 
         assert result["session_id"] == "my-sess"
 
     @pytest.mark.asyncio
     async def test_start_pull_failure_returns_error(self, bridge):
         with patch.object(bridge, "_git") as mock_git:
-            mock_git.return_value = MagicMock(
-                returncode=1, stdout="", stderr="conflict"
-            )
+            mock_git.return_value = MagicMock(returncode=1, stdout="", stderr="conflict")
             result = await bridge.dispatch("start", {})
 
         assert "error" in result
@@ -88,16 +84,12 @@ class TestSessionStart:
 
     @pytest.mark.asyncio
     async def test_start_nats_unreachable_returns_error(self, bridge):
-        with patch.object(bridge, "_git") as mock_git, \
-             patch.object(
-                 bridge, "_check_nats", return_value=(False, "down")
-             ), \
-             patch.object(
-                 bridge, "_check_ollama", return_value=(True, "ok")
-             ):
-            mock_git.return_value = MagicMock(
-                returncode=0, stdout="abc\n", stderr=""
-            )
+        with (
+            patch.object(bridge, "_git") as mock_git,
+            patch.object(bridge, "_check_nats", return_value=(False, "down")),
+            patch.object(bridge, "_check_ollama", return_value=(True, "ok")),
+        ):
+            mock_git.return_value = MagicMock(returncode=0, stdout="abc\n", stderr="")
             result = await bridge.dispatch("start", {})
 
         assert "error" in result
@@ -117,12 +109,14 @@ class TestSessionEnd:
                 m.stdout = ""
             return m
 
-        with patch.object(bridge, "_git", side_effect=mock_git_fn), \
-             patch("loom.mcp.session_registry.unregister_session"), \
-             patch(
-                 "loom.mcp.session_registry.get_active_sessions",
-                 return_value=[{"session_id": "s1"}],
-             ):
+        with (
+            patch.object(bridge, "_git", side_effect=mock_git_fn),
+            patch("loom.mcp.session_registry.unregister_session"),
+            patch(
+                "loom.mcp.session_registry.get_active_sessions",
+                return_value=[{"session_id": "s1"}],
+            ),
+        ):
             result = await bridge.dispatch("end", {})
 
         assert result["status"] == "ended"
@@ -144,23 +138,17 @@ class TestSessionStatus:
 
     @pytest.mark.asyncio
     async def test_status_returns_structure(self, bridge):
-        with patch(
-            "loom.mcp.session_registry.get_active_sessions",
-            return_value=[{"session_id": "s1"}],
-        ), \
-             patch.object(bridge, "_git") as mock_git, \
-             patch.object(
-                 bridge, "_check_nats", return_value=(True, "ok")
-             ), \
-             patch.object(
-                 bridge, "_check_ollama", return_value=(True, "ok")
-             ), \
-             patch.object(
-                 bridge, "_check_duckdb", return_value=(True, "ok")
-             ):
-            mock_git.return_value = MagicMock(
-                returncode=0, stdout="", stderr=""
-            )
+        with (
+            patch(
+                "loom.mcp.session_registry.get_active_sessions",
+                return_value=[{"session_id": "s1"}],
+            ),
+            patch.object(bridge, "_git") as mock_git,
+            patch.object(bridge, "_check_nats", return_value=(True, "ok")),
+            patch.object(bridge, "_check_ollama", return_value=(True, "ok")),
+            patch.object(bridge, "_check_duckdb", return_value=(True, "ok")),
+        ):
+            mock_git.return_value = MagicMock(returncode=0, stdout="", stderr="")
             result = await bridge.dispatch("status", {})
 
         assert "sessions" in result
@@ -227,9 +215,7 @@ class TestSync:
     @pytest.mark.asyncio
     async def test_sync_pull_conflict_returns_error(self, bridge):
         with patch.object(bridge, "_git") as mock_git:
-            mock_git.return_value = MagicMock(
-                returncode=1, stdout="", stderr="conflict"
-            )
+            mock_git.return_value = MagicMock(returncode=1, stdout="", stderr="conflict")
             result = await bridge.dispatch("sync", {})
 
         assert "error" in result

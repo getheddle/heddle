@@ -62,15 +62,12 @@ class SessionBridge:
         "sync": "_session_sync",
     }
 
-    async def dispatch(
-        self, action: str, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def dispatch(self, action: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Route to the appropriate session handler."""
         handler_name = self._HANDLERS.get(action)
         if handler_name is None:
             raise SessionBridgeError(
-                f"Unknown session action: {action}. "
-                f"Available: {sorted(self._HANDLERS)}"
+                f"Unknown session action: {action}. Available: {sorted(self._HANDLERS)}"
             )
         handler = getattr(self, handler_name)
         return await handler(arguments)
@@ -107,14 +104,9 @@ class SessionBridge:
         try:
             import httpx
 
-            resp = httpx.get(
-                f"{self.ollama_url}/api/tags", timeout=5
-            )
+            resp = httpx.get(f"{self.ollama_url}/api/tags", timeout=5)
             if resp.status_code == 200:
-                models = [
-                    m["name"]
-                    for m in resp.json().get("models", [])
-                ]
+                models = [m["name"] for m in resp.json().get("models", [])]
                 return True, f"Ollama reachable ({', '.join(models[:3])})"
             return True, f"Ollama returned {resp.status_code}"
         except Exception:
@@ -130,17 +122,13 @@ class SessionBridge:
         return True, f"DuckDB exists ({size_mb:.1f} MB, {age_h:.0f}h old)"
 
     def _generate_session_id(self) -> str:
-        return dt.datetime.now(tz=dt.UTC).strftime(
-            "session-%Y%m%d-%H%M%S"
-        )
+        return dt.datetime.now(tz=dt.UTC).strftime("session-%Y%m%d-%H%M%S")
 
     # ------------------------------------------------------------------
     # Handlers
     # ------------------------------------------------------------------
 
-    async def _session_start(
-        self, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _session_start(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Pull framework, import DuckDB, check services, register."""
         from loom.mcp.session_registry import (
             register_session,
@@ -163,18 +151,11 @@ class SessionBridge:
             commit = head.stdout.strip() if head.returncode == 0 else "?"
             steps.append({"step": "pull", "ok": True, "commit": commit})
         else:
-            steps.append(
-                {"step": "pull", "ok": False, "reason": "not a git repo"}
-            )
+            steps.append({"step": "pull", "ok": False, "reason": "not a git repo"})
 
         # 2. Incremental DuckDB import
         if self.baft_dir:
-            script = (
-                self.baft_dir
-                / "pipeline"
-                / "scripts"
-                / "itp_import_to_duckdb.py"
-            )
+            script = self.baft_dir / "pipeline" / "scripts" / "itp_import_to_duckdb.py"
             if script.exists():  # pragma: no cover — subprocess tested via mock
                 result = subprocess.run(
                     ["uv", "run", "python", str(script), "--incremental"],
@@ -184,9 +165,7 @@ class SessionBridge:
                     cwd=str(self.baft_dir),
                     check=False,
                 )
-                steps.append(
-                    {"step": "duckdb_import", "ok": result.returncode == 0}
-                )
+                steps.append({"step": "duckdb_import", "ok": result.returncode == 0})
             else:
                 steps.append(
                     {
@@ -201,9 +180,7 @@ class SessionBridge:
         steps.append({"step": "nats", "ok": nats_ok, "message": nats_msg})
 
         ollama_ok, ollama_msg = self._check_ollama()
-        steps.append(
-            {"step": "ollama", "ok": ollama_ok, "message": ollama_msg}
-        )
+        steps.append({"step": "ollama", "ok": ollama_ok, "message": ollama_msg})
 
         if not nats_ok:
             return {
@@ -218,9 +195,7 @@ class SessionBridge:
 
         return {"session_id": sid, "status": "active", "steps": steps}
 
-    async def _session_end(
-        self, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _session_end(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Unregister session, commit framework, push."""
         from loom.mcp.session_registry import (
             get_active_sessions,
@@ -246,9 +221,7 @@ class SessionBridge:
         if (fw / ".git").is_dir():
             status = self._git(["status", "--porcelain"])
             if status.stdout.strip():
-                date_str = dt.datetime.now(tz=dt.UTC).strftime(
-                    "%Y-%m-%dT%H:%M:%SZ"
-                )
+                date_str = dt.datetime.now(tz=dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
                 commit_msg = f"Session {sid}: {message} — {date_str}"
                 self._git(["add", "-A"])
                 commit = self._git(["commit", "-m", commit_msg])
@@ -264,9 +237,7 @@ class SessionBridge:
             "pushed": push_ok,
         }
 
-    async def _session_status(
-        self, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _session_status(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Show active sessions and system health."""
         from loom.mcp.session_registry import get_active_sessions
 
@@ -277,11 +248,7 @@ class SessionBridge:
         git_clean = None
         if (fw / ".git").is_dir():
             status = self._git(["status", "--porcelain"])
-            dirty_count = (
-                len(status.stdout.strip().split("\n"))
-                if status.stdout.strip()
-                else 0
-            )
+            dirty_count = len(status.stdout.strip().split("\n")) if status.stdout.strip() else 0
             git_clean = dirty_count == 0
 
         # Services
@@ -302,9 +269,7 @@ class SessionBridge:
             },
         }
 
-    async def _session_sync_check(
-        self, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _session_sync_check(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Check if framework remote has new commits."""
         fw = self.framework_dir
         if not (fw / ".git").is_dir():
@@ -314,18 +279,10 @@ class SessionBridge:
         if fetch.returncode != 0:
             return {"error": f"Fetch failed: {fetch.stderr.strip()}"}
 
-        behind = self._git(
-            ["rev-list", "--count", "HEAD..origin/main"]
-        )
-        ahead = self._git(
-            ["rev-list", "--count", "origin/main..HEAD"]
-        )
-        behind_n = (
-            int(behind.stdout.strip()) if behind.returncode == 0 else 0
-        )
-        ahead_n = (
-            int(ahead.stdout.strip()) if ahead.returncode == 0 else 0
-        )
+        behind = self._git(["rev-list", "--count", "HEAD..origin/main"])
+        ahead = self._git(["rev-list", "--count", "origin/main..HEAD"])
+        behind_n = int(behind.stdout.strip()) if behind.returncode == 0 else 0
+        ahead_n = int(ahead.stdout.strip()) if ahead.returncode == 0 else 0
 
         if behind_n > 0 and ahead_n > 0:
             status = "diverged"
@@ -342,9 +299,7 @@ class SessionBridge:
             "ahead": ahead_n,
         }
 
-    async def _session_sync(
-        self, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _session_sync(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Pull framework and run incremental DuckDB import."""
         fw = self.framework_dir
         if not (fw / ".git").is_dir():
@@ -352,21 +307,14 @@ class SessionBridge:
 
         pull = self._git(["pull", "--ff-only"])
         if pull.returncode != 0:
-            return {
-                "error": f"Pull failed: {pull.stderr.strip()}"
-            }
+            return {"error": f"Pull failed: {pull.stderr.strip()}"}
 
         head = self._git(["rev-parse", "--short", "HEAD"])
         commit = head.stdout.strip() if head.returncode == 0 else "?"
 
         import_ok = True
         if self.baft_dir:
-            script = (
-                self.baft_dir
-                / "pipeline"
-                / "scripts"
-                / "itp_import_to_duckdb.py"
-            )
+            script = self.baft_dir / "pipeline" / "scripts" / "itp_import_to_duckdb.py"
             if script.exists():  # pragma: no cover — subprocess tested via mock
                 result = subprocess.run(
                     ["uv", "run", "python", str(script), "--incremental"],
