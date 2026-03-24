@@ -6,6 +6,7 @@ import pytest
 def _can_import_lancedb():
     try:
         import lancedb  # noqa: F401
+
         return True
     except ImportError:
         return False

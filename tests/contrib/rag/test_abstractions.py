@@ -82,6 +82,7 @@ class TestIngestorBackendConfigurable:
         cls = backend._resolve_ingestor_class()
         # Should resolve to the same class
         from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+
         assert cls is TelegramIngestor
 
 
@@ -104,4 +105,5 @@ class TestVectorStoreBackendConfigurable:
         )
         cls = backend._resolve_store_class()
         from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+
         assert cls is DuckDBVectorStore

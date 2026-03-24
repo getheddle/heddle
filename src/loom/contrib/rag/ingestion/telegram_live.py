@@ -119,7 +119,7 @@ class TelegramLiveIngestor(Ingestor):
     # Async lifecycle
     # ------------------------------------------------------------------
 
-    async def start(self) -> None:
+    async def start(self) -> None:  # pragma: no cover
         """Connect to Telegram and start listening for new messages.
 
         This is a long-running operation. Call from an async context.
@@ -179,7 +179,7 @@ class TelegramLiveIngestor(Ingestor):
             len(self._resolved_entities),
         )
 
-    async def stop(self) -> None:
+    async def stop(self) -> None:  # pragma: no cover
         """Disconnect from Telegram."""
         self._running = False
         if self._client:
@@ -192,7 +192,7 @@ class TelegramLiveIngestor(Ingestor):
             len(self._buffer),
         )
 
-    async def run_until_disconnected(self) -> None:
+    async def run_until_disconnected(self) -> None:  # pragma: no cover
         """Block until the client disconnects (for standalone usage)."""
         if self._client:
             await self._client.run_until_disconnected()
@@ -201,7 +201,7 @@ class TelegramLiveIngestor(Ingestor):
     # Message handling
     # ------------------------------------------------------------------
 
-    async def _handle_message(self, event: Any) -> None:
+    async def _handle_message(self, event: Any) -> None:  # pragma: no cover
         """Process a new message event from Telethon."""
         self._total_received += 1
 

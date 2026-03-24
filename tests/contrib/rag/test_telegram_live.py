@@ -22,9 +22,7 @@ class TestTelegramLiveIngestorConfig:
     def test_load_requires_channels(self):
         from loom.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
 
-        ingestor = TelegramLiveIngestor(
-            api_id=12345, api_hash="abc123", channels=[]
-        )
+        ingestor = TelegramLiveIngestor(api_id=12345, api_hash="abc123", channels=[])
         with pytest.raises(ValueError, match="channel"):
             ingestor.load()
 

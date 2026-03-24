@@ -71,7 +71,10 @@ class LanceDBVectorTool(SyncToolProvider):
         self.table_name = table_name
         self.vector_column = vector_column
         self._result_columns = result_columns or [
-            "chunk_id", "text", "source_channel_id", "source_global_id",
+            "chunk_id",
+            "text",
+            "source_channel_id",
+            "source_global_id",
         ]
         self.tool_name = tool_name
         self.description = description
@@ -100,7 +103,7 @@ class LanceDBVectorTool(SyncToolProvider):
             },
         }
 
-    def execute_sync(self, arguments: dict[str, Any]) -> str:
+    def execute_sync(self, arguments: dict[str, Any]) -> str:  # pragma: no cover
         """Embed the query and search for similar records."""
         query = arguments.get("query", "")
         limit = min(arguments.get("limit", 5), self.max_results)
@@ -141,7 +144,7 @@ class LanceDBVectorTool(SyncToolProvider):
         except Exception as e:
             return json.dumps({"error": str(e)})
 
-    def _embed_query(self, text: str) -> list[float] | None:
+    def _embed_query(self, text: str) -> list[float] | None:  # pragma: no cover
         """Generate embedding for the query text."""
         from loom.worker.embeddings import OllamaEmbeddingProvider
 

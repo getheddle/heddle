@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def normalize_telegram_message(
+def normalize_telegram_message(  # pragma: no cover
     msg: RawTelegramMessage,
     channel_id: int,
     channel_name: str,

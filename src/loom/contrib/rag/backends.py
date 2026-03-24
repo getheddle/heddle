@@ -44,7 +44,10 @@ class IngestorBackend(SyncProcessingBackend):
     """
 
     def __init__(
-        self, source_path: str | None = None, ingestor_class: str | None = None, **kwargs: Any,
+        self,
+        source_path: str | None = None,
+        ingestor_class: str | None = None,
+        **kwargs: Any,
     ) -> None:
         self._default_source = source_path
         self._ingestor_class_path = ingestor_class
@@ -54,6 +57,7 @@ class IngestorBackend(SyncProcessingBackend):
         if not self._ingestor_class_path:
             return TelegramIngestor
         import importlib
+
         module_path, class_name = self._ingestor_class_path.rsplit(".", 1)
         mod = importlib.import_module(module_path)
         return getattr(mod, class_name)
@@ -209,8 +213,10 @@ class VectorStoreBackend(SyncProcessingBackend):
         """Resolve store class from dotted path or return default."""
         if not self._store_class_path:
             from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+
             return DuckDBVectorStore
         import importlib
+
         module_path, class_name = self._store_class_path.rsplit(".", 1)
         mod = importlib.import_module(module_path)
         return getattr(mod, class_name)

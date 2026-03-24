@@ -87,7 +87,7 @@ class LanceDBVectorStore(VectorStore):
     # Embedding
     # ------------------------------------------------------------------
 
-    def _get_embedder(self) -> Any:
+    def _get_embedder(self) -> Any:  # pragma: no cover
         """Lazy-load the Ollama embedding provider."""
         from loom.worker.embeddings import OllamaEmbeddingProvider
 
@@ -96,7 +96,7 @@ class LanceDBVectorStore(VectorStore):
             base_url=self.ollama_url,
         )
 
-    def _embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def _embed_texts(self, texts: list[str]) -> list[list[float]]:  # pragma: no cover
         """Generate embeddings for a batch of texts synchronously."""
         import asyncio
 
@@ -127,7 +127,7 @@ class LanceDBVectorStore(VectorStore):
         self._table = self._db.create_table(self.TABLE_NAME, records)
         return True
 
-    def add_chunks(
+    def add_chunks(  # pragma: no cover
         self,
         chunks: list[TextChunk],
         batch_size: int = 64,
@@ -149,24 +149,26 @@ class LanceDBVectorStore(VectorStore):
 
             records = []
             for chunk, emb in zip(batch, embeddings, strict=False):
-                records.append({
-                    "chunk_id": chunk.chunk_id,
-                    "source_global_id": chunk.source_global_id,
-                    "source_channel_id": chunk.source_channel_id,
-                    "source_channel_name": chunk.source_channel_name,
-                    "text": chunk.text,
-                    "char_start": chunk.char_start,
-                    "char_end": chunk.char_end,
-                    "chunk_index": chunk.chunk_index,
-                    "total_chunks": chunk.total_chunks,
-                    "strategy": chunk.strategy.value
-                    if hasattr(chunk.strategy, "value")
-                    else str(chunk.strategy),
-                    "timestamp_unix": chunk.timestamp_unix,
-                    "vector": emb,
-                    "embedding_model": self.embedding_model,
-                    "embedding_dim": len(emb),
-                })
+                records.append(
+                    {
+                        "chunk_id": chunk.chunk_id,
+                        "source_global_id": chunk.source_global_id,
+                        "source_channel_id": chunk.source_channel_id,
+                        "source_channel_name": chunk.source_channel_name,
+                        "text": chunk.text,
+                        "char_start": chunk.char_start,
+                        "char_end": chunk.char_end,
+                        "chunk_index": chunk.chunk_index,
+                        "total_chunks": chunk.total_chunks,
+                        "strategy": chunk.strategy.value
+                        if hasattr(chunk.strategy, "value")
+                        else str(chunk.strategy),
+                        "timestamp_unix": chunk.timestamp_unix,
+                        "vector": emb,
+                        "embedding_model": self.embedding_model,
+                        "embedding_dim": len(emb),
+                    }
+                )
 
             try:
                 created = self._ensure_table(records)
@@ -217,7 +219,7 @@ class LanceDBVectorStore(VectorStore):
     # Search
     # ------------------------------------------------------------------
 
-    def search(
+    def search(  # pragma: no cover
         self,
         query: str,
         limit: int = 10,

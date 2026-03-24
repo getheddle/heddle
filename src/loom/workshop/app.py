@@ -132,10 +132,12 @@ def create_app(  # noqa: PLR0915
         try:
             if rag_store_class:
                 import importlib
+
                 mod_path, cls_name = rag_store_class.rsplit(".", 1)
                 store_cls = getattr(importlib.import_module(mod_path), cls_name)
             else:
                 from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+
                 store_cls = DuckDBVectorStore
             rag_store = store_cls(db_path=rag_db_path).initialize()
         except Exception as exc:
