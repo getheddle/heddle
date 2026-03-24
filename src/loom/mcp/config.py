@@ -99,6 +99,7 @@ def validate_mcp_config(  # noqa: PLR0912
         errors.extend(_validate_pipeline_entries(tools.get("pipelines", [])))
         errors.extend(_validate_query_entries(tools.get("queries", [])))
         errors.extend(_validate_workshop_config(tools.get("workshop")))
+        errors.extend(_validate_session_config(tools.get("session")))
 
     # Resources section.
     resources = config.get("resources")
@@ -188,6 +189,32 @@ def _validate_workshop_config(workshop: Any) -> list[str]:
                 f"(valid: {', '.join(sorted(valid_groups))})"
                 for item in workshop["enable"]
                 if item not in valid_groups
+            )
+    return errors
+
+
+def _validate_session_config(session: Any) -> list[str]:
+    """Validate the tools.session section."""
+    if session is None:
+        return []
+    errors: list[str] = []
+    if not isinstance(session, dict):
+        return ["tools.session must be a dict"]
+    errors.extend(
+        f"tools.session: '{key}' must be a string"
+        for key in ("framework_dir", "workspace_dir", "baft_dir", "nats_url", "ollama_url")
+        if key in session and not isinstance(session[key], str)
+    )
+    if "enable" in session:
+        if not isinstance(session["enable"], list):
+            errors.append("tools.session: 'enable' must be a list")
+        else:
+            valid_actions = {"start", "end", "status", "sync_check", "sync"}
+            errors.extend(
+                f"tools.session: unknown action '{item}' in 'enable' "
+                f"(valid: {', '.join(sorted(valid_actions))})"
+                for item in session["enable"]
+                if item not in valid_actions
             )
     return errors
 

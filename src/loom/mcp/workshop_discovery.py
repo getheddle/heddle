@@ -292,3 +292,110 @@ def _deadletter_tools() -> list[dict[str, Any]]:
     tools.append(tool)
 
     return tools
+
+
+# ---------------------------------------------------------------------------
+# Session management tools
+# ---------------------------------------------------------------------------
+
+
+def discover_session_tools(
+    session_config: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Generate MCP tool definitions for session management operations.
+
+    Args:
+        session_config: The ``tools.session`` dict from the MCP gateway config.
+            Supported keys: ``framework_dir``, ``workspace_dir``, ``baft_dir``,
+            ``nats_url``, ``ollama_url``, ``enable`` (list of actions).
+
+    Returns:
+        List of tool definition dicts with ``_loom`` metadata.
+    """
+    enabled = set(
+        session_config.get(
+            "enable",
+            ["start", "end", "status", "sync_check", "sync"],
+        )
+    )
+
+    tools: list[dict[str, Any]] = []
+
+    if "start" in enabled:
+        tool = make_tool(
+            "session.start",
+            "Start an analytical session: pull framework, import DuckDB, "
+            "check services, register session.",
+            {
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "Session ID (auto-generated if omitted)",
+                    },
+                },
+            },
+        )
+        tool["_loom"] = {"kind": "session", "action": "start"}
+        tools.append(tool)
+
+    if "end" in enabled:
+        tool = make_tool(
+            "session.end",
+            "End an analytical session: commit framework changes, push, "
+            "unregister session.",
+            {
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "Session to end (most recent if omitted)",
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Commit message describing session work",
+                    },
+                },
+            },
+        )
+        tool["_loom"] = {"kind": "session", "action": "end"}
+        tools.append(tool)
+
+    if "status" in enabled:
+        tool = make_tool(
+            "session.status",
+            "Show active sessions, framework git status, and service health.",
+            {"type": "object", "properties": {}},
+        )
+        tool["_loom"] = {
+            "kind": "session",
+            "action": "status",
+            "read_only": True,
+        }
+        tools.append(tool)
+
+    if "sync_check" in enabled:
+        tool = make_tool(
+            "session.sync_check",
+            "Check if the framework remote has new commits. Reports "
+            "ahead/behind/diverged/current status.",
+            {"type": "object", "properties": {}},
+        )
+        tool["_loom"] = {
+            "kind": "session",
+            "action": "sync_check",
+            "read_only": True,
+        }
+        tools.append(tool)
+
+    if "sync" in enabled:
+        tool = make_tool(
+            "session.sync",
+            "Pull framework updates (fast-forward) and run incremental "
+            "DuckDB import.",
+            {"type": "object", "properties": {}},
+        )
+        tool["_loom"] = {"kind": "session", "action": "sync"}
+        tools.append(tool)
+
+    return tools

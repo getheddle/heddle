@@ -23,6 +23,7 @@ See Also:
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -42,8 +43,9 @@ from loom.mcp.discovery import (
     discover_worker_tools,
 )
 from loom.mcp.resources import WorkspaceResources
+from loom.mcp.session_bridge import SessionBridge
 from loom.mcp.workshop_bridge import WorkshopBridge
-from loom.mcp.workshop_discovery import discover_workshop_tools
+from loom.mcp.workshop_discovery import discover_session_tools, discover_workshop_tools
 
 logger = structlog.get_logger()
 
@@ -68,6 +70,7 @@ class MCPGateway:
     tool_defs: list[dict[str, Any]] = field(default_factory=list)
     resources: WorkspaceResources | None = None
     workshop_bridge: WorkshopBridge | None = None
+    session_bridge: SessionBridge | None = None
     requires_bus: bool = True
 
 
@@ -110,6 +113,28 @@ def create_server(config_path: str) -> tuple[FastMCPType, MCPGateway]:
             replay_bus=bridge.bus if requires_bus else None,
         )
 
+    # Session tools (optional — only if tools.session is present).
+    session_config = tools_config.get("session")
+    session_bridge: SessionBridge | None = None
+    if session_config is not None:
+        all_tools.extend(discover_session_tools(session_config))
+        session_bridge = SessionBridge(
+            framework_dir=session_config.get(
+                "framework_dir",
+                os.environ.get("ITP_ROOT", ".") + "/framework",
+            ),
+            workspace_dir=session_config.get(
+                "workspace_dir",
+                os.environ.get("BAFT_WORKSPACE", "./itp-workspace"),
+            ),
+            baft_dir=session_config.get("baft_dir"),
+            nats_url=session_config.get("nats_url", nats_url),
+            ollama_url=session_config.get(
+                "ollama_url",
+                os.environ.get("OLLAMA_URL", "http://localhost:11434"),
+            ),
+        )
+
     # Build registry.
     registry: dict[str, ToolEntry] = {}
     mcp_tool_defs: list[dict[str, Any]] = []
@@ -147,6 +172,7 @@ def create_server(config_path: str) -> tuple[FastMCPType, MCPGateway]:
         tool_defs=mcp_tool_defs,
         resources=workspace_resources,
         workshop_bridge=workshop_bridge,
+        session_bridge=session_bridge,
         requires_bus=requires_bus,
     )
 
@@ -291,11 +317,12 @@ async def _safe_dispatch(
 ) -> dict[str, Any]:
     """Dispatch with error handling — returns error dicts instead of raising."""
     from loom.mcp.bridge import BridgeTimeoutError
+    from loom.mcp.session_bridge import SessionBridgeError
     from loom.mcp.workshop_bridge import WorkshopBridgeError
 
     try:
         return await _dispatch_tool(gateway, entry, arguments)
-    except WorkshopBridgeError as exc:
+    except (WorkshopBridgeError, SessionBridgeError) as exc:
         return {"error": str(exc)}
     except BridgeTimeoutError as exc:
         return {"error": f"Timeout: {exc}"}
@@ -344,6 +371,14 @@ async def _dispatch_tool(
         if gateway.workshop_bridge is None:
             raise BridgeError("Workshop tools are not configured")
         return await gateway.workshop_bridge.dispatch(
+            action=meta["action"],
+            arguments=arguments,
+        )
+
+    if entry.kind == "session":
+        if gateway.session_bridge is None:
+            raise BridgeError("Session tools are not configured")
+        return await gateway.session_bridge.dispatch(
             action=meta["action"],
             arguments=arguments,
         )
