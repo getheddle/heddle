@@ -4,12 +4,39 @@
 
 ---
 
+## Quick Start (RAG Pipeline — No NATS Needed)
+
+The fastest way to use Loom — analyze Telegram channels without infrastructure:
+
+```bash
+# 1. Install
+uv sync --extra rag
+
+# 2. Configure (interactive wizard)
+uv run loom setup
+
+# 3. Ingest Telegram exports
+uv run loom rag ingest /path/to/telegram/exports/*.json
+
+# 4. Search
+uv run loom rag search "earthquake damage reports"
+
+# 5. Open the dashboard
+uv run loom rag serve
+```
+
+The `loom setup` wizard detects Ollama, prompts for API keys, and writes
+`~/.loom/config.yaml`. All settings can be overridden via environment
+variables or CLI flags.
+
+---
+
 ## Prerequisites
 
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) package manager
 - At least one LLM backend (Ollama recommended to start)
-- NATS and Valkey for full infrastructure (not needed for unit tests)
+- NATS and Valkey for full infrastructure (not needed for unit tests or RAG pipeline)
 
 ---
 

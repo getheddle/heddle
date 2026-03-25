@@ -491,7 +491,9 @@ def _openai_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def build_backends_from_env() -> dict[str, LLMBackend]:
-    """Build LLM backends from environment variables.
+    """Build LLM backends from environment variables and ``~/.loom/config.yaml``.
+
+    Resolution priority: env vars > config.yaml > built-in defaults.
 
     Resolves available backends based on which env vars are set:
 
@@ -504,6 +506,15 @@ def build_backends_from_env() -> dict[str, LLMBackend]:
         Dict mapping tier name → LLMBackend instance. May be empty if no
         environment variables are set.
     """
+    # Load config.yaml defaults (best-effort; env vars still override)
+    try:
+        from loom.cli.config import apply_config_to_env, load_config
+
+        config = load_config()
+        apply_config_to_env(config)
+    except Exception:
+        pass
+
     backends: dict[str, LLMBackend] = {}
 
     if os.getenv("OLLAMA_URL"):

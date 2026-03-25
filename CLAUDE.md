@@ -103,9 +103,16 @@ src/loom/
     mdns.py               # LoomServiceAdvertiser — mDNS/Bonjour LAN service advertisement
 
   cli/
-    main.py               # Click CLI: worker, processor, pipeline, orchestrator, scheduler,
-                          #   router, submit, mcp, workshop, ui, mdns, dead-letter (12 commands)
+    main.py               # Click CLI: setup, rag, worker, processor, pipeline, orchestrator,
+                          #   scheduler, router, submit, mcp, workshop, ui, mdns, dead-letter
                           #   --skip-preflight flag on all actor commands
+    config.py             # User config (~/.loom/config.yaml) load/save/merge
+                          #   LoomConfig dataclass, resolve_config() priority chain,
+                          #   apply_config_to_env() for backwards compat with build_backends_from_env
+    setup.py              # Interactive setup wizard (loom setup)
+                          #   Ollama detection, API key validation, embedding model, data sources
+    rag.py                # Zero-config RAG CLI (loom rag ingest/search/stats/serve)
+                          #   Direct pipeline execution without NATS/router/actors
     preflight.py          # Pre-flight checks: NATS connectivity, env vars, config readability
 
   workshop/               # LLM Worker Workshop — web-based worker builder, test bench, eval tool
@@ -232,6 +239,8 @@ tests/                    # 69 test files, 1491 unit tests + 1 integration test 
   test_schema_ref.py                              # Pydantic schema_ref resolution
   test_result_stream.py                           # ResultStream streaming collection (Strategy A)
   test_tui.py                                     # TUI dashboard domain models and event handlers
+  test_cli_config.py      test_cli_setup.py        # CLI config utility, setup wizard
+  test_cli_rag.py                                  # CLI RAG pipeline commands
   test_dead_letter.py     test_preflight.py       # Dead-letter consumer, CLI pre-flight checks
   test_integration.py                             # @pytest.mark.integration (needs NATS)
   test_deepeval_worker.py                         # @pytest.mark.deepeval (DeepEval + Ollama judge)
@@ -289,6 +298,15 @@ uv run mkdocs build --strict
 # Serve locally with live reload (localhost:8000)
 uv run mkdocs serve
 # NOTE: GitHub Pages auto-deploys on push to main via .github/workflows/docs.yml
+
+# First-time setup wizard (interactive, writes ~/.loom/config.yaml)
+uv run loom setup
+
+# RAG pipeline — zero-config, no NATS needed
+uv run loom rag ingest /path/to/telegram/exports/*.json   # ingest Telegram data
+uv run loom rag search "earthquake damage reports"         # semantic search
+uv run loom rag stats                                      # store statistics
+uv run loom rag serve                                      # Workshop with RAG dashboard
 
 # Run a worker locally (needs NATS running)
 uv run loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222

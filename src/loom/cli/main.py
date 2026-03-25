@@ -6,6 +6,8 @@ every type of Loom actor. Each command starts a long-running async process
 that connects to NATS and processes messages until terminated.
 
 Commands:
+    loom setup        -- Interactive setup wizard (writes ~/.loom/config.yaml)
+    loom rag          -- Zero-config RAG pipeline (ingest, search, stats, serve)
     loom worker       -- Start an LLM worker (requires OLLAMA_URL or ANTHROPIC_API_KEY)
     loom processor    -- Start a non-LLM processor worker (e.g., DoclingBackend)
     loom pipeline     -- Start a pipeline orchestrator (sequential stage execution)
@@ -899,6 +901,17 @@ def dead_letter_monitor(nats_url: str, max_size: int):
     )
 
     _run_async(consumer.run(DEAD_LETTER_SUBJECT))
+
+
+# ---------------------------------------------------------------------------
+# Progressive-disclosure commands (no NATS needed)
+# ---------------------------------------------------------------------------
+
+from loom.cli.rag import rag as rag_group  # noqa: E402
+from loom.cli.setup import setup as setup_cmd  # noqa: E402
+
+cli.add_command(setup_cmd)
+cli.add_command(rag_group)
 
 
 if __name__ == "__main__":
