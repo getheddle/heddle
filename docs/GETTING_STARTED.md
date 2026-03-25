@@ -33,27 +33,32 @@ variables or CLI flags. See [Configuration](CONFIG.md) for details.
 
 ## Build Your First Worker
 
-Once you've tried the RAG pipeline, build your own AI step:
+Once you've tried the RAG pipeline, build your own AI step — or use one of
+the six that ship with Loom:
+
+| Worker | What it does | Tier |
+|--------|-------------|------|
+| `summarizer` | Compress text into structured summary with key points | local |
+| `classifier` | Assign text to categories with confidence | local |
+| `extractor` | Pull structured fields from unstructured text | standard |
+| `translator` | Translate between languages with auto-detection | local |
+| `qa` | Answer questions from provided context with citations | local |
+| `reviewer` | Review content quality against configurable criteria | standard |
+
+See [Workers Reference](workers-reference.md) for full I/O schemas and examples.
 
 ```bash
-# Interactive scaffolding — generates a YAML config from prompts
+# Create your own worker interactively
 uv run loom new worker
 
-# Validate your config
-uv run loom validate configs/workers/my_worker.yaml
-
-# Test it in the web UI
-uv run loom workshop
-```
-
-Chain workers into a pipeline:
-
-```bash
-# Interactive — pick workers, define data flow between stages
+# Or chain shipped workers into a pipeline
 uv run loom new pipeline
 
-# Validate
-uv run loom validate configs/orchestrators/my_pipeline.yaml
+# Validate configs (no infrastructure needed)
+uv run loom validate configs/workers/*.yaml
+
+# Test in the web UI
+uv run loom workshop
 ```
 
 No NATS or infrastructure needed. The Workshop calls LLM backends directly.

@@ -8,6 +8,9 @@ whether they need a running NATS server.
 | Command | Purpose | NATS Required |
 |---|---|---|
 | `loom setup` | Interactive configuration wizard | No |
+| `loom new worker` | Scaffold a new worker config | No |
+| `loom new pipeline` | Scaffold a new pipeline config | No |
+| `loom validate` | Validate config files | No |
 | `loom rag ingest` | Ingest Telegram exports into vector store | No |
 | `loom rag search` | Semantic search | No |
 | `loom rag stats` | Vector store statistics | No |
@@ -49,6 +52,73 @@ Steps performed:
 3. Checks/pulls the embedding model
 4. Scans for Telegram export files
 5. Writes `~/.loom/config.yaml`
+
+---
+
+### loom new (group)
+
+Scaffold new worker and pipeline configs interactively. YAML is generated
+from your answers — you don't need to write it from scratch.
+
+#### loom new worker
+
+```bash
+loom new worker [OPTIONS]
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--name` | *(prompted)* | Worker name (lowercase, underscores) |
+| `--kind` | *(prompted)* | `llm` or `processor` |
+| `--tier` | *(prompted)* | `local`, `standard`, or `frontier` |
+| `--configs-dir` | `configs/` | Where to write the config |
+| `--non-interactive` | `false` | Use defaults, skip prompts |
+
+Prompts for: name, kind, system prompt (or editor), model tier, input/output
+field names, timeout. Validates before writing.
+
+#### loom new pipeline
+
+```bash
+loom new pipeline [OPTIONS]
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--name` | *(prompted)* | Pipeline name |
+| `--configs-dir` | `configs/` | Where to write the config |
+| `--non-interactive` | `false` | Use defaults, skip prompts |
+
+Lists available workers, then prompts to add stages in a loop. For each stage:
+worker type, stage name, input mapping (guided path syntax). Validates the
+pipeline graph before writing.
+
+---
+
+### loom validate
+
+Validate worker, pipeline, and orchestrator configs without starting any
+infrastructure. Auto-detects config type from file content.
+
+```bash
+loom validate [OPTIONS] [PATHS...]
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--all` | `false` | Validate all configs in `--configs-dir` |
+| `--configs-dir` | `configs/` | Root config directory |
+
+Examples:
+
+```bash
+loom validate configs/workers/my_worker.yaml       # single file
+loom validate configs/workers/*.yaml               # multiple files
+loom validate --all                                 # everything in configs/
+```
+
+Exit code 0 if all valid, 1 if any errors. Colored output with per-file
+pass/fail indicators.
 
 ---
 

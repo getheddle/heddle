@@ -80,17 +80,20 @@ uv run loom rag search "protest reports"  # semantic search
 uv run loom rag stats                     # store statistics
 ```
 
-### 2. Workshop web UI (no infrastructure)
+### 2. Build your own steps (guided)
 
-Build, test, and evaluate AI steps in a web browser:
+Scaffold workers and pipelines interactively — YAML is generated for you:
 
 ```bash
-uv run loom workshop --port 8080
+uv run loom new worker                   # create a step from prompts
+uv run loom new pipeline                 # chain steps into a workflow
+uv run loom validate configs/workers/*.yaml  # check your configs
+uv run loom workshop --port 8080         # test and evaluate in the web UI
 ```
 
-Define a step with a system prompt and I/O schema in YAML, test it with sample
-data, run evaluation suites, and compare results — all without touching NATS
-or writing Python code.
+Six ready-made workers ship with Loom: **summarizer**, **classifier**,
+**extractor**, **translator**, **qa** (question answering with source
+citations), and **reviewer** (quality review against configurable criteria).
 
 ### 3. Distributed infrastructure (production)
 
@@ -111,14 +114,17 @@ Scale any component by running more copies — NATS load-balances automatically.
 
 | Feature | What It Does |
 |---------|-------------|
+| **6 Ready-Made Workers** | Summarizer, classifier, extractor, translator, QA, reviewer — chain them immediately |
 | **LLM Steps** | YAML-defined AI tasks with system prompts, JSON Schema contracts, tool-use |
 | **Processor Steps** | Non-LLM tasks (PDF extraction, chunking, embedding) in the same pipeline |
+| **Document Processing** | PDF/DOCX extraction via MarkItDown (fast) or Docling (deep OCR). Smart fallback. |
 | **Pipeline Orchestration** | Chain steps with automatic dependency detection and parallelism |
 | **Three Model Tiers** | Local (Ollama), Standard (Claude Sonnet), Frontier (Claude Opus) |
 | **Workshop** | Web UI for testing, evaluating, and comparing step outputs |
 | **RAG Pipeline** | Telegram channel ingestion, chunking, vector search (DuckDB or LanceDB) |
 | **MCP Gateway** | Expose any workflow as an MCP server with a single YAML config |
-| **Config Wizard** | `loom setup` auto-detects backends and writes `~/.loom/config.yaml` |
+| **Config Wizard** | `loom setup` auto-detects backends; `loom new` scaffolds workers/pipelines |
+| **Config Validation** | `loom validate` checks configs without starting infrastructure |
 | **Live Monitoring** | TUI dashboard, OpenTelemetry tracing, dead-letter inspection |
 | **Deployment** | Docker Compose, Kubernetes manifests, mDNS discovery |
 
@@ -133,7 +139,8 @@ Start here:
 | **[Concepts](docs/CONCEPTS.md)** | How Loom works — the mental model in plain language |
 | **[Getting Started](docs/GETTING_STARTED.md)** | Install and run your first pipeline |
 | **[Configuration](docs/CONFIG.md)** | `~/.loom/config.yaml` reference and priority chain |
-| **[CLI Reference](docs/CLI_REFERENCE.md)** | All 17 commands with every flag and default |
+| **[CLI Reference](docs/CLI_REFERENCE.md)** | All 19 commands with every flag and default |
+| **[Workers Reference](docs/workers-reference.md)** | 6 shipped workers with I/O schemas and examples |
 
 Go deeper:
 
@@ -160,7 +167,7 @@ Go deeper:
 | RAG pipeline | Complete | Ingest, chunk, embed, search (DuckDB + LanceDB) |
 | Workshop web UI | Complete | Test bench, eval runner, pipeline editor |
 | MCP gateway | Complete | FastMCP 3.x, session tools, workshop tools |
-| Tests | 1586 passing | 90% coverage, no infrastructure needed |
+| Tests | 1643 passing | 90% coverage, no infrastructure needed |
 
 ---
 

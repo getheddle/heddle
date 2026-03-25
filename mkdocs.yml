@@ -74,6 +74,7 @@ nav:
     - Getting Started: GETTING_STARTED.md
     - Configuration: CONFIG.md
     - CLI Reference: CLI_REFERENCE.md
+    - Workers Reference: workers-reference.md
     - RAG How-To: rag-howto.md
     - Building Workflows: building-workflows.md
     - Workshop: workshop.md
