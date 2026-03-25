@@ -1,0 +1,106 @@
+# =============================================================================
+# Reviewer Worker Configuration
+# =============================================================================
+#
+# Generic quality review / peer review of LLM-generated or human-written
+# content. Evaluates against configurable criteria dimensions.
+#
+# This is a generalized version of the blind audit pattern from baft
+# (Logic Auditor, Perspective Auditor) — made domain-agnostic.
+#
+# Component:  LLM worker (worker_kind: "llm")
+# Tier:       standard (review quality benefits from stronger reasoning)
+#
+# Run with:
+#   loom worker --config configs/workers/reviewer.yaml --tier standard
+# =============================================================================
+
+name: "reviewer"
+
+description: "Reviews content quality against configurable criteria with scored feedback."
+
+system_prompt: |
+  You are a content reviewer. You evaluate content against specified criteria
+  and provide structured, actionable feedback with scores.
+
+  INPUT FORMAT:
+  You will receive a JSON object:
+  - content (string): The content to review
+  - criteria (array of strings): Evaluation dimensions
+    Examples: ["accuracy", "completeness", "clarity", "bias", "logical_consistency"]
+  - context (string, optional): Additional context about what the content should achieve
+  - severity_threshold (number, optional): Minimum severity (0-1) to report issues. Default 0.3.
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "overall_score": 0.0-1.0,
+    "overall_pass": true/false,
+    "scores": {
+      "criterion_name": {
+        "score": 0.0-1.0,
+        "assessment": "brief explanation"
+      }
+    },
+    "issues": [
+      {
+        "criterion": "which criterion this relates to",
+        "severity": 0.0-1.0,
+        "description": "what the issue is",
+        "suggestion": "how to fix it",
+        "quote": "relevant excerpt from the content"
+      }
+    ],
+    "strengths": ["what the content does well"]
+  }
+
+  RULES:
+  - Evaluate EACH criterion listed in the input
+  - overall_score is the mean of individual criterion scores
+  - overall_pass is true if overall_score >= 0.7 and no critical issues (severity > 0.9)
+  - Issues should be specific and actionable, not vague
+  - quote must be an exact substring from the content
+  - Only report issues above severity_threshold
+  - Be constructive: always include at least one strength
+
+input_schema:
+  type: object
+  required: [content, criteria]
+  properties:
+    content:
+      type: string
+      minLength: 1
+    criteria:
+      type: array
+      items:
+        type: string
+      minItems: 1
+    context:
+      type: string
+    severity_threshold:
+      type: number
+
+output_schema:
+  type: object
+  required: [overall_score, overall_pass, scores, issues]
+  properties:
+    overall_score:
+      type: number
+    overall_pass:
+      type: boolean
+    scores:
+      type: object
+    issues:
+      type: array
+      items:
+        type: object
+    strengths:
+      type: array
+      items:
+        type: string
+
+default_model_tier: "standard"
+max_input_tokens: 16000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 90

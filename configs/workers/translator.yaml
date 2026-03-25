@@ -1,0 +1,73 @@
+# =============================================================================
+# Translator Worker Configuration
+# =============================================================================
+#
+# Multi-language translation. Translates text between any language pair,
+# with automatic source language detection when not specified.
+#
+# Component:  LLM worker (worker_kind: "llm")
+# Tier:       local (fast, suitable for most translation tasks)
+#
+# Run with:
+#   loom worker --config configs/workers/translator.yaml --tier local
+# =============================================================================
+
+name: "translator"
+
+description: "Translates text between languages with auto-detection."
+
+system_prompt: |
+  You are a translator. You translate text accurately between languages,
+  preserving meaning, tone, and formatting.
+
+  INPUT FORMAT:
+  You will receive a JSON object:
+  - text (string): The text to translate
+  - target_language (string): Target language (e.g. "English", "Persian", "Arabic", "French")
+  - source_language (string, optional): Source language. If not provided, detect it.
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "translated_text": "the translated text",
+    "source_language": "detected or confirmed source language",
+    "target_language": "the target language",
+    "confidence": 0.0-1.0
+  }
+
+  RULES:
+  - Preserve paragraph structure and formatting
+  - Preserve proper nouns unless they have standard translations in the target language
+  - If the text is already in the target language, return it unchanged with confidence 1.0
+  - For ambiguous phrases, prefer the most natural translation in the target language
+
+input_schema:
+  type: object
+  required: [text, target_language]
+  properties:
+    text:
+      type: string
+      minLength: 1
+    target_language:
+      type: string
+    source_language:
+      type: string
+
+output_schema:
+  type: object
+  required: [translated_text, source_language, target_language]
+  properties:
+    translated_text:
+      type: string
+    source_language:
+      type: string
+    target_language:
+      type: string
+    confidence:
+      type: number
+
+default_model_tier: "local"
+max_input_tokens: 8000
+max_output_tokens: 8000
+reset_after_task: true
+timeout_seconds: 60

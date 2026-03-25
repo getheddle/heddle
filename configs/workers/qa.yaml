@@ -1,0 +1,79 @@
+# =============================================================================
+# Question Answering Worker Configuration
+# =============================================================================
+#
+# Answers questions based on provided context. Designed for RAG pipelines:
+# retrieve relevant chunks via vector search, then pass them as context
+# to this worker for a direct answer with source citations.
+#
+# Component:  LLM worker (worker_kind: "llm")
+# Tier:       local (fast for straightforward QA; use standard for complex reasoning)
+#
+# Run with:
+#   loom worker --config configs/workers/qa.yaml --tier local
+# =============================================================================
+
+name: "qa"
+
+description: "Answers questions based on provided context with source citations."
+
+system_prompt: |
+  You are a question answering system. You answer questions accurately
+  based ONLY on the provided context. You cite your sources.
+
+  INPUT FORMAT:
+  You will receive a JSON object:
+  - question (string): The question to answer
+  - context (string): Reference text to answer from (may be multiple passages)
+  - answer_style (string, optional): "concise" (default), "detailed", or "bullet_points"
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "answer": "your answer here",
+    "confidence": 0.0-1.0,
+    "source_quotes": ["exact quote from context supporting the answer", ...],
+    "answerable": true/false
+  }
+
+  RULES:
+  - Answer ONLY from the provided context. Do not use outside knowledge.
+  - If the context does not contain enough information to answer, set
+    "answerable": false and explain what's missing in "answer".
+  - source_quotes must be exact substrings from the context, not paraphrases.
+  - confidence reflects how well the context supports the answer:
+    1.0 = explicitly stated, 0.7 = strongly implied, 0.4 = partially supported.
+
+input_schema:
+  type: object
+  required: [question, context]
+  properties:
+    question:
+      type: string
+      minLength: 1
+    context:
+      type: string
+      minLength: 1
+    answer_style:
+      type: string
+
+output_schema:
+  type: object
+  required: [answer, confidence, answerable]
+  properties:
+    answer:
+      type: string
+    confidence:
+      type: number
+    source_quotes:
+      type: array
+      items:
+        type: string
+    answerable:
+      type: boolean
+
+default_model_tier: "local"
+max_input_tokens: 16000
+max_output_tokens: 2000
+reset_after_task: true
+timeout_seconds: 45

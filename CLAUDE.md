@@ -137,6 +137,11 @@ src/loom/
     static/               # CSS (Pico CSS + custom styles)
 
   contrib/                # Optional integrations (Django-style contrib namespace)
+    docproc/
+      contracts.py        # ExtractorInput/ExtractorOutput Pydantic models
+      markitdown_backend.py  # MarkItDownBackend — fast doc extraction (no ML, no torch)
+      docling_backend.py  # DoclingBackend — deep PDF/DOCX extraction (OCR, tables)
+      smart_extractor.py  # SmartExtractorBackend — MarkItDown-first, Docling fallback
     duckdb/
       query_backend.py    # DuckDBQueryBackend — action-dispatch query (FTS, filter, stats, get, vector)
       view_tool.py        # DuckDBViewTool — read-only view as LLM-callable tool
@@ -173,6 +178,9 @@ configs/
     summarizer.yaml       #   text → summary + key_points (local tier)
     classifier.yaml       #   text + categories → category + confidence (local tier)
     extractor.yaml        #   text + fields → extracted data (standard tier)
+    translator.yaml       #   text + target_language → translated_text (local tier)
+    qa.yaml               #   question + context → answer + source_quotes (local tier)
+    reviewer.yaml         #   content + criteria → scores + issues + suggestions (standard tier)
     rag_ingestor.yaml     #   source_path → posts (processor, local)
     rag_mux.yaml          #   posts_by_channel → muxed windows (processor, local)
     rag_chunker.yaml      #   posts → chunks (processor, local)
@@ -250,6 +258,7 @@ tests/                    # 69 test files, 1491 unit tests + 1 integration test 
   test_integration.py                             # @pytest.mark.integration (needs NATS)
   test_deepeval_worker.py                         # @pytest.mark.deepeval (DeepEval + Ollama judge)
   conftest.py                                     # Shared fixtures: skip_no_deepeval, helpers
+  contrib/docproc/        # Document extraction backend tests (MarkItDown, SmartExtractor, contracts)
   contrib/rag/            # 8 RAG test files (abstractions, backends, chunker, ingestion, mux, schemas, telegram_live, tools)
   contrib/lancedb/        # LanceDB store tests
 ```
