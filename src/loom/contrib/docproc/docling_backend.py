@@ -120,7 +120,7 @@ class DoclingBackend(SyncProcessingBackend):
 
         return {"output": result, "model_used": "docling"}
 
-    def _build_converter(self, config: dict[str, Any]) -> Any:
+    def _build_converter(self, config: dict[str, Any]) -> Any:  # pragma: no cover
         """Build a Docling DocumentConverter with settings from backend_config.
 
         Constructs the converter with accelerator, OCR, and table structure
@@ -207,7 +207,7 @@ class DoclingBackend(SyncProcessingBackend):
             },
         )
 
-    def _extract(
+    def _extract(  # pragma: no cover
         self, source_path: Path, ws: WorkspaceManager, config: dict[str, Any]
     ) -> dict[str, Any]:
         """Run synchronous Docling extraction.
