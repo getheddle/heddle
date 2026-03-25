@@ -6,6 +6,37 @@
 
 It is designed for Persian/RTL text but works with any language.
 
+## Quick Start (CLI)
+
+The fastest way to use the RAG pipeline — no Python code needed:
+
+```bash
+# 1. Install and configure
+uv sync --extra rag
+uv run loom setup                    # interactive wizard
+
+# 2. Ingest Telegram exports
+uv run loom rag ingest /path/to/exports/result*.json
+
+# 3. Search
+uv run loom rag search "earthquake damage reports" --limit 10
+
+# 4. Check statistics
+uv run loom rag stats
+
+# 5. Open the web dashboard
+uv run loom rag serve --port 8080
+```
+
+Use `--store lancedb` for ANN search on larger datasets:
+
+```bash
+uv sync --extra lancedb
+uv run loom rag --store lancedb ingest /path/to/exports/*.json
+```
+
+See the [CLI Reference](CLI_REFERENCE.md#loom-rag-group) for all options.
+
 ## Installation
 
 ```bash
@@ -51,9 +82,9 @@ All ingestors extend the `Ingestor` ABC (`ingestion/base.py`). All vector stores
 extend the `VectorStore` ABC (`vectorstore/base.py`). Backends are configurable
 via `ingestor_class` and `store_class` parameters.
 
-## Quick Start (Standalone Python)
+## Quick Start (Python API)
 
-The simplest way to use the RAG module — no Loom infrastructure needed:
+For programmatic access — use the RAG classes directly without CLI or infrastructure:
 
 ```python
 from datetime import timedelta

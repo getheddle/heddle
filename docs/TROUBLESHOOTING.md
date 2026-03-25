@@ -4,6 +4,92 @@ Common issues and solutions when running Loom.
 
 ---
 
+## Setup & Configuration
+
+### `loom setup` can't detect Ollama
+
+**Symptom:** Setup wizard reports "Ollama not detected" even though Ollama is running.
+
+**Fix:**
+
+- Check Ollama is running: `curl http://localhost:11434/api/tags`
+- If Ollama is on a different port or host, enter the URL when prompted
+- Check firewall isn't blocking port 11434
+- If using Docker Ollama: `docker run -p 11434:11434 ollama/ollama`
+
+### `loom setup` Anthropic key validation fails
+
+**Symptom:** Setup reports "Key validation failed" after entering an API key.
+
+**Fix:**
+
+- Double-check the key starts with `sk-ant-`
+- Verify network connectivity to `api.anthropic.com`
+- The key is saved anyway — validation is best-effort
+- Test manually: `curl -H "x-api-key: sk-ant-..." https://api.anthropic.com/v1/models`
+
+### Config file not picked up
+
+**Symptom:** Settings from `~/.loom/config.yaml` don't take effect.
+
+**Fix:**
+
+- Check the file exists: `cat ~/.loom/config.yaml`
+- Env vars override config file values — check for conflicting `OLLAMA_URL`, `ANTHROPIC_API_KEY`
+- Priority: CLI flags > env vars > config.yaml > defaults
+- See [Configuration](CONFIG.md) for the full priority chain
+
+---
+
+## RAG Pipeline
+
+### `loom rag ingest` fails with "No valid exports found"
+
+**Symptom:** Ingest exits immediately without processing any files.
+
+**Fix:**
+
+- Verify files exist: `ls /path/to/exports/result*.json`
+- Telegram exports must be JSON format (not HTML)
+- Use Telegram Desktop → Export Chat → JSON format
+- File paths are passed as arguments: `loom rag ingest file1.json file2.json`
+
+### Embedding fails during `loom rag ingest`
+
+**Symptom:** Ingest hangs or errors at the "Storing chunks" step.
+
+**Fix:**
+
+- Check Ollama is running: `curl http://localhost:11434/api/tags`
+- Check embedding model is installed: `ollama list | grep nomic-embed-text`
+- Pull the model: `ollama pull nomic-embed-text`
+- Use `--no-embed` to skip embeddings: `loom rag ingest --no-embed files...`
+- Check Ollama URL in config: `cat ~/.loom/config.yaml | grep ollama_url`
+
+### `loom rag search` returns no results
+
+**Symptom:** Search returns "No results found" even after ingesting data.
+
+**Fix:**
+
+- Check the store has data: `loom rag stats`
+- If you ingested with `--no-embed`, search won't work (embeddings required)
+- Re-ingest with embeddings: `loom rag ingest --embed files...`
+- Lower the score threshold: `loom rag search "query" --min-score 0.0`
+- Check you're using the same store path: `loom rag --db-path /path/to/store.duckdb search "query"`
+
+### LanceDB import errors
+
+**Symptom:** `ImportError: No module named 'lancedb'` when using `--store lancedb`.
+
+**Fix:**
+
+```bash
+uv sync --extra lancedb
+```
+
+---
+
 ## NATS Connection
 
 ### Cannot connect to NATS

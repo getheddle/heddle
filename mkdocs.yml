@@ -70,15 +70,21 @@ markdown_extensions:
 nav:
   - Home: index.md
   - User Guide:
+    - Concepts: CONCEPTS.md
     - Getting Started: GETTING_STARTED.md
+    - Configuration: CONFIG.md
+    - CLI Reference: CLI_REFERENCE.md
+    - RAG How-To: rag-howto.md
     - Building Workflows: building-workflows.md
-    - Architecture: ARCHITECTURE.md
+    - Workshop: workshop.md
+    - Troubleshooting: TROUBLESHOOTING.md
+  - Architecture:
+    - Overview: ARCHITECTURE.md
+    - Design Invariants: DESIGN_INVARIANTS.md
+  - Deployment:
     - Local Deployment: LOCAL_DEPLOYMENT.md
     - Application Deployment: APP_DEPLOYMENT.md
     - Kubernetes: KUBERNETES.md
-    - RAG How-To: rag-howto.md
-    - Workshop: workshop.md
-    - Troubleshooting: TROUBLESHOOTING.md
   - API Reference:
     - Core: api/core.md
     - Message Bus: api/bus.md
@@ -92,4 +98,3 @@ nav:
   - Development:
     - Contributing: CONTRIBUTING.md
     - Coding Guide: CODING_GUIDE.md
-    - Design Invariants: DESIGN_INVARIANTS.md

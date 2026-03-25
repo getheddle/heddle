@@ -2,17 +2,19 @@
 
 **Loom — Lightweight Orchestrated Operational Mesh**
 
+New to Loom? Start with [Concepts](CONCEPTS.md) to understand the mental model.
+
 ---
 
-## Quick Start (RAG Pipeline — No NATS Needed)
+## Quick Start (No Infrastructure Needed)
 
-The fastest way to use Loom — analyze Telegram channels without infrastructure:
+The fastest way to use Loom — analyze Telegram channels in 5 commands:
 
 ```bash
 # 1. Install
 uv sync --extra rag
 
-# 2. Configure (interactive wizard)
+# 2. Configure (interactive wizard — detects Ollama, prompts for API keys)
 uv run loom setup
 
 # 3. Ingest Telegram exports
@@ -27,7 +29,10 @@ uv run loom rag serve
 
 The `loom setup` wizard detects Ollama, prompts for API keys, and writes
 `~/.loom/config.yaml`. All settings can be overridden via environment
-variables or CLI flags.
+variables or CLI flags. See [Configuration](CONFIG.md) for details.
+
+> **That's it for basic usage.** Everything below is for when you need the
+> full distributed infrastructure (multi-user, scaling, custom workers).
 
 ---
 
@@ -36,7 +41,7 @@ variables or CLI flags.
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) package manager
 - At least one LLM backend (Ollama recommended to start)
-- NATS and Valkey for full infrastructure (not needed for unit tests or RAG pipeline)
+- NATS and Valkey for full infrastructure (not needed for Quick Start)
 
 ---
 
@@ -50,43 +55,68 @@ uv sync --all-extras
 Loom has optional extras for integrations:
 
 ```bash
+uv sync --extra rag           # RAG pipeline (DuckDB + Ollama embeddings)
+uv sync --extra lancedb       # LanceDB vector store (ANN search, alternative to DuckDB)
+uv sync --extra telegram      # Live Telegram channel capture via Telethon
 uv sync --extra duckdb        # DuckDB tools and query backends
-uv sync --extra redis         # Redis-backed checkpoint store
-uv sync --extra local         # Ollama client
-uv sync --extra rag           # RAG pipeline (DuckDB + Ollama)
-uv sync --extra scheduler     # Cron expression parsing (croniter)
-uv sync --extra mcp           # MCP gateway (Model Context Protocol SDK)
+uv sync --extra redis         # Redis/Valkey-backed checkpoint store
+uv sync --extra local         # Ollama client for local models
 uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
+uv sync --extra mcp           # MCP gateway (Model Context Protocol)
 uv sync --extra otel          # OpenTelemetry distributed tracing
-```
-
-See [Architecture — Distributed Tracing](ARCHITECTURE.md#distributed-tracing-tracing) for
-GenAI semantic conventions and environment variables (`LOOM_TRACE_CONTENT`).
-
-```bash
 uv sync --extra tui           # Terminal dashboard (Textual)
 uv sync --extra mdns          # mDNS/Bonjour service discovery on LAN
-uv sync --extra eval          # DeepEval LLM output quality evaluation (uses Ollama judge)
-uv sync --extra docs          # Sphinx API documentation generation
+uv sync --extra scheduler     # Cron expression parsing (croniter)
+uv sync --extra eval          # DeepEval LLM output quality evaluation
+uv sync --extra docs          # MkDocs-Material API documentation generation
 ```
 
 ---
 
-## 2. Run the Unit Tests (No Infrastructure Needed)
+## 2. Configure LLM Backends
+
+The easiest path — run the setup wizard:
 
 ```bash
-uv run pytest tests/ -v -m "not integration"
+uv run loom setup
 ```
 
-This runs all unit tests (messages, contracts, checkpoint, pipeline, workers,
-processor, tools, tool-use, knowledge silos, embeddings, contrib/duckdb) without
-needing NATS or Valkey. The integration test is excluded by marker.
+This auto-detects Ollama, prompts for API keys, and writes `~/.loom/config.yaml`.
+
+**Or configure manually** via environment variables:
+
+```bash
+# Option A: Ollama (free, local, recommended to start)
+brew install ollama
+ollama serve &
+ollama pull llama3.2:3b
+export OLLAMA_URL=http://localhost:11434
+
+# Option B: Anthropic API
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Option C: Any OpenAI-compatible API (vLLM, LiteLLM, llama.cpp server)
+# See OpenAICompatibleBackend in src/loom/worker/backends.py
+```
+
+Settings resolution priority: CLI flags > environment variables > `~/.loom/config.yaml` > built-in defaults. See [Configuration](CONFIG.md) for the full reference.
 
 ---
 
-## 3. Set Up Infrastructure (NATS + Valkey)
+## 3. Run the Unit Tests (No Infrastructure Needed)
 
-The simplest path — run NATS and Valkey locally:
+```bash
+uv run pytest tests/ -v -m "not integration and not deepeval"
+```
+
+This runs all unit tests without needing NATS or Valkey.
+
+---
+
+## 4. Set Up Infrastructure (NATS + Valkey)
+
+> **Skip this** if you only need the RAG pipeline or Workshop.
+> The steps below are for the full distributed actor mesh.
 
 ```bash
 # Install via Homebrew (Mac) or use Docker
@@ -103,31 +133,6 @@ Or with Docker:
 docker run -d --name nats -p 4222:4222 nats:2.10-alpine
 docker run -d --name valkey -p 6379:6379 valkey/valkey:8-alpine
 ```
-
----
-
-## 4. Connect an LLM Backend
-
-Loom supports three backend types. You need at least one.
-
-**Option A: Ollama (free, local, recommended to start)**
-
-```bash
-brew install ollama
-ollama serve &
-ollama pull llama3.2:3b
-export OLLAMA_URL=http://localhost:11434
-```
-
-**Option B: Anthropic API**
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-```
-
-**Option C: Any OpenAI-compatible API** (vLLM, LiteLLM, llama.cpp server, etc.)
-
-Configure via the `OpenAICompatibleBackend` in `src/loom/worker/backends.py`.
 
 ---
 
@@ -156,18 +161,14 @@ uv run loom submit "Summarize the main points of the UN Charter preamble" --nats
 Monitor what's happening:
 
 ```bash
-# Option 1: Use the built-in TUI dashboard (recommended)
+# Option 1: TUI dashboard (recommended)
 uv sync --extra tui
 uv run loom ui --nats-url nats://localhost:4222
 
-# Option 2: Use the NATS CLI to watch raw messages
+# Option 2: NATS CLI (raw messages)
 brew tap nats-io/nats-tools && brew install nats-io/nats-tools/nats
 nats sub "loom.>" --server=nats://localhost:4222
 ```
-
-The TUI dashboard shows live goals, tasks, pipeline stages, and a scrolling
-event log in your terminal. See [Architecture — TUI Dashboard](ARCHITECTURE.md#tui-dashboard-tui)
-for details.
 
 ---
 
@@ -184,58 +185,30 @@ Then start it:
 uv run loom worker --config configs/workers/my_worker.yaml --tier local
 ```
 
-For a comprehensive guide to building workers, pipelines, knowledge injection,
-tool-use, and more, see [Building Workflows](building-workflows.md).
-
----
-
-## CLI Reference
+Or test it without NATS using the Workshop:
 
 ```bash
-# Run a worker locally
-uv run loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
-
-# Run a processor worker
-uv run loom processor --config configs/workers/my_processor.yaml --nats-url nats://localhost:4222
-
-# Run the router
-uv run loom router --nats-url nats://localhost:4222
-
-# Run the orchestrator
-uv run loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
-
-# Run a pipeline
-uv run loom pipeline --config configs/orchestrators/my_pipeline.yaml --nats-url nats://localhost:4222
-
-# Run the scheduler
-uv run loom scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
-
-# Submit a goal
-uv run loom submit "some goal text" --nats-url nats://localhost:4222
-
-# Run an MCP server (stdio transport, default)
-uv run loom mcp --config configs/mcp/docman.yaml
-
-# Run an MCP server (streamable-http transport)
-uv run loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
-
-# Run the Worker Workshop web UI
 uv run loom workshop --port 8080
-
-# Launch the real-time TUI dashboard
-uv run loom ui --nats-url nats://localhost:4222
-
-# Monitor the dead-letter queue
-uv run loom dead-letter monitor --nats-url nats://localhost:4222
-
-# Advertise services on LAN via mDNS/Bonjour
-uv run loom mdns --workshop-port 8080 --nats-port 4222
-
-# Lint
-uv run ruff check src/
+# Open http://localhost:8080 → Workers → my_worker → Test
 ```
 
 ---
 
+## What's Next
+
+| Goal | Guide |
+|------|-------|
+| Understand the mental model | [Concepts](CONCEPTS.md) |
+| Build workers, pipelines, tools | [Building Workflows](building-workflows.md) |
+| Set up RAG analysis pipeline | [RAG How-To](rag-howto.md) |
+| Configure settings and API keys | [Configuration](CONFIG.md) |
+| Full CLI command reference | [CLI Reference](CLI_REFERENCE.md) |
+| Test and evaluate workers | [Workshop](workshop.md) |
+| Deploy to production | [Local Deployment](LOCAL_DEPLOYMENT.md) / [Kubernetes](KUBERNETES.md) |
+| Debug issues | [Troubleshooting](TROUBLESHOOTING.md) |
+| Understand design decisions | [Design Invariants](DESIGN_INVARIANTS.md) |
+
+---
+
 *For architecture details, see [Architecture](ARCHITECTURE.md).
-For Kubernetes deployment, see [Kubernetes](KUBERNETES.md).*
+For the full CLI reference, see [CLI Reference](CLI_REFERENCE.md).*
