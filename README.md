@@ -1,4 +1,4 @@
-# Loom — Lightweight Orchestrated Operational Mesh
+# Loom
 
 [![CI](https://github.com/IranTransitionProject/loom/actions/workflows/ci.yml/badge.svg)](https://github.com/IranTransitionProject/loom/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://irantransitionproject.github.io/loom/)
@@ -10,160 +10,166 @@
 [![Loom v0.8.0](https://img.shields.io/badge/loom-v0.8.0-blueviolet.svg)](https://github.com/IranTransitionProject/loom)
 [![Status: Active Development](https://img.shields.io/badge/status-active_development-brightgreen.svg)]()
 
-**Actor-based Python framework for orchestrating multi-LLM AI workflows via NATS messaging.**
+**Split complex AI work into focused steps. Test them individually. Chain them into workflows. Scale when you need to.**
 
 ---
 
-## Why This Project Exists
+## Try It in 60 Seconds
 
-A single monolithic LLM conversation breaks down when you need to work with
-large databases, complex knowledge graphs, or tasks that require multiple model
-tiers working together. Context windows fill up, prompts become unwieldy, and
-there is no clean way to split cognitive work across specialized agents.
+```bash
+pip install uv                                       # if you don't have uv
+git clone https://github.com/IranTransitionProject/loom.git && cd loom
+uv sync --extra rag                                   # install RAG pipeline
+uv run loom setup                                     # configure (auto-detects Ollama)
+uv run loom rag ingest /path/to/telegram/exports/*.json
+uv run loom rag search "earthquake damage reports"
+uv run loom rag serve                                 # open dashboard at localhost:8080
+```
 
-Loom solves this by decomposing AI work across narrowly-scoped stateless worker
-actors coordinated by an orchestrator through a message bus. Each worker has a
-single system prompt, strict I/O contracts, and resets after every task. The
-orchestrator decomposes goals, routes subtasks, and synthesizes results —
-checkpointing its own context when it gets too large.
-
-The result is an AI workflow system that scales with complexity instead of
-collapsing under it.
+No servers to run. No configuration files to write. The setup wizard handles everything.
 
 ---
 
-## What This Project Provides
+## What Loom Does
 
-**Stateless LLM Workers** — each worker has a single system prompt and strict
-JSON Schema I/O contracts. Workers call LLM backends (Anthropic, Ollama, or
-any OpenAI-compatible API), support multi-turn tool-use, knowledge injection,
-and file-ref resolution. They reset after every task.
+Instead of one giant AI prompt that tries to do everything, Loom lets you break
+work into small, focused **steps** — each with a clear job, testable
+independently, and using the right model for the task.
 
-**Processing Workers** — non-LLM backends for CPU-bound or deterministic tasks.
-Implement the `ProcessingBackend` ABC and plug into the same messaging
-infrastructure.
+```text
+  Document ──► Extract ──► Classify ──► Summarize ──► Report
+                 │            │            │
+                 │            │            └─ Claude Opus (complex reasoning)
+                 │            └─ Ollama local (fast, free)
+                 └─ Ollama local (fast, free)
+```
 
-**Goal Decomposition and Synthesis** — an LLM-driven orchestrator breaks
-complex goals into subtasks, dispatches them to appropriate workers, collects
-results, and synthesizes final answers. Self-checkpointing to Valkey prevents
-context overflow.
+Steps can run in parallel, use different AI models, and be tested with the
+built-in Workshop web UI — all without deploying any infrastructure.
 
-**Pipeline Orchestration** — dependency-aware parallel stage execution with
-automatic parallelism, conditional stages, and concurrent goal processing.
-
-**Deterministic Routing** — a pure-logic router dispatches tasks by worker type
-and model tier with token-bucket rate limiting and dead-letter handling. No LLM
-in the routing path.
-
-**Scheduled Dispatch** — a time-driven actor dispatches goals or tasks on cron
-expressions or fixed intervals, configured entirely in YAML.
-
-**MCP Gateway** — any LOOM system becomes a Model Context Protocol server with a
-single YAML config. Workers, pipelines, and query backends are automatically
-discovered as MCP tools with typed input schemas. Supports stdio and
-streamable-http transports.
-
-**Worker Workshop** — a web-based tool for defining, testing, evaluating, and
-deploying LLM workers. Interactive test bench, eval suite runner with scoring,
-pipeline stage editor, and worker version tracking. No NATS needed for testing.
-
-**OpenTelemetry distributed tracing with GenAI semantic conventions** — optional
-`otel` extra for end-to-end distributed tracing across actors, with automatic
-LLM call instrumentation following the OpenTelemetry GenAI semantic conventions.
-
-**Contrib Ecosystem** — optional packages for DuckDB (analytics, vector search),
-Valkey (checkpoint persistence), and RAG (ingestion, chunking, embedding, analysis).
+When you're ready to scale, Loom adds a message bus (NATS) that connects
+everything for production use.
 
 ---
 
 ## Who This Is For
 
-**AI/ML engineers** building multi-agent systems who need worker isolation,
-typed messaging, and structured orchestration instead of ad-hoc prompt chaining.
+**Researchers and analysts** — analyze social media streams, extract data from
+documents, build knowledge graphs. Start with `loom rag` and the Workshop
+dashboard. No infrastructure knowledge needed.
 
-**Platform teams** deploying AI infrastructure who need rate limiting, model tier
-management, dead-letter handling, and Kubernetes-ready containerization.
+**AI engineers** — build multi-step LLM workflows with typed contracts, tool-use,
+knowledge injection, and pipeline orchestration. Test everything locally before
+deploying.
 
-**Researchers and experimenters** who want to prototype multi-LLM workflows
-quickly using YAML worker configs and a local Ollama backend.
-
-**Anyone** who has outgrown single-prompt LLM applications and needs a framework
-that separates concerns across specialized actors.
-
----
-
-## Current State
-
-| Component | Status |
-|-----------|--------|
-| Core (messages, contracts, config, workspace) | Complete |
-| LLM Worker (Anthropic, Ollama, OpenAI-compatible) | Complete |
-| Processing Worker (sync/async backends) | Complete |
-| Tool-use (multi-turn, dynamic loading) | Complete |
-| Knowledge sources and silos | Complete |
-| Orchestrator (decompose/dispatch/synthesize) | Complete |
-| Pipeline orchestrator (sequential stages) | Complete |
-| Router (deterministic, rate-limited) | Complete |
-| Checkpoint (Valkey + in-memory) | Complete |
-| Scheduler (cron + interval dispatch) | Complete |
-| MCP gateway (FastMCP 3.x, session tools) | Complete |
-| Contrib: DuckDB, Valkey, RAG | Complete |
-| Worker Workshop (web UI) | Complete |
-| Unit tests | 1491 passing, 90% coverage |
+**Platform teams** — deploy to Kubernetes with rate limiting, model tier
+management, dead-letter handling, and OpenTelemetry tracing. Scale any component
+independently.
 
 ---
 
-## Quick Start
+## Three Ways to Use Loom
+
+### 1. Command line (no setup)
+
+Ingest data, search, and analyze — all from the terminal:
 
 ```bash
-# Requires Python 3.11+ and uv (https://docs.astral.sh/uv/)
-uv sync --all-extras
-
-# Run unit tests (no infrastructure needed)
-uv run pytest tests/ -v -m "not integration"
-
-# Lint
-uv run ruff check src/ tests/
+uv run loom rag ingest exports/*.json    # ingest Telegram channels
+uv run loom rag search "protest reports"  # semantic search
+uv run loom rag stats                     # store statistics
 ```
 
-For the full 7-step setup with infrastructure and LLM backends, see
-[Getting Started](docs/GETTING_STARTED.md).
+### 2. Workshop web UI (no infrastructure)
+
+Build, test, and evaluate AI steps in a web browser:
+
+```bash
+uv run loom workshop --port 8080
+```
+
+Define a step with a system prompt and I/O schema in YAML, test it with sample
+data, run evaluation suites, and compare results — all without touching NATS
+or writing Python code.
+
+### 3. Distributed infrastructure (production)
+
+For teams, continuous processing, or high-throughput scenarios:
+
+```bash
+uv run loom router --nats-url nats://localhost:4222
+uv run loom worker --config configs/workers/summarizer.yaml --tier local
+uv run loom pipeline --config configs/orchestrators/my_pipeline.yaml
+uv run loom submit "Analyze the quarterly reports"
+```
+
+Scale any component by running more copies — NATS load-balances automatically.
+
+---
+
+## Key Features
+
+| Feature | What It Does |
+|---------|-------------|
+| **LLM Steps** | YAML-defined AI tasks with system prompts, JSON Schema contracts, tool-use |
+| **Processor Steps** | Non-LLM tasks (PDF extraction, chunking, embedding) in the same pipeline |
+| **Pipeline Orchestration** | Chain steps with automatic dependency detection and parallelism |
+| **Three Model Tiers** | Local (Ollama), Standard (Claude Sonnet), Frontier (Claude Opus) |
+| **Workshop** | Web UI for testing, evaluating, and comparing step outputs |
+| **RAG Pipeline** | Telegram channel ingestion, chunking, vector search (DuckDB or LanceDB) |
+| **MCP Gateway** | Expose any workflow as an MCP server with a single YAML config |
+| **Config Wizard** | `loom setup` auto-detects backends and writes `~/.loom/config.yaml` |
+| **Live Monitoring** | TUI dashboard, OpenTelemetry tracing, dead-letter inspection |
+| **Deployment** | Docker Compose, Kubernetes manifests, mDNS discovery |
 
 ---
 
 ## Documentation
 
-- **[Architecture](docs/ARCHITECTURE.md)** — Source tree, message flow, NATS
-  subjects, design rules, component details
-- **[Getting Started](docs/GETTING_STARTED.md)** — Installation, infrastructure
-  setup, LLM backend configuration, running your first workflow
-- **[Building Workflows](docs/building-workflows.md)** — Comprehensive guide:
-  workers, pipelines, knowledge, file-refs, routing, silos, tools, embeddings,
-  DuckDB, MCP gateway
-- **[Worker Workshop](docs/workshop.md)** — Workshop web app architecture,
-  component reference, data model, enhancement guide
-- **[RAG Pipeline](docs/rag-howto.md)** — Social media stream ingestion,
-  chunking, vector storage, and analysis
-- **[Kubernetes Deployment](docs/KUBERNETES.md)** — Minikube manifests,
-  container builds, environment variables
-- **[Coding Guide](docs/CODING_GUIDE.md)** — Coding, documentation, and commenting standards for contributors
-- **[Contributing](docs/CONTRIBUTING.md)** — CLA, technical standards, PR process
+Start here:
 
-> **Deploying apps (baft, docman)?** Application repos ship their own Helm
-> charts and Dockerfiles. See the app's `charts/` directory for Kubernetes
-> deployment.
+| Guide | Description |
+|-------|-------------|
+| **[Concepts](docs/CONCEPTS.md)** | How Loom works — the mental model in plain language |
+| **[Getting Started](docs/GETTING_STARTED.md)** | Install and run your first pipeline |
+| **[Configuration](docs/CONFIG.md)** | `~/.loom/config.yaml` reference and priority chain |
+| **[CLI Reference](docs/CLI_REFERENCE.md)** | All 17 commands with every flag and default |
+
+Go deeper:
+
+| Guide | Description |
+|-------|-------------|
+| [RAG Pipeline](docs/rag-howto.md) | Social media stream analysis end-to-end |
+| [Building Workflows](docs/building-workflows.md) | Custom steps, pipelines, tools, knowledge |
+| [Workshop](docs/workshop.md) | Web UI architecture and enhancement guide |
+| [Architecture](docs/ARCHITECTURE.md) | System design, message flow, NATS subjects |
+| [Design Invariants](docs/DESIGN_INVARIANTS.md) | Non-obvious design decisions (read before structural changes) |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
+| [Deployment](docs/LOCAL_DEPLOYMENT.md) | Local, Docker, and [Kubernetes](docs/KUBERNETES.md) |
+
+---
+
+## Current State
+
+| Area | Status | Details |
+|------|--------|---------|
+| Core framework | Complete | Messages, contracts, config, workspace |
+| LLM backends | Complete | Anthropic, Ollama, OpenAI-compatible |
+| Workers & processors | Complete | Tool-use, knowledge silos, embeddings |
+| Orchestration | Complete | Goal decomposition, pipelines, scheduling |
+| RAG pipeline | Complete | Ingest, chunk, embed, search (DuckDB + LanceDB) |
+| Workshop web UI | Complete | Test bench, eval runner, pipeline editor |
+| MCP gateway | Complete | FastMCP 3.x, session tools, workshop tools |
+| Tests | 1586 passing | 90% coverage, no infrastructure needed |
 
 ---
 
 ## Get Involved
 
-**Use the framework.** Build workers for your domain, create pipelines,
-experiment with orchestration patterns. Copy `configs/workers/_template.yaml`
-to get started.
+**Use it.** Start with `uv run loom setup` and go from there.
 
-**Contribute.** New worker types, contrib packages, test coverage, and
-documentation improvements are all welcome.
-See [Contributing](docs/CONTRIBUTING.md).
+**Contribute.** New step types, contrib packages, test coverage, and docs are
+welcome. See [Contributing](docs/CONTRIBUTING.md).
 
 **Report issues.** Bug reports with reproducible steps help the most.
 
@@ -171,24 +177,18 @@ See [Contributing](docs/CONTRIBUTING.md).
 
 ## AI-Assisted Development
 
-This project uses Claude (Anthropic) as a development and maintenance tool.
-The [`CLAUDE.md`](CLAUDE.md) file documents the project's architecture, design
-rules, and current state for AI-assisted sessions.
-
-AI-generated code is subject to the same standards as human contributions:
-typed messages, stateless workers, validated I/O contracts, and test coverage.
+This project uses Claude (Anthropic) as a development tool.
+[`CLAUDE.md`](CLAUDE.md) documents the architecture and design rules for
+AI-assisted sessions. AI-generated code meets the same standards as human
+contributions: typed messages, stateless workers, validated contracts, tests.
 
 ---
 
 ## License
 
-[MPL 2.0](LICENSE) — Mozilla Public License 2.0. Modified source files must
-remain open; unmodified files can be combined with proprietary code in a
-Larger Work.
-
-Alternative licensing available for organizations with copyleft constraints.
+[MPL 2.0](LICENSE) — Modified source files must remain open; unmodified files
+can be combined with proprietary code. Alternative licensing available for
+organizations with copyleft constraints.
 Contact: <admin@irantransitionproject.org>
-
----
 
 *For governance, succession, and contributor rights, see [GOVERNANCE.md](GOVERNANCE.md).*
