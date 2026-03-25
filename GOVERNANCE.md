@@ -2,7 +2,7 @@
 
 **Loom — Lightweight Orchestrated Operational Mesh**
 **Effective:** 2026
-**Contact:** hooman@mac.com
+**Contact:** admin@irantransitionproject.org
 
 ---
 
@@ -24,7 +24,7 @@ leadership review.
 
 | Role | Holder | Scope |
 |------|--------|-------|
-| Founder / Copyright Holder | Hooman (hooman@mac.com) | Full authority while active |
+| Founder / Copyright Holder | Hooman (admin@irantransitionproject.org) | Full authority while active |
 | GitHub Org Owner | IranTransitionProject org | Administrative control |
 | Co-owner (succession backup) | To be designated | Prevents single-point-of-failure |
 
