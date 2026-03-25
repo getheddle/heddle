@@ -11,7 +11,7 @@ checkpointing, tool use, and OpenTelemetry tracing with GenAI semantic conventio
 ## Quick Start
 
 ```bash
-pip install loom  # or: uv add loom
+pip install loom-ai  # or: uv add loom-ai
 ```
 
 See [Getting Started](GETTING_STARTED.md) for full setup instructions.

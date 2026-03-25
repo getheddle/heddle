@@ -17,13 +17,19 @@
 ## Try It in 60 Seconds
 
 ```bash
-pip install uv                                       # if you don't have uv
+pip install loom-ai[rag]                              # install from PyPI
+loom setup                                            # configure (auto-detects Ollama)
+loom rag ingest /path/to/telegram/exports/*.json
+loom rag search "earthquake damage reports"
+loom rag serve                                        # open dashboard at localhost:8080
+```
+
+Or from source:
+
+```bash
 git clone https://github.com/IranTransitionProject/loom.git && cd loom
-uv sync --extra rag                                   # install RAG pipeline
-uv run loom setup                                     # configure (auto-detects Ollama)
-uv run loom rag ingest /path/to/telegram/exports/*.json
-uv run loom rag search "earthquake damage reports"
-uv run loom rag serve                                 # open dashboard at localhost:8080
+uv sync --extra rag
+uv run loom setup
 ```
 
 No servers to run. No configuration files to write. The setup wizard handles everything.

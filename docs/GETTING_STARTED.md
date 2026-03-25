@@ -11,11 +11,12 @@ New to Loom? Start with [Concepts](CONCEPTS.md) to understand the mental model.
 The fastest way to use Loom — analyze Telegram channels in 5 commands:
 
 ```bash
-# 1. Install
-uv sync --extra rag
+# 1. Install (from PyPI)
+pip install loom-ai[rag]
+# Or from source: git clone ... && uv sync --extra rag
 
 # 2. Configure (interactive wizard — detects Ollama, prompts for API keys)
-uv run loom setup
+loom setup
 
 # 3. Ingest Telegram exports
 uv run loom rag ingest /path/to/telegram/exports/*.json

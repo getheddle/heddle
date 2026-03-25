@@ -516,7 +516,7 @@ workers/pipelines appear alongside base configs in the Workers/Pipelines lists.
 
 ### mDNS Service Discovery
 
-When the optional `zeroconf` package is installed (`pip install loom[mdns]`),
+When the optional `zeroconf` package is installed (`pip install loom-ai[mdns]`),
 the Workshop automatically advertises itself on the local network via mDNS/Bonjour.
 
 The integration uses a FastAPI lifespan context manager:

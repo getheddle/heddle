@@ -96,7 +96,7 @@ Run Loom as launchd background services that start on login.
 
 ### Prerequisites
 
-- Python 3.11+ with loom installed: `pip install loom[workshop]`
+- Python 3.11+ with loom installed: `pip install loom-ai[workshop]`
 - NATS server: `brew install nats-server` or Docker
 
 ### Install
@@ -146,7 +146,7 @@ Run Loom as Windows services using NSSM.
 
 ### Prerequisites
 
-- Python 3.11+ with loom installed: `pip install loom[workshop]`
+- Python 3.11+ with loom installed: `pip install loom-ai[workshop]`
 - NSSM: `choco install nssm`
 - NATS server: `choco install nats-server` or Docker
 
@@ -190,7 +190,7 @@ nssm restart LoomWorkshop
 Install the optional mDNS dependency to auto-advertise Loom on your LAN:
 
 ```bash
-pip install loom[mdns]
+pip install loom-ai[mdns]
 ```
 
 When the Workshop starts, it automatically registers as a Bonjour service.

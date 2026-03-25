@@ -1,8 +1,27 @@
 [project]
-name = "loom"
+name = "loom-ai"
 version = "0.8.0"
 description = "Lightweight Orchestrated Operational Mesh — Actor-based multi-LLM agent framework"
+readme = "README.md"
+license = {text = "MPL-2.0"}
 requires-python = ">=3.11"
+authors = [
+    {name = "Iran Transition Project", email = "admin@irantransitionproject.org"},
+]
+keywords = ["llm", "ai", "agents", "multi-agent", "orchestration", "nats", "rag", "mcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Typing :: Typed",
+]
 dependencies = [
     "nats-py>=2.7.0",          # NATS client (async)
     "pydantic>=2.5.0",         # Message schemas and validation
@@ -12,6 +31,12 @@ dependencies = [
     "click>=8.1.0",            # CLI
     "structlog>=24.1.0",       # Structured logging
 ]
+
+[project.urls]
+Homepage = "https://github.com/IranTransitionProject/loom"
+Documentation = "https://irantransitionproject.github.io/loom/"
+Repository = "https://github.com/IranTransitionProject/loom"
+Issues = "https://github.com/IranTransitionProject/loom/issues"
 
 [project.optional-dependencies]
 redis = [
