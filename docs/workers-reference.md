@@ -311,6 +311,7 @@ processing_backend: "loom.contrib.docproc.smart_extractor.SmartExtractorBackend"
 ```
 
 **Fallback triggers:**
+
 - MarkItDown produces less than 50 characters (likely a scanned document)
 - MarkItDown raises an error
 - File extension is in `force_docling_extensions` list
