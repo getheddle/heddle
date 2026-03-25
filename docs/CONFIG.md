@@ -10,7 +10,7 @@ can be overridden at runtime via environment variables or CLI flags.
 
 When Loom resolves a setting, the first source that provides a value wins:
 
-```
+```text
 CLI flags  >  environment variables  >  ~/.loom/config.yaml  >  built-in defaults
 ```
 

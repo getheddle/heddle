@@ -33,7 +33,7 @@ whether they need a running NATS server.
 
 Interactive wizard that detects your environment and writes a config file.
 
-```
+```bash
 loom setup [OPTIONS]
 ```
 
@@ -56,7 +56,7 @@ Steps performed:
 
 All RAG subcommands share a set of group-level options.
 
-```
+```bash
 loom rag [GROUP-OPTIONS] COMMAND
 ```
 
@@ -74,7 +74,7 @@ loom rag [GROUP-OPTIONS] COMMAND
 
 Ingest Telegram JSON exports into the vector store.
 
-```
+```bash
 loom rag ingest [OPTIONS] PATHS...
 ```
 
@@ -91,7 +91,7 @@ loom rag ingest [OPTIONS] PATHS...
 
 Run a semantic similarity search against the vector store.
 
-```
+```bash
 loom rag search [OPTIONS] QUERY
 ```
 
@@ -104,7 +104,7 @@ loom rag search [OPTIONS] QUERY
 
 Print vector store statistics (row count, embedding dimensions, disk size).
 
-```
+```bash
 loom rag stats
 ```
 
@@ -114,7 +114,7 @@ No additional options beyond the group options.
 
 Start the Workshop web UI with the RAG dashboard enabled.
 
-```
+```bash
 loom rag serve [OPTIONS]
 ```
 
@@ -135,7 +135,7 @@ the actor.
 
 Start an LLM worker actor.
 
-```
+```bash
 loom worker --config PATH [OPTIONS]
 ```
 
@@ -150,7 +150,7 @@ loom worker --config PATH [OPTIONS]
 
 Start a non-LLM processor worker (e.g. extractors, validators).
 
-```
+```bash
 loom processor --config PATH [OPTIONS]
 ```
 
@@ -165,7 +165,7 @@ loom processor --config PATH [OPTIONS]
 
 Start a pipeline orchestrator that chains workers in sequence.
 
-```
+```bash
 loom pipeline --config PATH [OPTIONS]
 ```
 
@@ -179,7 +179,7 @@ loom pipeline --config PATH [OPTIONS]
 
 Start the dynamic LLM orchestrator (goal decomposition, delegation).
 
-```
+```bash
 loom orchestrator --config PATH [OPTIONS]
 ```
 
@@ -194,7 +194,7 @@ loom orchestrator --config PATH [OPTIONS]
 
 Start the time-driven task scheduler.
 
-```
+```bash
 loom scheduler --config PATH [OPTIONS]
 ```
 
@@ -208,7 +208,7 @@ loom scheduler --config PATH [OPTIONS]
 
 Start the deterministic task router.
 
-```
+```bash
 loom router [OPTIONS]
 ```
 
@@ -222,7 +222,7 @@ loom router [OPTIONS]
 
 Submit a goal to the orchestrator for processing.
 
-```
+```bash
 loom submit GOAL [OPTIONS]
 ```
 
@@ -245,7 +245,7 @@ loom submit "Process document" --context file_ref=test.pdf --context lang=en
 
 Start the Worker Workshop web UI.
 
-```
+```bash
 loom workshop [OPTIONS]
 ```
 
@@ -262,7 +262,7 @@ loom workshop [OPTIONS]
 
 Launch the terminal dashboard (TUI) for monitoring actors in real time.
 
-```
+```bash
 loom ui [OPTIONS]
 ```
 
@@ -274,7 +274,7 @@ loom ui [OPTIONS]
 
 Broadcast mDNS service records so other Loom nodes can discover this machine.
 
-```
+```bash
 loom mdns [OPTIONS]
 ```
 
@@ -289,7 +289,7 @@ loom mdns [OPTIONS]
 
 Start the MCP (Model Context Protocol) server gateway.
 
-```
+```bash
 loom mcp --config PATH [OPTIONS]
 ```
 
@@ -305,7 +305,7 @@ loom mcp --config PATH [OPTIONS]
 
 Consume and display messages from the dead-letter queue.
 
-```
+```bash
 loom dead-letter monitor [OPTIONS]
 ```
 
