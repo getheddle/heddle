@@ -31,6 +31,33 @@ The `loom setup` wizard detects Ollama, prompts for API keys, and writes
 `~/.loom/config.yaml`. All settings can be overridden via environment
 variables or CLI flags. See [Configuration](CONFIG.md) for details.
 
+## Build Your First Worker
+
+Once you've tried the RAG pipeline, build your own AI step:
+
+```bash
+# Interactive scaffolding — generates a YAML config from prompts
+uv run loom new worker
+
+# Validate your config
+uv run loom validate configs/workers/my_worker.yaml
+
+# Test it in the web UI
+uv run loom workshop
+```
+
+Chain workers into a pipeline:
+
+```bash
+# Interactive — pick workers, define data flow between stages
+uv run loom new pipeline
+
+# Validate
+uv run loom validate configs/orchestrators/my_pipeline.yaml
+```
+
+No NATS or infrastructure needed. The Workshop calls LLM backends directly.
+
 > **That's it for basic usage.** Everything below is for when you need the
 > full distributed infrastructure (multi-user, scaling, custom workers).
 

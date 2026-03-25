@@ -113,6 +113,10 @@ src/loom/
                           #   Ollama detection, API key validation, embedding model, data sources
     rag.py                # Zero-config RAG CLI (loom rag ingest/search/stats/serve)
                           #   Direct pipeline execution without NATS/router/actors
+    new.py                # Interactive scaffolding (loom new worker / loom new pipeline)
+                          #   Generates valid YAML from prompts, validates before writing
+    validate.py           # Config validation CLI (loom validate configs/*.yaml)
+                          #   Auto-detects worker/pipeline/orchestrator, colored output
     preflight.py          # Pre-flight checks: NATS connectivity, env vars, config readability
 
   workshop/               # LLM Worker Workshop — web-based worker builder, test bench, eval tool
@@ -241,6 +245,7 @@ tests/                    # 69 test files, 1491 unit tests + 1 integration test 
   test_tui.py                                     # TUI dashboard domain models and event handlers
   test_cli_config.py      test_cli_setup.py        # CLI config utility, setup wizard
   test_cli_rag.py                                  # CLI RAG pipeline commands
+  test_cli_new.py         test_cli_validate.py     # CLI scaffolding, config validation
   test_dead_letter.py     test_preflight.py       # Dead-letter consumer, CLI pre-flight checks
   test_integration.py                             # @pytest.mark.integration (needs NATS)
   test_deepeval_worker.py                         # @pytest.mark.deepeval (DeepEval + Ollama judge)
@@ -301,6 +306,16 @@ uv run mkdocs serve
 
 # First-time setup wizard (interactive, writes ~/.loom/config.yaml)
 uv run loom setup
+
+# Scaffold new configs (interactive, generates YAML)
+uv run loom new worker                                     # scaffold a worker config
+uv run loom new pipeline                                   # scaffold a pipeline config
+uv run loom new worker --non-interactive --name my_worker  # non-interactive mode
+
+# Validate configs (no infrastructure needed)
+uv run loom validate configs/workers/summarizer.yaml       # single file
+uv run loom validate configs/workers/*.yaml                # multiple files
+uv run loom validate --all                                 # all configs in configs/
 
 # RAG pipeline — zero-config, no NATS needed
 uv run loom rag ingest /path/to/telegram/exports/*.json   # ingest Telegram data
