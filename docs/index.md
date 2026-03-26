@@ -1,21 +1,21 @@
 # Loom
 
-**Encode your professional judgment into testable, composable AI steps.
-Chain them into workflows. Measure whether they work. Scale when ready.**
+**Turn what you know into testable AI steps. Chain them into workflows.
+Measure whether they work. Scale when ready.**
 
 ---
 
 ## What Loom Does
 
-The bottleneck with AI isn't the model — it's the **input layer**. Every
-frontier model already knows your domain. What it doesn't know is your
-process: the judgment calls, the edge cases, the analytical sequence that
-makes your work yours.
+Most AI tools give you one big prompt and one model. That works until it
+doesn't — the prompt gets unwieldy, you can't test parts independently,
+and asking the same model to review its own work doesn't catch real
+problems.
 
-Loom gives you infrastructure to encode that judgment into focused AI
-**steps**, each defined in YAML with a system prompt, typed contracts,
-and knowledge access rules. Test them. Chain them into pipelines. Measure
-whether they work. Scale when ready.
+Loom splits AI work into focused **steps**. Each step has a clear job, a
+typed contract (so you know what goes in and what comes out), and can use
+a different model. You test steps individually, chain them into pipelines,
+and measure whether changes help or hurt.
 
 ```text
   Document ──► Extract ──► Classify ──► Summarize ──► Report
@@ -44,17 +44,17 @@ Want to analyze Telegram channels? See the [RAG quickstart](GETTING_STARTED.md#r
 
 ## Who This Is For
 
-**Domain experts** — analysts, researchers, policy professionals. Define
-workers in YAML, test in the Workshop, iterate until the output matches
-your judgment. No Python needed.
+**Anyone hitting the limits of single-prompt AI.** Start with the six
+shipped workers in Workshop — no coding needed.
 
-**AI engineers** — build multi-step LLM workflows with typed contracts,
-tool-use, knowledge injection, and pipeline orchestration. Test everything
-locally before deploying.
+**Researchers and analysts** — process documents, extract data, build
+analytical pipelines with knowledge silos and blind audit review.
 
-**Platform teams** — deploy to Kubernetes with rate limiting, model tier
-management, dead-letter handling, and OpenTelemetry tracing. Scale any
-component independently.
+**AI engineers** — multi-step LLM workflows with typed contracts,
+tool-use, and pipeline orchestration.
+
+**Platform teams** — Kubernetes deployment with rate limiting, model tier
+management, and OpenTelemetry tracing.
 
 ## Key Features
 

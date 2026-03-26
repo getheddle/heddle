@@ -10,8 +10,8 @@
 [![Loom v0.9.0](https://img.shields.io/badge/loom-v0.9.0-blueviolet.svg)](https://github.com/IranTransitionProject/loom)
 [![Status: Active Development](https://img.shields.io/badge/status-active_development-brightgreen.svg)]()
 
-**Encode your professional judgment into testable, composable AI steps.
-Chain them into workflows. Measure whether they work. Scale when ready.**
+**Turn what you know into testable AI steps. Chain them into workflows.
+Measure whether they work. Scale when ready.**
 
 ---
 
@@ -42,20 +42,17 @@ No servers to run. No configuration files to write. The setup wizard handles eve
 
 ---
 
-## The Problem Loom Solves
+## What Loom Does
 
-The bottleneck with AI isn't the model — it's the **input layer**. Every
-frontier model already knows your domain. What it doesn't know is your
-process: the sequence of judgment calls you make when working through a
-problem, the edge cases you check, what matters and what's noise.
+Most AI tools give you one big prompt and one model. That works until it
+doesn't — the prompt gets unwieldy, you can't test parts independently,
+and asking the same model to review its own work doesn't catch real
+problems.
 
-Most AI tools optimize the output layer — fine-tuning, wrappers, retrieval.
-Loom goes the other direction. It gives you infrastructure to encode your
-judgment into **worker configs** (YAML files with system prompts, typed
-contracts, and knowledge access rules), **test them** against evaluation
-suites, **track versions** so you know whether a change helped, and
-**chain them** into multi-step pipelines where each step uses the right
-model for the task.
+Loom splits AI work into focused **steps**. Each step has a clear job, a
+typed contract (so you know what goes in and what comes out), and can use
+a different model. You test steps individually, chain them into pipelines,
+and measure whether changes help or hurt.
 
 ```text
   Document ──► Extract ──► Classify ──► Summarize ──► Report
@@ -65,23 +62,33 @@ model for the task.
                  └─ Ollama local (fast, free)
 ```
 
-Steps run in parallel when they can, use different AI models, and are
-tested with the built-in Workshop web UI — all without deploying any
-infrastructure. When you're ready to scale, Loom adds a message bus (NATS)
-that connects everything for production use.
+Steps run in parallel when they can, and are tested with the built-in
+Workshop web UI — all without deploying any infrastructure. When you're
+ready to scale, Loom adds a message bus (NATS) that connects everything
+for production use.
 
-> **[Why Loom?](docs/WHY_LOOM.md)** — How Loom compares to LangChain,
-> CrewAI, AutoGen, and vertical AI wrappers. When to use it and when not to.
+The key idea: the bottleneck with AI is never the model's knowledge —
+it's your ability to give it clear, precise instructions. Loom makes
+those instructions testable, version-tracked, and composable. The deeper
+argument for this approach is in **[Why Loom?](docs/WHY_LOOM.md)**
 
 ---
 
 ## Who This Is For
 
-**Domain experts** — analysts, researchers, policy professionals, anyone
-whose work involves structured reasoning over complex material. You
-define workers in YAML (no Python needed), test them in the Workshop
-browser UI, and iterate until the output matches your judgment. Your
-expertise is the input. Loom makes it testable and composable.
+**Anyone hitting the limits of single-prompt AI.** Whether you're a
+student comparing how different models answer questions, a teacher grading
+essays and checking for bias, or a city clerk categorizing public comments
+— if you need more than one AI step working together, Loom gives you a
+structured way to build that. Start with the six shipped workers in
+Workshop. No coding needed.
+
+**Researchers and analysts** — process documents, extract data, build
+analytical pipelines. Define your own workers in YAML, test them in
+Workshop, iterate until the output matches your judgment. Loom's knowledge
+silos and blind audit pattern let you get genuine adversarial review of
+AI-generated analysis — not the pseudo-review you get when the same model
+checks its own work.
 
 **AI engineers** — build multi-step LLM workflows with typed contracts,
 tool-use, knowledge injection, and pipeline orchestration. Test everything
@@ -139,7 +146,7 @@ Scale any component by running more copies — NATS load-balances automatically.
 | Feature | What It Does |
 |---------|-------------|
 | **6 Ready-Made Workers** | Summarizer, classifier, extractor, translator, QA, reviewer — chain them immediately |
-| **Workshop** | Web UI for testing, evaluating, and comparing step outputs — the compounding flywheel |
+| **Workshop** | Web UI for testing, evaluating, and comparing step outputs |
 | **Built-in Evaluation** | Test suites, scoring, golden dataset baselines, regression detection |
 | **Config-Driven** | Define workers in YAML — no Python code needed for LLM steps |
 | **Knowledge Silos** | Per-worker access control; blind audit workers can't see what they're reviewing |

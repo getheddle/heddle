@@ -7,15 +7,15 @@ frontier model has already ingested the entire internet. Claude knows what
 a good analysis looks like. So does GPT, Gemini, and every other frontier
 model. The model's knowledge was never the constraint.
 
-The constraint is the **input layer**: the human's ability to encode their
-professional judgment — the priorities, the edge cases, the decision
-sequences, the domain-specific reasoning — into instructions precise enough
-that a literal-minded machine can act on them without guessing.
+The constraint is the **input layer**: your ability to encode what you
+know — the priorities, the edge cases, the decision sequences, the
+domain-specific reasoning — into instructions precise enough that a
+literal-minded machine can act on them without guessing.
 
 A vague prompt produces the average of everything the model has seen. A
 precise prompt, one that closes off every path except the one you want,
-produces work that looks like it came from a domain expert. The difference
-is entirely in the input.
+produces work that looks like it came from someone who knows what they're
+doing. The difference is entirely in the input.
 
 ## What Most Tools Get Wrong
 
@@ -28,23 +28,22 @@ human can step back.
 
 This doesn't work. Not because the technology is bad, but because the
 bottleneck was never the model's knowledge. The bottleneck is the process:
-the sequence of judgment calls a skilled professional makes when working
-through a problem. What to look at first. What to weigh heavily. What
-edge cases to check. When to be aggressive and when to hold back. That
-process is invisible in the finished product — you can't reconstruct it
-by training on outputs. It has to be explicitly encoded by someone who
-understands both the domain and how to communicate with the model.
+the sequence of decisions someone makes when working through a problem.
+What to look at first. What to weigh heavily. What edge cases to check.
+That process is invisible in the finished product — you can't reconstruct
+it by training on outputs. It has to be explicitly encoded by someone who
+understands the domain and how to communicate with the model.
 
 The same error shows up at every level:
 
-- **Prompt template marketplaces** sell "7 Amazing Prompts" that stop
+- **Prompt template marketplaces** sell pre-made prompts that stop
   working the moment you need them for anything real. Good prompts don't
   generalize because the judgment baked into them is specific to the
   situation.
 
 - **Vertical AI wrappers** fine-tune models on domain documents and charge
   premium prices for access. But the model already knew the domain — the
-  missing ingredient was the analyst's process, not the model's knowledge.
+  missing ingredient was the human's process, not the model's knowledge.
 
 - **Multi-agent frameworks** (CrewAI, AutoGen, LangGraph) provide
   orchestration infrastructure but leave the input layer entirely to the
@@ -53,10 +52,10 @@ The same error shows up at every level:
 
 ## What Loom Does Differently
 
-Loom is infrastructure for the input layer. It gives domain experts —
-analysts, researchers, policy professionals, anyone whose work involves
-structured reasoning — a system for encoding their judgment into AI
-instructions that are validated, testable, version-tracked, and composable.
+Loom is infrastructure for the input layer. It gives you a system for
+encoding what you know into AI instructions that are validated, testable,
+version-tracked, and composable — whether you're a researcher building
+analytical pipelines or a teacher grading essays.
 
 ### Worker configs are skill files
 
@@ -64,17 +63,17 @@ A Loom worker config is a YAML file containing a system prompt, typed
 input/output contracts, model tier selection, and knowledge access rules.
 No Python code needed. This is the equivalent of what practitioners who
 go deep with AI call "skill files" — reusable documents encoding
-professional process. The difference: Loom's are structurally validated
+process knowledge. The difference: Loom's are structurally validated
 (the system catches malformed instructions before they run), version-tracked
 (every edit is preserved), and testable (you can run evaluation suites
 against them and measure whether a change made things better or worse).
 
 ### Workshop is the compounding flywheel
 
-Practitioners who build effective AI skill files describe a reinforcement
-loop: run the instructions, notice what worked and what didn't, update the
-instructions, repeat. Over hundreds of iterations, the skill file
-accumulates micro-decisions about how you practice.
+People who build effective AI skill files describe a reinforcement loop:
+run the instructions, notice what worked and what didn't, update the
+instructions, repeat. Over many iterations, the skill file accumulates
+decisions about what works.
 
 Loom's Workshop systematizes this loop. Instead of noticing problems by
 feel and editing a markdown file, you:
@@ -91,10 +90,9 @@ actually improved things.
 
 ### Blind audit prevents the abdication trap
 
-The most common failure mode with AI in professional work: shipping output
-without genuine review. The human asks the AI to do the thinking, takes
-whatever comes back, and acts on it. The results range from embarrassing
-to catastrophic.
+The most common failure mode with AI: shipping output without genuine
+review. The human asks the AI to do the thinking, takes whatever comes
+back, and acts on it. The results range from embarrassing to catastrophic.
 
 Loom's blind audit pattern is an architectural solution. Workers designated
 as "blind" (for audit or adversarial review) are prevented from accessing
@@ -105,26 +103,15 @@ ever sees the content. The result: genuine adversarial evaluation, not
 the pseudo-confirmatory review you get when the same model (or the same
 human) reviews its own work.
 
-This is the only reliable way to catch the things that look right but
-aren't — the confident-sounding analysis that misses a key factor, the
-well-formatted output that contains a subtle logical error. The blind
-reviewer catches it because it's reasoning from first principles, not
-pattern-matching against the framework it's supposed to be checking.
+### Config-driven means anyone can build
 
-### Config-driven means domain experts can drive
-
-The people who are best positioned to build effective AI workflows are
-not primarily technologists. They're domain experts — the analysts,
-researchers, lawyers, and policy professionals who have the judgment
-worth encoding. But most AI frameworks require Python fluency to do
-anything useful.
-
-Loom's workers are defined entirely in YAML. System prompt, input/output
-schema, model tier, knowledge access — all configuration. The interactive
+Most AI frameworks require Python fluency to do anything useful. Loom's
+workers are defined entirely in YAML. System prompt, input/output schema,
+model tier, knowledge access — all configuration. The interactive
 scaffolding (`loom new worker`, `loom new pipeline`) generates valid YAML
 from guided prompts. The Workshop provides a visual interface for testing
-and evaluation. A domain expert can build, test, and iterate on workers
-without writing code.
+and evaluation. You can build, test, and iterate on workers without
+writing code.
 
 ---
 
@@ -132,12 +119,21 @@ without writing code.
 
 **Loom is a good fit when:**
 
-- You need structured, auditable analytical pipelines — not one-off prompts
-- Multiple steps must work together (extract → classify → review → synthesize)
-- You want genuine adversarial review of AI-generated analysis
-- Domain experts (not just engineers) need to build and maintain workers
-- You need to measure whether prompt changes improve output quality
-- Work must be reproducible and explainable to oversight or review boards
+- You want more from AI than a single prompt can deliver
+- Multiple steps need to work together (extract → classify → summarize)
+- You want to measure whether AI output is actually getting better as you iterate
+- You need to classify, summarize, extract from, or review a batch of documents
+- You want a second AI to check the first one's work (blind audit)
+- The people building the workflows aren't software engineers
+- Work needs to be reproducible and explainable
+
+**Some concrete examples:**
+
+- Classify and summarize 300 public comment emails on a zoning proposal
+- Grade free-response essays against a rubric, then check for grading bias
+- Extract claims from research papers and flag contradictions
+- Compare how different AI models answer the same set of questions
+- Build an analytical pipeline with genuine adversarial review
 
 **Loom is probably not what you need when:**
 
