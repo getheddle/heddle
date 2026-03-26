@@ -6,8 +6,6 @@ requiring Ollama at test time.
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -16,10 +14,10 @@ from loom.contrib.rag.schemas.chunk import ChunkStrategy, TextChunk
 from loom.contrib.rag.schemas.embedding import EmbeddedChunk, SimilarityResult
 from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def tmp_db(tmp_path):
@@ -196,12 +194,20 @@ class TestSearch:
     )
     def test_search_returns_results(self, mock_embed, store):
         # Insert chunks with known embeddings
-        store.add_embedded_chunks([
-            _make_embedded_chunk("ec1", text="earthquake damage report",
-                                embedding=[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-            _make_embedded_chunk("ec2", text="weather forecast",
-                                embedding=[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-        ])
+        store.add_embedded_chunks(
+            [
+                _make_embedded_chunk(
+                    "ec1",
+                    text="earthquake damage report",
+                    embedding=[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                ),
+                _make_embedded_chunk(
+                    "ec2",
+                    text="weather forecast",
+                    embedding=[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                ),
+            ]
+        )
         # Query embedding similar to ec1
         mock_embed.return_value = [[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
         results = store.search("earthquake", limit=2)
@@ -221,9 +227,11 @@ class TestSearch:
         "loom.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
     )
     def test_search_min_score_filter(self, mock_embed, store):
-        store.add_embedded_chunks([
-            _make_embedded_chunk("ec1", embedding=[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-        ])
+        store.add_embedded_chunks(
+            [
+                _make_embedded_chunk("ec1", embedding=[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            ]
+        )
         mock_embed.return_value = [[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
         results = store.search("unrelated", min_score=0.99)
         assert len(results) == 0
@@ -232,12 +240,28 @@ class TestSearch:
         "loom.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
     )
     def test_search_channel_filter(self, mock_embed, store):
-        store.add_embedded_chunks([
-            EmbeddedChunk(chunk_id="ec1", source_global_id="p1", source_channel_id=100,
-                          text="a", embedding=[1.0] * 8, model="m", dimensions=8),
-            EmbeddedChunk(chunk_id="ec2", source_global_id="p2", source_channel_id=200,
-                          text="b", embedding=[1.0] * 8, model="m", dimensions=8),
-        ])
+        store.add_embedded_chunks(
+            [
+                EmbeddedChunk(
+                    chunk_id="ec1",
+                    source_global_id="p1",
+                    source_channel_id=100,
+                    text="a",
+                    embedding=[1.0] * 8,
+                    model="m",
+                    dimensions=8,
+                ),
+                EmbeddedChunk(
+                    chunk_id="ec2",
+                    source_global_id="p2",
+                    source_channel_id=200,
+                    text="b",
+                    embedding=[1.0] * 8,
+                    model="m",
+                    dimensions=8,
+                ),
+            ]
+        )
         mock_embed.return_value = [[1.0] * 8]
         results = store.search("query", channel_ids=[100])
         assert all(r.source_channel_id == 100 for r in results)
@@ -254,10 +278,12 @@ class TestStats:
         assert stats == {"total_chunks": 0}
 
     def test_stats_with_data(self, store):
-        store.add_embedded_chunks([
-            _make_embedded_chunk("ec1"),
-            _make_embedded_chunk("ec2"),
-        ])
+        store.add_embedded_chunks(
+            [
+                _make_embedded_chunk("ec1"),
+                _make_embedded_chunk("ec2"),
+            ]
+        )
         stats = store.stats()
         assert stats["total_chunks"] == 2
         assert stats["unique_posts"] == 1

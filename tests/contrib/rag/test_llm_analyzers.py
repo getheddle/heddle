@@ -10,8 +10,6 @@ import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
-import pytest
-
 from loom.contrib.rag.analysis.llm_analyzers import (
     AnomalyDetector,
     BaseAnalysisActor,
@@ -27,7 +25,6 @@ from loom.contrib.rag.schemas.analysis import (
 )
 from loom.contrib.rag.schemas.mux import MuxEntry
 from loom.contrib.rag.schemas.post import NormalizedPost
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -57,7 +54,7 @@ def _make_post(
         source_channel_id=channel_id,
         source_channel_name=channel_name,
         global_id=global_id,
-        message_id=int(global_id.split("_")[-1]) if "_" in global_id else 1,
+        message_id=int(global_id.rsplit("_", maxsplit=1)[-1]) if "_" in global_id else 1,
         text_raw=text,
         text_clean=text,
         timestamp=ts,
@@ -209,20 +206,22 @@ class TestTrendAnalyzer:
         assert analyzer.analyze([]) == []
 
     def test_basic_trend_detection(self):
-        llm = MockLLMBackend({
-            "trends": [
-                {
-                    "topic_label": "earthquake",
-                    "topic_label_fa": "زلزله",
-                    "description": "Reports of earthquake damage",
-                    "channels_present": ["FactNameh"],
-                    "post_indices": [1, 2],
-                    "keywords": ["earthquake", "damage"],
-                    "sentiment": "negative",
-                    "severity": "high",
-                }
-            ]
-        })
+        llm = MockLLMBackend(
+            {
+                "trends": [
+                    {
+                        "topic_label": "earthquake",
+                        "topic_label_fa": "زلزله",
+                        "description": "Reports of earthquake damage",
+                        "channels_present": ["FactNameh"],
+                        "post_indices": [1, 2],
+                        "keywords": ["earthquake", "damage"],
+                        "sentiment": "negative",
+                        "severity": "high",
+                    }
+                ]
+            }
+        )
         entries = _make_entries(3)
         analyzer = TrendAnalyzer("trend-1", llm=llm)
         signals = analyzer.analyze(entries)
@@ -234,19 +233,21 @@ class TestTrendAnalyzer:
         assert len(signals[0].exemplar_post_ids) == 2
 
     def test_invalid_post_indices_filtered(self):
-        llm = MockLLMBackend({
-            "trends": [
-                {
-                    "topic_label": "test",
-                    "description": "test",
-                    "channels_present": [],
-                    "post_indices": [1, 999],
-                    "keywords": [],
-                    "sentiment": "neutral",
-                    "severity": "low",
-                }
-            ]
-        })
+        llm = MockLLMBackend(
+            {
+                "trends": [
+                    {
+                        "topic_label": "test",
+                        "description": "test",
+                        "channels_present": [],
+                        "post_indices": [1, 999],
+                        "keywords": [],
+                        "sentiment": "neutral",
+                        "severity": "low",
+                    }
+                ]
+            }
+        )
         entries = _make_entries(2)
         analyzer = TrendAnalyzer("trend-1", llm=llm)
         signals = analyzer.analyze(entries)
@@ -254,13 +255,22 @@ class TestTrendAnalyzer:
         assert len(signals[0].exemplar_post_ids) == 1
 
     def test_malformed_trend_skipped(self):
-        llm = MockLLMBackend({
-            "trends": [
-                {"topic_label": "good", "description": "ok", "channels_present": [],
-                 "post_indices": [], "keywords": [], "sentiment": "neutral", "severity": "low"},
-                {"severity": "INVALID_ENUM_VALUE"},
-            ]
-        })
+        llm = MockLLMBackend(
+            {
+                "trends": [
+                    {
+                        "topic_label": "good",
+                        "description": "ok",
+                        "channels_present": [],
+                        "post_indices": [],
+                        "keywords": [],
+                        "sentiment": "neutral",
+                        "severity": "low",
+                    },
+                    {"severity": "INVALID_ENUM_VALUE"},
+                ]
+            }
+        )
         entries = _make_entries(2)
         analyzer = TrendAnalyzer("trend-1", llm=llm)
         signals = analyzer.analyze(entries)
@@ -284,18 +294,20 @@ class TestCorroborationFinder:
         assert finder.analyze(_make_entries(5, multi_channel=False)) == []
 
     def test_basic_corroboration(self):
-        llm = MockLLMBackend({
-            "corroborations": [
-                {
-                    "claim": "Earthquake struck southern province",
-                    "claim_fa": "زلزله در استان جنوبی",
-                    "supporting_channels": ["FactNameh", "Iranwire"],
-                    "contradicting_channels": [],
-                    "corroboration_score": 0.85,
-                    "notes": "Both channels report the same event",
-                }
-            ]
-        })
+        llm = MockLLMBackend(
+            {
+                "corroborations": [
+                    {
+                        "claim": "Earthquake struck southern province",
+                        "claim_fa": "زلزله در استان جنوبی",
+                        "supporting_channels": ["FactNameh", "Iranwire"],
+                        "contradicting_channels": [],
+                        "corroboration_score": 0.85,
+                        "notes": "Both channels report the same event",
+                    }
+                ]
+            }
+        )
         entries = _make_entries(5, multi_channel=True)
         finder = CorroborationFinder("corr-1", llm=llm)
         matches = finder.analyze(entries)
@@ -305,13 +317,20 @@ class TestCorroborationFinder:
         assert matches[0].analysis_type == AnalysisType.CORROBORATION
 
     def test_malformed_corroboration_skipped(self):
-        llm = MockLLMBackend({
-            "corroborations": [
-                {"claim": "good", "supporting_channels": [], "contradicting_channels": [],
-                 "corroboration_score": 0.5, "notes": "ok"},
-                {"corroboration_score": "NOT_A_NUMBER"},
-            ]
-        })
+        llm = MockLLMBackend(
+            {
+                "corroborations": [
+                    {
+                        "claim": "good",
+                        "supporting_channels": [],
+                        "contradicting_channels": [],
+                        "corroboration_score": 0.5,
+                        "notes": "ok",
+                    },
+                    {"corroboration_score": "NOT_A_NUMBER"},
+                ]
+            }
+        )
         entries = _make_entries(5, multi_channel=True)
         finder = CorroborationFinder("corr-1", llm=llm)
         matches = finder.analyze(entries)
@@ -330,17 +349,19 @@ class TestAnomalyDetector:
         assert detector.analyze([]) == []
 
     def test_semantic_anomaly_detection(self):
-        llm = MockLLMBackend({
-            "anomalies": [
-                {
-                    "anomaly_type": "narrative_break",
-                    "description": "Sudden shift in narrative",
-                    "affected_channels": ["FactNameh"],
-                    "severity": "medium",
-                    "recommendation": "Investigate further",
-                }
-            ]
-        })
+        llm = MockLLMBackend(
+            {
+                "anomalies": [
+                    {
+                        "anomaly_type": "narrative_break",
+                        "description": "Sudden shift in narrative",
+                        "affected_channels": ["FactNameh"],
+                        "severity": "medium",
+                        "recommendation": "Investigate further",
+                    }
+                ]
+            }
+        )
         entries = _make_entries(3)
         detector = AnomalyDetector("anom-1", llm=llm)
         flags = detector.analyze(entries)
@@ -389,13 +410,20 @@ class TestAnomalyDetector:
         assert len(volume_flags) == 0
 
     def test_malformed_anomaly_skipped(self):
-        llm = MockLLMBackend({
-            "anomalies": [
-                {"anomaly_type": "linguistic", "description": "ok",
-                 "affected_channels": [], "severity": "low", "recommendation": "none"},
-                {"anomaly_type": "INVALID_TYPE"},
-            ]
-        })
+        llm = MockLLMBackend(
+            {
+                "anomalies": [
+                    {
+                        "anomaly_type": "linguistic",
+                        "description": "ok",
+                        "affected_channels": [],
+                        "severity": "low",
+                        "recommendation": "none",
+                    },
+                    {"anomaly_type": "INVALID_TYPE"},
+                ]
+            }
+        )
         entries = _make_entries(3)
         detector = AnomalyDetector("anom-1", llm=llm)
         flags = detector.analyze(entries)
@@ -410,20 +438,22 @@ class TestAnomalyDetector:
 
 class TestDataExtractor:
     def test_basic_extraction(self):
-        llm = MockLLMBackend({
-            "data": [
-                {
-                    "datum_type": "statistic",
-                    "value": "1200",
-                    "value_normalized": "1200",
-                    "unit": "people",
-                    "entity": "displaced population",
-                    "source_post_index": 1,
-                    "context_snippet": "1200 people displaced",
-                    "confidence": 0.9,
-                }
-            ]
-        })
+        llm = MockLLMBackend(
+            {
+                "data": [
+                    {
+                        "datum_type": "statistic",
+                        "value": "1200",
+                        "value_normalized": "1200",
+                        "unit": "people",
+                        "entity": "displaced population",
+                        "source_post_index": 1,
+                        "context_snippet": "1200 people displaced",
+                        "confidence": 0.9,
+                    }
+                ]
+            }
+        )
         entries = _make_entries(3)
         extractor = DataExtractor("data-1", llm=llm)
         result = extractor.analyze(entries)
@@ -433,25 +463,38 @@ class TestDataExtractor:
         assert result.data[0].entity == "displaced population"
 
     def test_low_confidence_filtered(self):
-        llm = MockLLMBackend({
-            "data": [
-                {"datum_type": "statistic", "value": "100", "source_post_index": 1,
-                 "context_snippet": "x", "confidence": 0.3},
-            ]
-        })
+        llm = MockLLMBackend(
+            {
+                "data": [
+                    {
+                        "datum_type": "statistic",
+                        "value": "100",
+                        "source_post_index": 1,
+                        "context_snippet": "x",
+                        "confidence": 0.3,
+                    },
+                ]
+            }
+        )
         entries = _make_entries(2)
         extractor = DataExtractor("data-1", llm=llm)
         result = extractor.analyze(entries, confidence_floor=0.5)
         assert len(result.data) == 0
 
     def test_invalid_post_index_uses_fallback(self):
-        llm = MockLLMBackend({
-            "data": [
-                {"datum_type": "date_event", "value": "2025-01-15",
-                 "source_post_index": 999, "context_snippet": "test",
-                 "confidence": 0.8},
-            ]
-        })
+        llm = MockLLMBackend(
+            {
+                "data": [
+                    {
+                        "datum_type": "date_event",
+                        "value": "2025-01-15",
+                        "source_post_index": 999,
+                        "context_snippet": "test",
+                        "confidence": 0.8,
+                    },
+                ]
+            }
+        )
         entries = _make_entries(2)
         extractor = DataExtractor("data-1", llm=llm)
         result = extractor.analyze(entries)
@@ -459,30 +502,57 @@ class TestDataExtractor:
         assert result.data[0].source_global_id == "unknown"
 
     def test_malformed_datum_skipped(self):
-        llm = MockLLMBackend({
-            "data": [
-                {"datum_type": "statistic", "value": "ok", "source_post_index": 1,
-                 "context_snippet": "ok", "confidence": 0.9},
-                {"datum_type": "INVALID_TYPE", "confidence": 0.9},
-            ]
-        })
+        llm = MockLLMBackend(
+            {
+                "data": [
+                    {
+                        "datum_type": "statistic",
+                        "value": "ok",
+                        "source_post_index": 1,
+                        "context_snippet": "ok",
+                        "confidence": 0.9,
+                    },
+                    {"datum_type": "INVALID_TYPE", "confidence": 0.9},
+                ]
+            }
+        )
         entries = _make_entries(2)
         extractor = DataExtractor("data-1", llm=llm)
         result = extractor.analyze(entries)
         assert len(result.data) == 1
 
     def test_multiple_data_types(self):
-        llm = MockLLMBackend({
-            "data": [
-                {"datum_type": "person", "value": "Ali Khamenei", "entity": "Supreme Leader",
-                 "source_post_index": 1, "context_snippet": "test", "confidence": 0.95},
-                {"datum_type": "location", "value": "Tehran", "entity": "Capital",
-                 "source_post_index": 2, "context_snippet": "test", "confidence": 0.9},
-                {"datum_type": "price", "value": "50000 IRR", "unit": "IRR",
-                 "entity": "bread price", "source_post_index": 1,
-                 "context_snippet": "test", "confidence": 0.8},
-            ]
-        })
+        llm = MockLLMBackend(
+            {
+                "data": [
+                    {
+                        "datum_type": "person",
+                        "value": "Ali Khamenei",
+                        "entity": "Supreme Leader",
+                        "source_post_index": 1,
+                        "context_snippet": "test",
+                        "confidence": 0.95,
+                    },
+                    {
+                        "datum_type": "location",
+                        "value": "Tehran",
+                        "entity": "Capital",
+                        "source_post_index": 2,
+                        "context_snippet": "test",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "datum_type": "price",
+                        "value": "50000 IRR",
+                        "unit": "IRR",
+                        "entity": "bread price",
+                        "source_post_index": 1,
+                        "context_snippet": "test",
+                        "confidence": 0.8,
+                    },
+                ]
+            }
+        )
         entries = _make_entries(3)
         extractor = DataExtractor("data-1", llm=llm)
         result = extractor.analyze(entries)
