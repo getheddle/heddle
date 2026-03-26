@@ -1,41 +1,74 @@
 # Getting Started
 
-**Loom — Lightweight Orchestrated Operational Mesh**
-
 New to Loom? Start with [Concepts](CONCEPTS.md) to understand the mental model.
 
 ---
 
-## Quick Start (No Infrastructure Needed)
+## Quick Start — Try a Worker (No Data Files Needed)
 
-The fastest way to use Loom — analyze Telegram channels in 5 commands:
+The fastest way to see Loom work. Paste any text and get structured output.
 
 ```bash
-# 1. Install (from PyPI)
-pip install loom-ai[rag]
-# Or from source: git clone ... && uv sync --extra rag
+# 1. Install
+pip install loom-ai[workshop]
 
 # 2. Configure (interactive wizard — detects Ollama, prompts for API keys)
 loom setup
 
+# 3. Open the Workshop web UI
+loom workshop
+```
+
+Open your browser at `http://localhost:8080`. You'll see a list of workers.
+Click any worker → **Test** → paste text into the input box → click **Run**.
+
+Try these first:
+
+- **summarizer** — paste an article, get a structured summary with key points
+- **classifier** — paste text and a list of categories, get a classification with confidence score
+- **extractor** — paste a contract or report, define fields to extract (names, dates, amounts)
+- **qa** — paste a passage and ask a question, get an answer with source citations
+
+All four work with Ollama (free, local). If you don't have Ollama, `loom setup`
+will prompt for an Anthropic API key instead.
+
+See [Workers Reference](workers-reference.md) for full I/O schemas and the
+[Workshop Tour](WORKSHOP_TOUR.md) for what each screen does.
+
+---
+
+## RAG Quickstart
+
+If you have Telegram JSON exports, Loom can ingest, chunk, embed, and search
+them:
+
+```bash
+# 1. Install with RAG support
+pip install loom-ai[rag]
+
+# 2. Configure
+loom setup
+
 # 3. Ingest Telegram exports
-uv run loom rag ingest /path/to/telegram/exports/*.json
+loom rag ingest /path/to/telegram/exports/*.json
 
 # 4. Search
-uv run loom rag search "earthquake damage reports"
+loom rag search "earthquake damage reports"
 
 # 5. Open the dashboard
-uv run loom rag serve
+loom rag serve
 ```
 
 The `loom setup` wizard detects Ollama, prompts for API keys, and writes
 `~/.loom/config.yaml`. All settings can be overridden via environment
 variables or CLI flags. See [Configuration](CONFIG.md) for details.
 
+---
+
 ## Build Your First Worker
 
-Once you've tried the RAG pipeline, build your own AI step — or use one of
-the six that ship with Loom:
+Once you've tested the shipped workers, build your own — or chain existing
+ones into a pipeline:
 
 | Worker | What it does | Tier |
 |--------|-------------|------|
@@ -46,33 +79,31 @@ the six that ship with Loom:
 | `qa` | Answer questions from provided context with citations | local |
 | `reviewer` | Review content quality against configurable criteria | standard |
 
-See [Workers Reference](workers-reference.md) for full I/O schemas and examples.
-
 ```bash
-# Create your own worker interactively
-uv run loom new worker
+# Create your own worker interactively (generates YAML for you)
+loom new worker
 
-# Or chain shipped workers into a pipeline
-uv run loom new pipeline
+# Chain workers into a pipeline
+loom new pipeline
 
 # Validate configs (no infrastructure needed)
-uv run loom validate configs/workers/*.yaml
+loom validate configs/workers/*.yaml
 
-# Test in the web UI
-uv run loom workshop
+# Test in the Workshop
+loom workshop
 ```
 
 No NATS or infrastructure needed. The Workshop calls LLM backends directly.
 
 > **That's it for basic usage.** Everything below is for when you need the
-> full distributed infrastructure (multi-user, scaling, custom workers).
+> full distributed infrastructure (multi-user, scaling, continuous processing).
 
 ---
 
-## Prerequisites
+## Prerequisites (Full Infrastructure)
 
 - Python 3.11+
-- [uv](https://docs.astral.sh/uv/) package manager
+- [uv](https://docs.astral.sh/uv/) package manager (recommended for development)
 - At least one LLM backend (Ollama recommended to start)
 - NATS and Valkey for full infrastructure (not needed for Quick Start)
 
@@ -232,6 +263,7 @@ uv run loom workshop --port 8080
 | Goal | Guide |
 |------|-------|
 | Understand the mental model | [Concepts](CONCEPTS.md) |
+| Tour the Workshop UI | [Workshop Tour](WORKSHOP_TOUR.md) |
 | Build workers, pipelines, tools | [Building Workflows](building-workflows.md) |
 | Set up RAG analysis pipeline | [RAG How-To](rag-howto.md) |
 | Configure settings and API keys | [Configuration](CONFIG.md) |

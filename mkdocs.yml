@@ -1,5 +1,5 @@
 site_name: Loom
-site_description: Actor-based multi-LLM orchestration framework
+site_description: Split complex AI work into focused steps — test, chain, and scale.
 site_url: https://irantransitionproject.github.io/loom/
 repo_url: https://github.com/IranTransitionProject/loom
 repo_name: IranTransitionProject/loom
@@ -72,12 +72,13 @@ nav:
   - User Guide:
     - Concepts: CONCEPTS.md
     - Getting Started: GETTING_STARTED.md
+    - Workshop Tour: WORKSHOP_TOUR.md
     - Configuration: CONFIG.md
     - CLI Reference: CLI_REFERENCE.md
     - Workers Reference: workers-reference.md
     - RAG How-To: rag-howto.md
     - Building Workflows: building-workflows.md
-    - Workshop: workshop.md
+    - Workshop Architecture: workshop.md
     - Troubleshooting: TROUBLESHOOTING.md
   - Architecture:
     - Overview: ARCHITECTURE.md

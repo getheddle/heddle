@@ -17,18 +17,23 @@
 ## Try It in 60 Seconds
 
 ```bash
-pip install loom-ai[rag]                              # install from PyPI
+pip install loom-ai[workshop]                         # install from PyPI
 loom setup                                            # configure (auto-detects Ollama)
-loom rag ingest /path/to/telegram/exports/*.json
-loom rag search "earthquake damage reports"
-loom rag serve                                        # open dashboard at localhost:8080
+loom workshop                                         # open web UI at localhost:8080
 ```
+
+Open your browser → pick a worker (summarizer, classifier, extractor) →
+paste any text → click Run. No data files needed.
+
+**Have Telegram exports?** Install with `pip install loom-ai[rag]` instead,
+then run `loom rag ingest`, `loom rag search`, and `loom rag serve` for
+full social media stream analysis.
 
 Or from source:
 
 ```bash
 git clone https://github.com/IranTransitionProject/loom.git && cd loom
-uv sync --extra rag
+uv sync --extra workshop
 uv run loom setup
 ```
 
@@ -60,9 +65,9 @@ everything for production use.
 
 ## Who This Is For
 
-**Researchers and analysts** — analyze social media streams, extract data from
-documents, build knowledge graphs. Start with `loom rag` and the Workshop
-dashboard. No infrastructure knowledge needed.
+**Researchers and analysts** — analyze documents, extract data, build
+knowledge graphs. Start with the Workshop and shipped workers. No
+infrastructure knowledge needed.
 
 **AI engineers** — build multi-step LLM workflows with typed contracts, tool-use,
 knowledge injection, and pipeline orchestration. Test everything locally before
@@ -76,40 +81,39 @@ independently.
 
 ## Three Ways to Use Loom
 
-### 1. Command line (no setup)
+### 1. Workshop (no setup beyond install)
 
-Ingest data, search, and analyze — all from the terminal:
-
-```bash
-uv run loom rag ingest exports/*.json    # ingest Telegram channels
-uv run loom rag search "protest reports"  # semantic search
-uv run loom rag stats                     # store statistics
-```
-
-### 2. Build your own steps (guided)
-
-Scaffold workers and pipelines interactively — YAML is generated for you:
+Test shipped workers in the browser — paste text, get results:
 
 ```bash
-uv run loom new worker                   # create a step from prompts
-uv run loom new pipeline                 # chain steps into a workflow
-uv run loom validate configs/workers/*.yaml  # check your configs
-uv run loom workshop --port 8080         # test and evaluate in the web UI
+loom workshop                            # open web UI
+# → Workers → summarizer → Test → paste text → Run
 ```
 
 Six ready-made workers ship with Loom: **summarizer**, **classifier**,
 **extractor**, **translator**, **qa** (question answering with source
 citations), and **reviewer** (quality review against configurable criteria).
 
+### 2. Build your own steps (guided)
+
+Scaffold workers and pipelines interactively — YAML is generated for you:
+
+```bash
+loom new worker                   # create a step from prompts
+loom new pipeline                 # chain steps into a workflow
+loom validate configs/workers/*.yaml  # check your configs
+loom workshop                     # test and evaluate in the web UI
+```
+
 ### 3. Distributed infrastructure (production)
 
 For teams, continuous processing, or high-throughput scenarios:
 
 ```bash
-uv run loom router --nats-url nats://localhost:4222
-uv run loom worker --config configs/workers/summarizer.yaml --tier local
-uv run loom pipeline --config configs/orchestrators/my_pipeline.yaml
-uv run loom submit "Analyze the quarterly reports"
+loom router --nats-url nats://localhost:4222
+loom worker --config configs/workers/summarizer.yaml --tier local
+loom pipeline --config configs/orchestrators/my_pipeline.yaml
+loom submit "Analyze the quarterly reports"
 ```
 
 Scale any component by running more copies — NATS load-balances automatically.
@@ -121,12 +125,12 @@ Scale any component by running more copies — NATS load-balances automatically.
 | Feature | What It Does |
 |---------|-------------|
 | **6 Ready-Made Workers** | Summarizer, classifier, extractor, translator, QA, reviewer — chain them immediately |
+| **Workshop** | Web UI for testing, evaluating, and comparing step outputs |
 | **LLM Steps** | YAML-defined AI tasks with system prompts, JSON Schema contracts, tool-use |
 | **Processor Steps** | Non-LLM tasks (PDF extraction, chunking, embedding) in the same pipeline |
 | **Document Processing** | PDF/DOCX extraction via MarkItDown (fast) or Docling (deep OCR). Smart fallback. |
 | **Pipeline Orchestration** | Chain steps with automatic dependency detection and parallelism |
 | **Three Model Tiers** | Local (Ollama), Standard (Claude Sonnet), Frontier (Claude Opus) |
-| **Workshop** | Web UI for testing, evaluating, and comparing step outputs |
 | **RAG Pipeline** | Telegram channel ingestion, chunking, vector search (DuckDB or LanceDB) |
 | **MCP Gateway** | Expose any workflow as an MCP server with a single YAML config |
 | **Config Wizard** | `loom setup` auto-detects backends; `loom new` scaffolds workers/pipelines |
@@ -143,7 +147,8 @@ Start here:
 | Guide | Description |
 |-------|-------------|
 | **[Concepts](docs/CONCEPTS.md)** | How Loom works — the mental model in plain language |
-| **[Getting Started](docs/GETTING_STARTED.md)** | Install and run your first pipeline |
+| **[Getting Started](docs/GETTING_STARTED.md)** | Install and get your first result |
+| **[Workshop Tour](docs/WORKSHOP_TOUR.md)** | What each Workshop screen does and when to use it |
 | **[Configuration](docs/CONFIG.md)** | `~/.loom/config.yaml` reference and priority chain |
 | **[CLI Reference](docs/CLI_REFERENCE.md)** | All 19 commands with every flag and default |
 | **[Workers Reference](docs/workers-reference.md)** | 6 shipped workers with I/O schemas and examples |
@@ -179,7 +184,7 @@ Go deeper:
 
 ## Get Involved
 
-**Use it.** Start with `uv run loom setup` and go from there.
+**Use it.** Start with `loom setup` and go from there.
 
 **Contribute.** New step types, contrib packages, test coverage, and docs are
 welcome. See [Contributing](docs/CONTRIBUTING.md).
