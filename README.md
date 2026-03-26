@@ -10,7 +10,8 @@
 [![Loom v0.9.0](https://img.shields.io/badge/loom-v0.9.0-blueviolet.svg)](https://github.com/IranTransitionProject/loom)
 [![Status: Active Development](https://img.shields.io/badge/status-active_development-brightgreen.svg)]()
 
-**Split complex AI work into focused steps. Test them individually. Chain them into workflows. Scale when you need to.**
+**Encode your professional judgment into testable, composable AI steps.
+Chain them into workflows. Measure whether they work. Scale when ready.**
 
 ---
 
@@ -41,11 +42,20 @@ No servers to run. No configuration files to write. The setup wizard handles eve
 
 ---
 
-## What Loom Does
+## The Problem Loom Solves
 
-Instead of one giant AI prompt that tries to do everything, Loom lets you break
-work into small, focused **steps** — each with a clear job, testable
-independently, and using the right model for the task.
+The bottleneck with AI isn't the model — it's the **input layer**. Every
+frontier model already knows your domain. What it doesn't know is your
+process: the sequence of judgment calls you make when working through a
+problem, the edge cases you check, what matters and what's noise.
+
+Most AI tools optimize the output layer — fine-tuning, wrappers, retrieval.
+Loom goes the other direction. It gives you infrastructure to encode your
+judgment into **worker configs** (YAML files with system prompts, typed
+contracts, and knowledge access rules), **test them** against evaluation
+suites, **track versions** so you know whether a change helped, and
+**chain them** into multi-step pipelines where each step uses the right
+model for the task.
 
 ```text
   Document ──► Extract ──► Classify ──► Summarize ──► Report
@@ -55,27 +65,31 @@ independently, and using the right model for the task.
                  └─ Ollama local (fast, free)
 ```
 
-Steps can run in parallel, use different AI models, and be tested with the
-built-in Workshop web UI — all without deploying any infrastructure.
+Steps run in parallel when they can, use different AI models, and are
+tested with the built-in Workshop web UI — all without deploying any
+infrastructure. When you're ready to scale, Loom adds a message bus (NATS)
+that connects everything for production use.
 
-When you're ready to scale, Loom adds a message bus (NATS) that connects
-everything for production use.
+> **[Why Loom?](docs/WHY_LOOM.md)** — How Loom compares to LangChain,
+> CrewAI, AutoGen, and vertical AI wrappers. When to use it and when not to.
 
 ---
 
 ## Who This Is For
 
-**Researchers and analysts** — analyze documents, extract data, build
-knowledge graphs. Start with the Workshop and shipped workers. No
-infrastructure knowledge needed.
+**Domain experts** — analysts, researchers, policy professionals, anyone
+whose work involves structured reasoning over complex material. You
+define workers in YAML (no Python needed), test them in the Workshop
+browser UI, and iterate until the output matches your judgment. Your
+expertise is the input. Loom makes it testable and composable.
 
-**AI engineers** — build multi-step LLM workflows with typed contracts, tool-use,
-knowledge injection, and pipeline orchestration. Test everything locally before
-deploying.
+**AI engineers** — build multi-step LLM workflows with typed contracts,
+tool-use, knowledge injection, and pipeline orchestration. Test everything
+locally before deploying.
 
 **Platform teams** — deploy to Kubernetes with rate limiting, model tier
-management, dead-letter handling, and OpenTelemetry tracing. Scale any component
-independently.
+management, dead-letter handling, and OpenTelemetry tracing. Scale any
+component independently.
 
 ---
 
@@ -125,16 +139,16 @@ Scale any component by running more copies — NATS load-balances automatically.
 | Feature | What It Does |
 |---------|-------------|
 | **6 Ready-Made Workers** | Summarizer, classifier, extractor, translator, QA, reviewer — chain them immediately |
-| **Workshop** | Web UI for testing, evaluating, and comparing step outputs |
-| **LLM Steps** | YAML-defined AI tasks with system prompts, JSON Schema contracts, tool-use |
-| **Processor Steps** | Non-LLM tasks (PDF extraction, chunking, embedding) in the same pipeline |
-| **Document Processing** | PDF/DOCX extraction via MarkItDown (fast) or Docling (deep OCR). Smart fallback. |
+| **Workshop** | Web UI for testing, evaluating, and comparing step outputs — the compounding flywheel |
+| **Built-in Evaluation** | Test suites, scoring, golden dataset baselines, regression detection |
+| **Config-Driven** | Define workers in YAML — no Python code needed for LLM steps |
+| **Knowledge Silos** | Per-worker access control; blind audit workers can't see what they're reviewing |
 | **Pipeline Orchestration** | Chain steps with automatic dependency detection and parallelism |
 | **Three Model Tiers** | Local (Ollama), Standard (Claude Sonnet), Frontier (Claude Opus) |
+| **Document Processing** | PDF/DOCX extraction via MarkItDown (fast) or Docling (deep OCR) |
 | **RAG Pipeline** | Telegram channel ingestion, chunking, vector search (DuckDB or LanceDB) |
 | **MCP Gateway** | Expose any workflow as an MCP server with a single YAML config |
 | **Config Wizard** | `loom setup` auto-detects backends; `loom new` scaffolds workers/pipelines |
-| **Config Validation** | `loom validate` checks configs without starting infrastructure |
 | **Live Monitoring** | TUI dashboard, OpenTelemetry tracing, dead-letter inspection |
 | **Deployment** | Docker Compose, Kubernetes manifests, mDNS discovery |
 
@@ -148,6 +162,7 @@ Start here:
 |-------|-------------|
 | **[Concepts](docs/CONCEPTS.md)** | How Loom works — the mental model in plain language |
 | **[Getting Started](docs/GETTING_STARTED.md)** | Install and get your first result |
+| **[Why Loom?](docs/WHY_LOOM.md)** | How Loom compares to other frameworks — and when not to use it |
 | **[Workshop Tour](docs/WORKSHOP_TOUR.md)** | What each Workshop screen does and when to use it |
 | **[Configuration](docs/CONFIG.md)** | `~/.loom/config.yaml` reference and priority chain |
 | **[CLI Reference](docs/CLI_REFERENCE.md)** | All 19 commands with every flag and default |

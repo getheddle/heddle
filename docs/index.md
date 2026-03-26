@@ -1,14 +1,21 @@
 # Loom
 
-**Split complex AI work into focused steps. Test them individually. Chain them into workflows. Scale when you need to.**
+**Encode your professional judgment into testable, composable AI steps.
+Chain them into workflows. Measure whether they work. Scale when ready.**
 
 ---
 
 ## What Loom Does
 
-Instead of one giant AI prompt that tries to do everything, Loom splits work into
-small, focused **steps** — each with a clear job, testable independently, and
-using the right model for the task.
+The bottleneck with AI isn't the model — it's the **input layer**. Every
+frontier model already knows your domain. What it doesn't know is your
+process: the judgment calls, the edge cases, the analytical sequence that
+makes your work yours.
+
+Loom gives you infrastructure to encode that judgment into focused AI
+**steps**, each defined in YAML with a system prompt, typed contracts,
+and knowledge access rules. Test them. Chain them into pipelines. Measure
+whether they work. Scale when ready.
 
 ```text
   Document ──► Extract ──► Classify ──► Summarize ──► Report
@@ -37,9 +44,9 @@ Want to analyze Telegram channels? See the [RAG quickstart](GETTING_STARTED.md#r
 
 ## Who This Is For
 
-**Researchers and analysts** — analyze documents, extract data, build
-knowledge graphs. Start with the Workshop and shipped workers. No
-infrastructure knowledge needed.
+**Domain experts** — analysts, researchers, policy professionals. Define
+workers in YAML, test in the Workshop, iterate until the output matches
+your judgment. No Python needed.
 
 **AI engineers** — build multi-step LLM workflows with typed contracts,
 tool-use, knowledge injection, and pipeline orchestration. Test everything
@@ -55,12 +62,13 @@ component independently.
 |---------|-------------|
 | **6 Ready-Made Workers** | Summarizer, classifier, extractor, translator, QA, reviewer — use immediately |
 | **Workshop** | Web UI for testing, evaluating, and comparing step outputs |
+| **Built-in Evaluation** | Test suites, scoring, golden dataset baselines, regression detection |
+| **Config-Driven** | Define workers in YAML — no Python code needed for LLM steps |
+| **Knowledge Silos** | Per-worker access control; blind audit workers can't see what they're reviewing |
 | **Pipeline Orchestration** | Chain steps with automatic dependency detection and parallelism |
 | **Three Model Tiers** | Local (Ollama), Standard (Claude Sonnet), Frontier (Claude Opus) |
-| **Config-Driven** | Define workers in YAML — no Python code needed for LLM steps |
 | **RAG Pipeline** | Telegram channel ingestion, chunking, vector search |
 | **MCP Gateway** | Expose any workflow as an MCP server |
-| **Built-in Evaluation** | Test suites, scoring, regression detection via golden datasets |
 
 ## Documentation
 
@@ -70,6 +78,7 @@ Start here:
 |-------|-------------|
 | **[Concepts](CONCEPTS.md)** | How Loom works — the mental model in plain language |
 | **[Getting Started](GETTING_STARTED.md)** | Install, configure, and get your first result |
+| **[Why Loom?](WHY_LOOM.md)** | How Loom compares to other frameworks — and when not to use it |
 | **[Workshop Tour](WORKSHOP_TOUR.md)** | What each Workshop screen does and when to use it |
 | **[Workers Reference](workers-reference.md)** | 6 shipped workers with I/O schemas and examples |
 | **[CLI Reference](CLI_REFERENCE.md)** | All commands with every flag and default |

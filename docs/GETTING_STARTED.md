@@ -263,6 +263,7 @@ uv run loom workshop --port 8080
 | Goal | Guide |
 |------|-------|
 | Understand the mental model | [Concepts](CONCEPTS.md) |
+| How Loom compares to other tools | [Why Loom?](WHY_LOOM.md) |
 | Tour the Workshop UI | [Workshop Tour](WORKSHOP_TOUR.md) |
 | Build workers, pipelines, tools | [Building Workflows](building-workflows.md) |
 | Set up RAG analysis pipeline | [RAG How-To](rag-howto.md) |

@@ -1,5 +1,5 @@
 site_name: Loom
-site_description: Split complex AI work into focused steps — test, chain, and scale.
+site_description: Encode your professional judgment into testable, composable AI steps.
 site_url: https://irantransitionproject.github.io/loom/
 repo_url: https://github.com/IranTransitionProject/loom
 repo_name: IranTransitionProject/loom
@@ -72,6 +72,7 @@ nav:
   - User Guide:
     - Concepts: CONCEPTS.md
     - Getting Started: GETTING_STARTED.md
+    - Why Loom: WHY_LOOM.md
     - Workshop Tour: WORKSHOP_TOUR.md
     - Configuration: CONFIG.md
     - CLI Reference: CLI_REFERENCE.md
