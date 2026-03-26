@@ -70,7 +70,7 @@ for production use.
 The key idea: the bottleneck with AI is never the model's knowledge —
 it's your ability to give it clear, precise instructions. Loom makes
 those instructions testable, version-tracked, and composable. The deeper
-argument for this approach is in **[Why Loom?](docs/WHY_LOOM.md)**
+argument for this approach is in **[Why Loom?](docs/WHY_LOOM.md).**
 
 ---
 

@@ -1,45 +1,65 @@
 # Building AI Workflows with Loom
 
-This guide walks you through building your own AI-powered workflows using Loom. By the end, you'll know how to create workers, chain them into pipelines, and use features like knowledge injection and file-ref resolution.
+This guide walks you through building your own AI-powered workflows using
+Loom. By the end, you'll know how to create workers, test them in the
+Workshop, chain them into pipelines, and optionally deploy to infrastructure.
 
 ## Core concepts
 
-Loom is built on an **actor model** where work is split across independent, stateless actors communicating via NATS messages.
-
-**Workers** are the building blocks. Each worker does exactly one thing — summarize text, classify a document, extract fields, convert a PDF. Workers are configured entirely through YAML files: a system prompt, input/output schemas, and a model tier. They process one task, publish a result, and reset. No state carries between tasks.
+**Workers** are the building blocks. Each worker does exactly one thing —
+summarize text, classify a document, extract fields, convert a PDF. Workers
+are configured entirely through YAML files: a system prompt, input/output
+schemas, and a model tier. They process one task and reset. No state
+carries between tasks.
 
 There are two kinds of workers:
 
-- **LLM workers** call a language model (Ollama, Anthropic, OpenAI-compatible). They're defined by a system prompt and I/O schemas.
-- **Processor workers** run non-LLM code (Docling for PDFs, ffmpeg for media, scikit-learn, custom Python). They implement a `ProcessingBackend` interface.
+- **LLM workers** call a language model (Ollama, Anthropic, OpenAI-compatible).
+  They're defined by a system prompt and I/O schemas.
+- **Processor workers** run non-LLM code (Docling for PDFs, ffmpeg for media,
+  scikit-learn, custom Python). They implement a `ProcessingBackend` interface.
 
-**Orchestrators** coordinate workers. A `PipelineOrchestrator` runs stages with automatic dependency-aware parallelism, wiring outputs from one stage as inputs to the next. Independent stages run concurrently. An `OrchestratorActor` uses an LLM to dynamically decompose goals into subtasks and supports concurrent goal processing.
-
-**The router** sits between orchestrators and workers. It's deterministic (no LLM) — it reads the `worker_type` and `model_tier` from each task message and publishes it to the right NATS subject. It enforces rate limits and sends unroutable tasks to a dead-letter subject.
+**Pipelines** chain workers together so data flows from one to the next.
+Loom figures out which stages can run in parallel from the input mappings —
+you don't wire dependencies by hand.
 
 ```text
-Goal → Orchestrator → Router → Worker(s) → Results → Orchestrator → Final answer
+  Document ──► Extract ──► Classify ──► Summarize ──► Report
+                              │            │
+                              └── (run in parallel — both depend on Extract)
 ```
+
+**Workshop** is the web UI for testing and evaluating workers. It calls
+LLM backends directly — no NATS, no infrastructure. This is where you
+develop and refine workers before deploying them.
+
+> **Infrastructure (NATS)** connects workers, routers, and orchestrators
+> for production use. You don't need it to get started — the Workshop and
+> CLI work without it. See [Part 4](#part-4-deploy-to-infrastructure-nats)
+> when you're ready to scale.
 
 ## Prerequisites
 
-Before building workflows, complete the setup in the main README:
+- Python 3.11+ with `pip install loom-ai[workshop]` (or `uv sync --extra workshop`)
+- At least one LLM backend (Ollama recommended: `ollama pull llama3.2:3b`)
+- Run `loom setup` if you haven't already
 
-1. Python 3.11+ with `uv sync --all-extras`
-2. NATS server running (e.g., `docker run -d -p 4222:4222 nats:2.10-alpine`)
-3. At least one LLM backend (Ollama recommended: `ollama pull llama3.2:3b`)
-
-Verify the setup:
-
-```bash
-uv run pytest tests/ -v -m "not integration"   # all unit tests should pass
-```
+That's it. No NATS, no Valkey, no Docker — those are for production later.
 
 ## Part 1: Create an LLM worker
 
-LLM workers are the simplest way to add AI capability. You define the worker entirely in YAML — no Python code needed.
+LLM workers are the simplest way to add AI capability. You define the
+worker entirely in YAML — no Python code needed.
 
-### Step 1: Copy the template
+### Step 1: Create the worker config
+
+Use the interactive scaffolding (generates YAML from your answers):
+
+```bash
+loom new worker
+```
+
+Or copy the template and edit manually:
 
 ```bash
 cp configs/workers/_template.yaml configs/workers/entity_extractor.yaml
@@ -47,7 +67,7 @@ cp configs/workers/_template.yaml configs/workers/entity_extractor.yaml
 
 ### Step 2: Define the worker
 
-Edit the file. The key sections are the system prompt and I/O schemas:
+The key sections are the system prompt and I/O schemas:
 
 ```yaml
 name: "entity_extractor"
@@ -107,47 +127,81 @@ reset_after_task: true
 timeout_seconds: 30
 ```
 
-The schemas are enforced at runtime — if the LLM returns output that doesn't match `output_schema`, the task fails with a validation error rather than propagating garbage downstream.
+The schemas are enforced at runtime — if the LLM returns output that
+doesn't match `output_schema`, the task fails with a validation error
+rather than propagating garbage downstream.
 
-### Step 3: Run the worker
-
-```bash
-loom worker --config configs/workers/entity_extractor.yaml --tier local
-```
-
-The worker subscribes to `loom.tasks.entity_extractor.local` and waits for tasks.
-
-### Step 4: Test it
-
-In another terminal (with the router running):
+### Step 3: Validate the config
 
 ```bash
-loom submit "Extract entities from this text" \
-  --context text="The United Nations was founded in San Francisco in 1945 by Franklin Roosevelt." \
-  --nats-url nats://localhost:4222
+loom validate configs/workers/entity_extractor.yaml
 ```
+
+This checks the config without starting any infrastructure. If there
+are errors (missing fields, invalid schema, bad tier value), you'll see
+them immediately.
+
+### Step 4: Test in Workshop
+
+```bash
+loom workshop
+# Open http://localhost:8080 → Workers → entity_extractor → Test
+```
+
+Paste test input into the form:
+
+```json
+{
+  "text": "The United Nations was founded in San Francisco in 1945 by Franklin Roosevelt."
+}
+```
+
+Click **Run**. You'll see the structured JSON output, the raw LLM
+response, token usage, and latency. Edit the input and run again to
+iterate.
+
+The Workshop calls the LLM backend directly — same validation, same
+contract enforcement as production, but no NATS or infrastructure needed.
+
+### Step 5: Evaluate systematically
+
+Once the worker produces reasonable output, set up an evaluation suite
+in Workshop:
+
+1. Go to **Workers → entity_extractor → Eval**
+2. Define test cases with inputs and expected outputs
+3. Choose a scoring method (field match, exact match, or LLM judge)
+4. Run the eval and review per-case scores
+5. Set a golden baseline for regression detection
+
+Now when you edit the system prompt, you can re-run the eval and see
+whether the change helped or hurt. This is the compounding flywheel —
+each iteration makes the worker measurably better.
 
 ### Worker config validation
 
-Worker configs are validated at startup. The CLI will refuse to start a
-worker with an invalid config. Validation checks:
+Worker configs are validated at startup (and by `loom validate`).
+Validation checks:
 
 - `name` is required (string)
-- LLM workers require `system_prompt`; processor workers require `processing_backend`
-  (a fully qualified Python class path)
+- LLM workers require `system_prompt`; processor workers require
+  `processing_backend` (a fully qualified Python class path)
 - `default_model_tier` must be `local`, `standard`, or `frontier`
-- `input_schema` and `output_schema` must be valid JSON Schema objects (with valid
-  `type`, `required` as list, `properties` as dict-of-dicts)
-- `timeout_seconds`, `max_input_tokens`, `max_output_tokens` must be positive numbers
+- `input_schema` and `output_schema` must be valid JSON Schema objects
+  (with valid `type`, `required` as list, `properties` as dict-of-dicts)
+- `timeout_seconds`, `max_input_tokens`, `max_output_tokens` must be
+  positive numbers
 - `reset_after_task` must be `true` (workers are stateless)
 - `resolve_file_refs` requires `workspace_dir` to be set
 
-See `configs/workers/_template.yaml` for the canonical reference with all fields
-documented.
+See `configs/workers/_template.yaml` for the canonical reference with
+all fields documented.
 
 ## Part 2: Create a processor worker (non-LLM)
 
-Processor workers wrap Python libraries that aren't LLMs. Use these for document conversion, media processing, data transformation, or any deterministic computation.
+Processor workers wrap Python libraries that aren't LLMs. Use these for
+document conversion, media processing, data transformation, or any
+deterministic computation.
 
 ### Step 1: Implement a ProcessingBackend
 
@@ -166,7 +220,8 @@ class MyAsyncBackend(ProcessingBackend):
         }
 ```
 
-For synchronous/CPU-bound backends (the common case), use `SyncProcessingBackend`:
+For synchronous/CPU-bound backends (the common case), use
+`SyncProcessingBackend`:
 
 ```python
 from loom.worker.processor import SyncProcessingBackend
@@ -231,17 +286,32 @@ output_schema:
 timeout_seconds: 120
 ```
 
-### Step 4: Run it
+### Step 4: Validate and test
 
 ```bash
-loom processor --config configs/workers/my_processor.yaml
+# Validate the config
+loom validate configs/workers/my_processor.yaml
+
+# Test in Workshop (processor workers are testable too)
+loom workshop
 ```
 
 ## Part 3: Chain workers into a pipeline
 
-Pipelines run stages with automatic dependency-aware parallelism, wiring outputs from one stage as inputs to the next. Stage dependencies are inferred from `input_mapping` paths — stages that only reference `goal.*` paths or shared earlier stages are independent and run concurrently.
+Pipelines run stages with automatic dependency-aware parallelism, wiring
+outputs from one stage as inputs to the next. Stage dependencies are
+inferred from `input_mapping` paths — stages that only reference `goal.*`
+paths or shared earlier stages are independent and run concurrently.
 
 ### Step 1: Create a pipeline config
+
+Use the interactive scaffolding:
+
+```bash
+loom new pipeline
+```
+
+Or write the YAML manually:
 
 ```yaml
 name: "analysis_pipeline"
@@ -273,7 +343,9 @@ The `input_mapping` wires data between stages:
 - `"goal.context.file_ref"` — reads from the original goal's context
 - `"extract.output.text_preview"` — reads from the `extract` stage's output
 
-**Automatic parallelism:** In this example, both `classify` and `summarize` depend only on `extract` (not on each other), so the pipeline automatically runs them concurrently:
+**Automatic parallelism:** In this example, both `classify` and `summarize`
+depend only on `extract` (not on each other), so the pipeline automatically
+runs them concurrently:
 
 ```text
 Level 0: extract          (only goal.* deps)
@@ -290,22 +362,29 @@ To override automatic inference, add explicit `depends_on` lists:
       text: "extract.output.text_preview"
 ```
 
-### Step 2: Run the pipeline
+### Step 2: Validate the pipeline
 
 ```bash
-# Start all workers that the pipeline needs
-loom worker --config configs/workers/entity_extractor.yaml --tier local &
-loom processor --config configs/workers/doc_extractor.yaml &
-
-# Start the router
-loom router &
-
-# Start the pipeline orchestrator
-loom pipeline --config configs/orchestrators/analysis_pipeline.yaml
-
-# Submit a goal
-loom submit "Analyze document" --context file_ref=report.pdf
+loom validate configs/orchestrators/analysis_pipeline.yaml
 ```
+
+This checks for duplicate stage names, invalid tier values, malformed
+input mappings, unknown `depends_on` references, invalid condition syntax,
+and non-positive timeouts — all without starting any infrastructure.
+
+### Step 3: Test individual stages in Workshop
+
+Before running the full pipeline, test each worker in Workshop
+individually. This lets you iterate on system prompts and validate I/O
+contracts before wiring everything together.
+
+```bash
+loom workshop
+# Test each worker: entity_extractor, doc_classifier, doc_extractor
+```
+
+The Workshop Pipeline Editor also lets you visualize the dependency graph
+and edit stages interactively.
 
 ### Conditional stages
 
@@ -320,14 +399,14 @@ Stages can be skipped based on earlier stage outputs:
       file_ref: "goal.context.file_ref"
 ```
 
-Conditions support `==` and `!=` operators against `true`, `false`, `null`, and
-string literals. If the path doesn't exist, the condition evaluates to false
-(stage is skipped).
+Conditions support `==` and `!=` operators against `true`, `false`, `null`,
+and string literals. If the path doesn't exist, the condition evaluates to
+false (stage is skipped).
 
 ### Concurrent goal processing
 
-Pipelines can process multiple goals simultaneously. Add `max_concurrent_goals`
-to the pipeline config:
+Pipelines can process multiple goals simultaneously. Add
+`max_concurrent_goals` to the pipeline config:
 
 ```yaml
 name: "analysis_pipeline"
@@ -354,14 +433,49 @@ processing. Validation catches:
 - Invalid `condition` syntax (must be `path op value` with `==` or `!=`)
 - Non-positive timeout values
 
-If validation fails, the CLI prints the errors and exits immediately. Fix the
-config before restarting.
+If validation fails, the CLI prints the errors and exits immediately. Fix
+the config before restarting.
 
-## Part 4: Add knowledge context
+---
+
+## Part 4: Deploy to infrastructure (NATS)
+
+> **Everything above works without NATS.** The sections below are for
+> when you need distributed infrastructure: multi-user, continuous
+> processing, horizontal scaling, or production deployment.
+
+### Prerequisites
+
+1. NATS server running (e.g., `docker run -d -p 4222:4222 nats:2.10-alpine`)
+2. Optional: Valkey for checkpoint persistence (`docker run -d -p 6379:6379 valkey/valkey:8-alpine`)
+
+### Run workers on the mesh
+
+```bash
+# Terminal 1: Start the router
+loom router --nats-url nats://localhost:4222
+
+# Terminal 2: Start a worker
+loom worker --config configs/workers/entity_extractor.yaml --tier local --nats-url nats://localhost:4222
+
+# Terminal 3: Start the pipeline orchestrator
+loom pipeline --config configs/orchestrators/analysis_pipeline.yaml --nats-url nats://localhost:4222
+
+# Terminal 4: Submit a goal
+loom submit "Extract entities from this text" \
+  --context text="The United Nations was founded in San Francisco in 1945." \
+  --nats-url nats://localhost:4222
+```
+
+The worker subscribes to `loom.tasks.entity_extractor.local` and receives
+dispatched work. Scale any component by running more copies — NATS
+load-balances via queue groups automatically.
+
+## Part 5: Add knowledge context
 
 LLM workers can have domain-specific knowledge injected into their system prompt. This is useful for glossaries, style guides, domain rules, or few-shot examples.
 
-> **Note:** For folder-based knowledge with write-back support, see Part 7 (Knowledge silos). `knowledge_sources` is simpler but read-only and file-level only.
+> **Note:** For folder-based knowledge with write-back support, see Part 8 (Knowledge silos). `knowledge_sources` is simpler but read-only and file-level only.
 
 ### Step 1: Create a knowledge file
 
@@ -406,7 +520,7 @@ For few-shot examples, structure your YAML like this:
   output: "meeting_minutes"
 ```
 
-## Part 5: Use file-ref resolution
+## Part 6: Use file-ref resolution
 
 When pipeline stages produce large data (extracted documents, analysis results), they write JSON files to a shared workspace directory rather than inlining everything in NATS messages. LLM workers can automatically resolve these file references and inject the content into their prompt.
 
@@ -458,7 +572,7 @@ class MyBackend(SyncProcessingBackend):
 
 `WorkspaceManager.resolve()` prevents path traversal attacks — any attempt to reference `../../etc/passwd` raises `ValueError`.
 
-## Part 6: Configure routing rules
+## Part 7: Configure routing rules
 
 The router controls which model tier handles each worker type and enforces rate limits.
 
@@ -505,7 +619,7 @@ Full list of fields available in worker YAML configs:
 | `max_input_tokens` | no | `4000` | Max input token budget |
 | `max_output_tokens` | no | `2000` | Max output token budget |
 | `knowledge_sources` | no | `[]` | List of `{path, inject_as}` for context injection |
-| `knowledge_silos` | no | `[]` | List of silo defs — see Part 7 below |
+| `knowledge_silos` | no | `[]` | List of silo defs — see Part 8 below |
 | `workspace_dir` | no | — | Workspace directory for file-ref resolution |
 | `resolve_file_refs` | no | `[]` | Payload fields to resolve as workspace file refs |
 | `reset_after_task` | no | `true` | Always `true` for workers (statelessness is enforced) |
@@ -550,7 +664,7 @@ identically.
 | `loom.tasks.dead_letter` | Unroutable or rate-limited tasks land here |
 | `loom.results.{goal_id}` | Results flow back to the orchestrator that owns the goal |
 
-## Part 7: Knowledge silos (folder-based knowledge with write-back)
+## Part 8: Knowledge silos (folder-based knowledge with write-back)
 
 Knowledge silos are a more powerful alternative to `knowledge_sources`. They support folder-based loading (not just single files), `.siloignore` filtering, and **write-back** — the LLM can persist learned patterns by including `silo_updates` in its output.
 
@@ -606,7 +720,7 @@ __pycache__/
 *.tmp
 ```
 
-## Part 8: Tool-use (LLM function-calling)
+## Part 9: Tool-use (LLM function-calling)
 
 LLM workers support multi-turn tool-use via the standard function-calling protocol. Tools are loaded dynamically from Python classes.
 
@@ -673,7 +787,7 @@ The `config` dict is passed as keyword arguments to the tool class constructor.
 3. Tool results are fed back to the LLM as follow-up messages
 4. This continues for up to 10 rounds until the LLM produces a final text response
 
-## Part 9: Vector embeddings
+## Part 10: Vector embeddings
 
 Loom provides an `EmbeddingProvider` abstraction for generating vector embeddings. The built-in implementation uses Ollama's `/api/embed` endpoint.
 
@@ -724,7 +838,7 @@ class MyEmbeddingProvider(EmbeddingProvider):
 - **Monitor the dead-letter subject.** Tasks landing on `loom.tasks.dead_letter` indicate routing failures or rate limit hits. Use `nats sub loom.tasks.dead_letter` during development.
 - **LLM calls are auto-instrumented with OTel.** Loom automatically instruments all LLM calls with OpenTelemetry GenAI semantic conventions. Install the `otel` extra (`uv sync --extra otel`) to get distributed tracing across actors. See [Architecture — Distributed Tracing](ARCHITECTURE.md#distributed-tracing-tracing) for details.
 
-## Part 10: DuckDB integration (`loom.contrib.duckdb`)
+## Part 11: DuckDB integration (`loom.contrib.duckdb`)
 
 Loom includes optional DuckDB tools and backends for workflows that need embedded database storage, full-text search, or vector similarity search.
 
@@ -810,7 +924,7 @@ class MyQueryBackend(DuckDBQueryBackend):
 
 The backend accepts payloads with `action` set to `search`, `filter`, `stats`, `get`, or `vector_search`, plus action-specific parameters.
 
-## Part 11: MCP gateway (expose LOOM as an MCP server)
+## Part 12: MCP gateway (expose LOOM as an MCP server)
 
 Any LOOM system can become a Model Context Protocol (MCP) server with a single YAML config — zero MCP-specific code needed. Workers, pipelines, and query backends are automatically discovered as MCP tools with typed input schemas.
 
