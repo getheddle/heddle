@@ -29,6 +29,8 @@ def get_active_sessions() -> list[dict[str, Any]]:
                 active.append(data)
         except (json.JSONDecodeError, KeyError):
             continue
+    # Sort by last_active descending so [0] is genuinely most recent.
+    active.sort(key=lambda d: d.get("last_active", 0), reverse=True)
     return active
 
 

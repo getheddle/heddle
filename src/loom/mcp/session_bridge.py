@@ -223,7 +223,9 @@ class SessionBridge:
             if status.stdout.strip():
                 date_str = dt.datetime.now(tz=dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
                 commit_msg = f"Session {sid}: {message} — {date_str}"
-                self._git(["add", "-A"])
+                # Stage only data/ (analytical content) + tracked-file updates
+                self._git(["add", "data/"])
+                self._git(["add", "-u"])
                 commit = self._git(["commit", "-m", commit_msg])
                 committed = commit.returncode == 0
                 if committed:
