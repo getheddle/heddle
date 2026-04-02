@@ -16,6 +16,7 @@ from loom.mcp.server import (
     ToolEntry,
     _build_annotations,
     _dispatch_tool,
+    _execute_query_direct,
     _safe_dispatch,
     create_server,
 )
@@ -1153,6 +1154,108 @@ class TestDispatchToolWorkshop:
 
         with pytest.raises(BridgeError, match="Workshop tools are not configured"):
             await _dispatch_tool(gateway, entry, {})
+
+
+# ---------------------------------------------------------------------------
+# Direct query execution (no NATS)
+# ---------------------------------------------------------------------------
+
+
+class TestExecuteQueryDirect:
+    """Test _execute_query_direct for in-process query execution."""
+
+    async def test_direct_query_search(self):
+        """Direct query dispatches to backend handler in-process."""
+        mock_handler = MagicMock(
+            return_value={"results": [{"id": "1", "title": "Test"}]},
+        )
+        mock_backend = MagicMock()
+        mock_backend._get_handlers.return_value = {"search": mock_handler}
+
+        with patch("importlib.import_module") as mock_import:
+            mock_module = MagicMock()
+            mock_module.FakeBackend = MagicMock(return_value=mock_backend)
+            mock_import.return_value = mock_module
+
+            result = await _execute_query_direct(
+                meta={
+                    "backend_path": "some.module.FakeBackend",
+                    "backend_config": {"db_path": "/tmp/test.db"},
+                    "action": "search",
+                },
+                arguments={"query": "test"},
+            )
+
+        assert result == {"results": [{"id": "1", "title": "Test"}]}
+        mock_handler.assert_called_once_with(
+            {"action": "search", "query": "test"},
+        )
+
+    async def test_direct_query_unknown_action(self):
+        """Unknown action returns error dict."""
+        mock_backend = MagicMock()
+        mock_backend._get_handlers.return_value = {"search": MagicMock()}
+
+        with patch("importlib.import_module") as mock_import:
+            mock_module = MagicMock()
+            mock_module.FakeBackend = MagicMock(return_value=mock_backend)
+            mock_import.return_value = mock_module
+
+            result = await _execute_query_direct(
+                meta={
+                    "backend_path": "some.module.FakeBackend",
+                    "backend_config": {},
+                    "action": "nonexistent",
+                },
+                arguments={},
+            )
+
+        assert "error" in result
+        assert "nonexistent" in result["error"]
+
+    async def test_dispatch_query_direct_when_no_bus(self):
+        """_dispatch_tool routes queries directly when requires_bus is False."""
+        mock_handler = MagicMock(
+            return_value={"results": [{"id": "2"}]},
+        )
+        mock_backend = MagicMock()
+        mock_backend._get_handlers.return_value = {"filter": mock_handler}
+
+        bus = InMemoryBus()
+        await bus.connect()
+        bridge = MCPBridge(bus)
+
+        gateway = MCPGateway(
+            config={"name": "test"},
+            bridge=bridge,
+            tool_registry={},
+            tool_defs=[],
+            requires_bus=False,
+        )
+
+        entry = ToolEntry(
+            name="docs_filter",
+            kind="query",
+            tool_def={},
+            loom_meta={
+                "kind": "query",
+                "worker_type": "docs_query",
+                "action": "filter",
+                "backend_path": "some.module.FakeBackend",
+                "backend_config": {},
+            },
+        )
+
+        with patch("importlib.import_module") as mock_import:
+            mock_module = MagicMock()
+            mock_module.FakeBackend = MagicMock(return_value=mock_backend)
+            mock_import.return_value = mock_module
+
+            result = await _dispatch_tool(gateway, entry, {"type": "person"})
+
+        assert result == {"results": [{"id": "2"}]}
+        mock_handler.assert_called_once()
+        await bus.close()
 
 
 # ---------------------------------------------------------------------------

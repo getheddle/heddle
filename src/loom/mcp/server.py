@@ -93,9 +93,7 @@ def create_server(config_path: str) -> tuple[FastMCPType, MCPGateway]:
 
     # --- Discover tools ---
     tools_config = config.get("tools", {})
-    requires_bus = bool(
-        tools_config.get("workers") or tools_config.get("pipelines") or tools_config.get("queries")
-    )
+    requires_bus = bool(tools_config.get("workers") or tools_config.get("pipelines"))
 
     all_tools: list[dict[str, Any]] = []
     all_tools.extend(discover_worker_tools(tools_config.get("workers", [])))
@@ -338,7 +336,7 @@ async def _safe_dispatch(
         return {"error": f"Internal error: {exc}"}
 
 
-async def _dispatch_tool(
+async def _dispatch_tool(  # noqa: PLR0911
     gateway: MCPGateway,
     entry: ToolEntry,
     arguments: dict[str, Any],
@@ -363,12 +361,15 @@ async def _dispatch_tool(
         )
 
     if entry.kind == "query":
-        return await gateway.bridge.call_query(
-            worker_type=meta["worker_type"],
-            action=meta["action"],
-            payload=arguments,
-            timeout=meta.get("timeout", 30),
-        )
+        if gateway.requires_bus:
+            return await gateway.bridge.call_query(
+                worker_type=meta["worker_type"],
+                action=meta["action"],
+                payload=arguments,
+                timeout=meta.get("timeout", 30),
+            )
+        # Direct in-process query (no NATS).
+        return await _execute_query_direct(meta, arguments)
 
     if entry.kind == "workshop":
         if gateway.workshop_bridge is None:
@@ -502,6 +503,43 @@ def _build_council_bridge(
 
     runner = CouncilRunner(backends=backends)
     return CouncilBridge(runner=runner, configs_dir=configs_dir)
+
+
+# ---------------------------------------------------------------------------
+# Direct query execution (no NATS)
+# ---------------------------------------------------------------------------
+
+
+async def _execute_query_direct(
+    meta: dict[str, Any],
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    """Execute a query action directly against an in-process backend.
+
+    Used when the gateway has no NATS bus (local mode).  Instantiates
+    the query backend from the ``_loom`` metadata and calls its handler.
+    """
+    import importlib
+
+    backend_path = meta["backend_path"]
+    backend_config = meta.get("backend_config", {})
+    action = meta["action"]
+
+    module_path, class_name = backend_path.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    backend_class = getattr(module, class_name)
+    backend = backend_class(**backend_config)
+
+    handlers = backend._get_handlers()
+    handler = handlers.get(action)
+    if handler is None:
+        return {"error": f"Unknown query action: {action}"}
+
+    payload = {"action": action, **arguments}
+
+    # Query backends are synchronous — run in a thread.
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, handler, payload)
 
 
 # ---------------------------------------------------------------------------
