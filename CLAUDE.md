@@ -151,6 +151,20 @@ src/loom/
       tool.py             # LanceDBVectorTool — semantic similarity search via LanceDB
     redis/
       store.py            # RedisCheckpointStore — production checkpoint persistence
+    council/              # Multi-round deliberation framework
+      schemas.py          # AgentConfig, CouncilResult, TranscriptEntry, ConvergenceResult
+      config.py           # CouncilConfig Pydantic model, load/validate YAML configs
+      transcript.py       # TranscriptStore — round history, visibility filtering, truncation
+      protocol.py         # DiscussionProtocol ABC + RoundRobin, StructuredDebate, Delphi
+      convergence.py      # ConvergenceDetector — none, position_stability, llm_judge
+      runner.py           # CouncilRunner — NATS-free execution (like WorkerTestRunner)
+    chatbridge/           # External chat/LLM session adapters
+      base.py             # ChatBridge ABC, ChatResponse, SessionInfo
+      anthropic.py        # AnthropicChatBridge — Claude API with session history
+      openai.py           # OpenAIChatBridge — OpenAI/ChatGPT with session history
+      ollama.py           # OllamaChatBridge — local models with session history
+      manual.py           # ManualChatBridge — human-in-the-loop (callback or queue)
+      worker.py           # ChatBridgeBackend — wraps any ChatBridge as ProcessingBackend
     rag/
       backends.py         # Processor backends: IngestorBackend, MuxBackend, ChunkerBackend,
                           #   VectorStoreBackend (configurable store_class / ingestor_class)
@@ -196,6 +210,8 @@ configs/
   mcp/
     docman.yaml           # Example: document management MCP server config
   router_rules.yaml       # Tier overrides and per-tier rate limits
+  councils/
+    example.yaml          # Example council config (architecture review, 3 agents)
 
 docs/                     # Project documentation
   ARCHITECTURE.md         # System architecture overview
@@ -223,7 +239,7 @@ deploy/
   macos/                  # launchd plist files + install/uninstall scripts
   windows/                # NSSM-based Windows service install/uninstall scripts
 
-tests/                    # 69 test files, 1491 unit tests + 1 integration test (90% coverage)
+tests/                    # 81 test files, 1807 unit tests + 1 integration test (90% coverage)
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -258,6 +274,8 @@ tests/                    # 69 test files, 1491 unit tests + 1 integration test 
   test_integration.py                             # @pytest.mark.integration (needs NATS)
   test_deepeval_worker.py                         # @pytest.mark.deepeval (DeepEval + Ollama judge)
   conftest.py                                     # Shared fixtures: skip_no_deepeval, helpers
+  contrib/council/        # 6 council test files (schemas, config, transcript, protocol, convergence, runner)
+  contrib/chatbridge/     # 6 chatbridge test files (base, anthropic, openai, ollama, manual, worker)
   contrib/docproc/        # Document extraction backend tests (MarkItDown, SmartExtractor, contracts)
   contrib/rag/            # 8 RAG test files (abstractions, backends, chunker, ingestion, mux, schemas, telegram_live, tools)
   contrib/lancedb/        # LanceDB store tests
@@ -384,6 +402,8 @@ uv sync --extra mdns          # mDNS/Bonjour service discovery on LAN (zeroconf)
 uv sync --extra tui           # TUI terminal dashboard (Textual)
 uv sync --extra otel          # OpenTelemetry distributed tracing (spans, OTLP export)
 uv sync --extra eval          # DeepEval LLM output quality evaluation (Ollama judge, no cloud API)
+uv sync --extra council       # Council multi-round deliberation framework (no new deps)
+uv sync --extra chatbridge    # External chat/LLM session adapters (OpenAI client)
 uv sync --extra docs           # MkDocs-Material API documentation generation
 uv sync --all-extras          # All dependencies including dev/test
 ```

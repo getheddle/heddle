@@ -1,0 +1,40 @@
+name: "architecture_review"
+protocol: "round_robin"
+max_rounds: 3
+timeout_seconds: 300
+
+convergence:
+  method: "llm_judge"
+  threshold: 0.8
+  backend_tier: "standard"
+
+agents:
+  - name: "architect"
+    worker_type: "reviewer"
+    tier: "standard"
+    role: "Senior software architect — focus on system design and scalability"
+    sees_transcript_from: ["all"]
+    max_tokens_per_turn: 2000
+
+  - name: "security_reviewer"
+    worker_type: "reviewer"
+    tier: "standard"
+    role: "Security specialist — focus on threat modeling and attack surface"
+    sees_transcript_from: ["all"]
+    max_tokens_per_turn: 2000
+
+  - name: "critic"
+    worker_type: "reviewer"
+    tier: "frontier"
+    role: "Devil's advocate — stress-test all proposals and find weaknesses"
+    sees_transcript_from: ["architect", "security_reviewer"]
+
+facilitator:
+  tier: "standard"
+  synthesis_prompt: |
+    You are the facilitator of an architecture review discussion.
+    Synthesize the team's discussion into a coherent set of recommendations.
+    Highlight areas of agreement, unresolved tensions, and action items.
+  convergence_prompt: |
+    Rate the level of agreement among the participants from 0.0 to 1.0.
+    Respond with JSON only: {"score": 0.X, "reason": "..."}

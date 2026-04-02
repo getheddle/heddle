@@ -94,6 +94,12 @@ docs = [
 eval = [
     "deepeval>=3.8.0",         # LLM output quality evaluation (pytest metrics)
 ]
+council = [
+    # No new deps — reuses core (pydantic, yaml, httpx, structlog)
+]
+chatbridge = [
+    "openai>=1.0.0",           # OpenAI Chat Completions client
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

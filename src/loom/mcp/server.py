@@ -37,6 +37,8 @@ import structlog
 from loom.bus.nats_adapter import NATSBus
 from loom.mcp.bridge import BridgeError, MCPBridge
 from loom.mcp.config import load_mcp_config
+from loom.mcp.council_bridge import CouncilBridge
+from loom.mcp.council_discovery import discover_council_tools
 from loom.mcp.discovery import (
     discover_pipeline_tools,
     discover_query_tools,
@@ -71,6 +73,7 @@ class MCPGateway:
     resources: WorkspaceResources | None = None
     workshop_bridge: WorkshopBridge | None = None
     session_bridge: SessionBridge | None = None
+    council_bridge: CouncilBridge | None = None
     requires_bus: bool = True
 
 
@@ -131,6 +134,13 @@ def create_server(config_path: str) -> tuple[FastMCPType, MCPGateway]:
             ),
         )
 
+    # Council tools (optional — only if tools.council is present).
+    council_config = tools_config.get("council")
+    council_bridge: CouncilBridge | None = None
+    if council_config is not None:
+        all_tools.extend(discover_council_tools(council_config))
+        council_bridge = _build_council_bridge(council_config)
+
     # Build registry.
     registry: dict[str, ToolEntry] = {}
     mcp_tool_defs: list[dict[str, Any]] = []
@@ -169,6 +179,7 @@ def create_server(config_path: str) -> tuple[FastMCPType, MCPGateway]:
         resources=workspace_resources,
         workshop_bridge=workshop_bridge,
         session_bridge=session_bridge,
+        council_bridge=council_bridge,
         requires_bus=requires_bus,
     )
 
@@ -375,6 +386,14 @@ async def _dispatch_tool(
             arguments=arguments,
         )
 
+    if entry.kind == "council":
+        if gateway.council_bridge is None:
+            raise BridgeError("Council tools are not configured")
+        return await gateway.council_bridge.dispatch(
+            action=meta["action"],
+            arguments=arguments,
+        )
+
     raise BridgeError(f"Unknown tool kind: {entry.kind}")
 
 
@@ -458,6 +477,33 @@ def _build_workshop_bridge(
         dead_letter=dead_letter,
         replay_bus=replay_bus,
     )
+
+
+def _build_council_bridge(
+    council_config: dict[str, Any],
+) -> CouncilBridge:
+    """Construct a CouncilBridge from the MCP gateway council config.
+
+    Instantiates a :class:`CouncilRunner` with available LLM backends
+    and wraps it in a :class:`CouncilBridge`.
+    """
+    from loom.contrib.council.runner import CouncilRunner
+
+    configs_dir = council_config.get("configs_dir", "configs/councils")
+
+    # Build LLM backends from environment.
+    backends: dict = {}
+    try:
+        from loom.worker.backends import build_backends_from_env
+
+        backends = build_backends_from_env()
+    except Exception as exc:
+        logger.warning(
+            "council_bridge.backends_init_failed", reason=str(exc)
+        )
+
+    runner = CouncilRunner(backends=backends)
+    return CouncilBridge(runner=runner, configs_dir=configs_dir)
 
 
 # ---------------------------------------------------------------------------
