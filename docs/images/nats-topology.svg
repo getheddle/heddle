@@ -1,0 +1,53 @@
+        <?xml version="1.0" encoding="UTF-8"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 600" width="1100" height="600">
+        <defs><marker id="arrow_1" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#e85c5c"/></marker>
+<marker id="arrow_2" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#cc7333"/></marker>
+<marker id="arrow_3" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#4278d9"/></marker>
+<marker id="arrow_4" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#7d52c2"/></marker>
+<marker id="arrow_5" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#999"/></marker></defs>
+        <rect width="1100" height="600" rx="12" fill="#fafafb"/>
+<text x="40" y="38" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="700" fill="#1e1e26" text-anchor="start" dominant-baseline="central">Loom — NATS Subject Topology</text>
+<text x="40" y="62" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="central">Message routing conventions and subject hierarchy</text>
+<rect x="350" y="250" width="400" height="50" rx="8" fill="#f5c72e"/>
+<text x="550" y="275" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="700" fill="#4a3800" text-anchor="middle" dominant-baseline="central">NATS Server</text>
+<rect x="40" y="100" width="280" height="100" rx="8" fill="#fff" stroke="#e85c5c" stroke-width="2"/>
+<text x="180.0" y="118" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#e85c5c" text-anchor="middle" dominant-baseline="central">loom.goals.*</text>
+<text x="50" y="140" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="#999" text-anchor="start" dominant-baseline="central">pub:</text>
+<text x="80" y="140" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#666" text-anchor="start" dominant-baseline="central">MCP Gateway, CLI, API</text>
+<text x="50" y="158" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="#999" text-anchor="start" dominant-baseline="central">sub:</text>
+<text x="80" y="158" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#666" text-anchor="start" dominant-baseline="central">OrchestratorActor</text>
+<line x1="320" y1="150.0" x2="350" y2="275" stroke="#e85c5c" stroke-width="1.5" marker-end="url(#arrow_1)"/>
+<rect x="40" y="380" width="280" height="100" rx="8" fill="#fff" stroke="#cc7333" stroke-width="2"/>
+<text x="180.0" y="398" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#cc7333" text-anchor="middle" dominant-baseline="central">loom.tasks.{type}.{tier}</text>
+<text x="50" y="420" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="#999" text-anchor="start" dominant-baseline="central">pub:</text>
+<text x="80" y="420" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#666" text-anchor="start" dominant-baseline="central">Router</text>
+<text x="50" y="438" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="#999" text-anchor="start" dominant-baseline="central">sub:</text>
+<text x="80" y="438" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#666" text-anchor="start" dominant-baseline="central">WorkerActors (queue group)</text>
+<line x1="320" y1="430.0" x2="350" y2="275" stroke="#cc7333" stroke-width="1.5" marker-end="url(#arrow_2)"/>
+<rect x="780" y="100" width="280" height="100" rx="8" fill="#fff" stroke="#4278d9" stroke-width="2"/>
+<text x="920.0" y="118" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#4278d9" text-anchor="middle" dominant-baseline="central">loom.results.{goal_id}</text>
+<text x="790" y="140" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="#999" text-anchor="start" dominant-baseline="central">pub:</text>
+<text x="820" y="140" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#666" text-anchor="start" dominant-baseline="central">WorkerActors</text>
+<text x="790" y="158" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="#999" text-anchor="start" dominant-baseline="central">sub:</text>
+<text x="820" y="158" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#666" text-anchor="start" dominant-baseline="central">ResultStream</text>
+<line x1="750" y1="275" x2="780" y2="150.0" stroke="#4278d9" stroke-width="1.5" marker-end="url(#arrow_3)"/>
+<rect x="780" y="380" width="280" height="100" rx="8" fill="#fff" stroke="#7d52c2" stroke-width="2"/>
+<text x="920.0" y="398" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#7d52c2" text-anchor="middle" dominant-baseline="central">loom.control.*</text>
+<text x="790" y="420" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="#999" text-anchor="start" dominant-baseline="central">pub:</text>
+<text x="820" y="420" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#666" text-anchor="start" dominant-baseline="central">Workshop, CLI</text>
+<text x="790" y="438" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="#999" text-anchor="start" dominant-baseline="central">sub:</text>
+<text x="820" y="438" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#666" text-anchor="start" dominant-baseline="central">All Actors</text>
+<line x1="750" y1="275" x2="780" y2="430.0" stroke="#7d52c2" stroke-width="1.5" marker-end="url(#arrow_4)"/>
+<rect x="350" y="430" width="280" height="100" rx="8" fill="#fff" stroke="#999" stroke-width="2"/>
+<text x="490.0" y="448" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#999" text-anchor="middle" dominant-baseline="central">loom.deadletter.*</text>
+<text x="360" y="470" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="#999" text-anchor="start" dominant-baseline="central">pub:</text>
+<text x="390" y="470" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#666" text-anchor="start" dominant-baseline="central">Router, Workers</text>
+<text x="360" y="488" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="#999" text-anchor="start" dominant-baseline="central">sub:</text>
+<text x="390" y="488" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#666" text-anchor="start" dominant-baseline="central">DeadLetterConsumer</text>
+<line x1="490" y1="300" x2="490" y2="430" stroke="#999" stroke-width="1.5" marker-end="url(#arrow_5)"/>
+<rect x="40" y="490" width="400" height="26" rx="4" fill="#fff8f0" stroke="#f0dfc0" stroke-width="1"/>
+<text x="240.0" y="503.0" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#cc7333" text-anchor="middle" dominant-baseline="central">Workers use NATS queue groups for load balancing across instances</text>
+<rect x="780" y="490" width="280" height="40" rx="4" fill="#f4f0ff" stroke="#d4c8ee" stroke-width="1"/>
+<text x="920.0" y="510.0" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#7d52c2" text-anchor="middle" dominant-baseline="central">loom.control.reload — hot-reload configs
+loom.control.shutdown — graceful stop</text>
+        </svg>

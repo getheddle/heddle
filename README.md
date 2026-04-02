@@ -13,6 +13,8 @@
 **Turn what you know into testable AI steps. Chain them into workflows.
 Measure whether they work. Scale when ready.**
 
+![Architecture Overview](docs/images/architecture-overview.svg)
+
 ---
 
 ## Try It in 60 Seconds

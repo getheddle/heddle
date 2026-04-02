@@ -1,0 +1,117 @@
+        <?xml version="1.0" encoding="UTF-8"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1000" width="1440" height="1000">
+        <defs></defs>
+        <rect width="1440" height="1000" rx="12" fill="#fafafb"/>
+<text x="40" y="38" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="700" fill="#1e1e26" text-anchor="start" dominant-baseline="central">Loom — Architecture Overview</text>
+<text x="40" y="62" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="central">Actor-based LLM orchestration framework  ·  NATS messaging  ·  Typed contracts</text>
+<rect x="30" y="92" width="1380" height="118" rx="10" fill="#e0e8ff"/>
+<text x="44" y="106" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="500" fill="#888" text-anchor="start" dominant-baseline="hanging">INTERFACES</text>
+<rect x="60" y="124" width="165" height="58" rx="8" fill="#4278d9"/>
+<text x="142.5" y="153.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">MCP Gateway</text>
+<rect x="250" y="124" width="165" height="58" rx="8" fill="#4278d9"/>
+<text x="332.5" y="153.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Workshop UI</text>
+<rect x="440" y="124" width="120" height="58" rx="8" fill="#4278d9"/>
+<text x="500.0" y="153.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">CLI</text>
+<rect x="590" y="124" width="165" height="58" rx="8" fill="#4278d9"/>
+<text x="672.5" y="153.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">TUI Dashboard</text>
+<rect x="810" y="124" width="165" height="58" rx="8" fill="#278e94"/>
+<text x="892.5" y="153.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Council</text>
+<rect x="990" y="124" width="165" height="58" rx="8" fill="#278e94"/>
+<text x="1072.5" y="153.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">ChatBridge</text>
+<text x="810" y="114" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="500" fill="#278e94" text-anchor="start" dominant-baseline="central">contrib/</text>
+<rect x="30" y="240" width="1380" height="120" rx="10" fill="#ede4ff"/>
+<text x="44" y="254" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="500" fill="#888" text-anchor="start" dominant-baseline="hanging">ORCHESTRATION</text>
+<rect x="60" y="274" width="195" height="58" rx="8" fill="#7d52c2"/>
+<text x="157.5" y="303.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">OrchestratorActor</text>
+<rect x="280" y="274" width="200" height="58" rx="8" fill="#7d52c2"/>
+<text x="380.0" y="303.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">PipelineOrchestrator</text>
+<rect x="505" y="274" width="180" height="58" rx="8" fill="#7d52c2"/>
+<text x="595.0" y="303.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">GoalDecomposer</text>
+<rect x="710" y="274" width="148" height="58" rx="8" fill="#7d52c2"/>
+<text x="784.0" y="303.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Router</text>
+<rect x="883" y="274" width="175" height="58" rx="8" fill="#7d52c2"/>
+<text x="970.5" y="303.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">ResultStream</text>
+<rect x="1083" y="274" width="185" height="58" rx="8" fill="#7d52c2"/>
+<text x="1175.5" y="303.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Dead Letter</text>
+<text x="285" y="342" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#a888d8" text-anchor="start" dominant-baseline="central">FIRST_COMPLETED · Dependency-aware parallel stages</text>
+<rect x="30" y="390" width="1380" height="52" rx="8" fill="#f5c72e"/>
+<text x="55" y="408" font-family="Inter, system-ui, sans-serif" font-size="15" font-weight="700" fill="#4a3800" text-anchor="start" dominant-baseline="central">NATS Message Bus</text>
+<text x="55" y="428" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="500" fill="#7a6510" text-anchor="start" dominant-baseline="central">loom.goals.*    loom.tasks.*    loom.results.*    loom.control.*    loom.deadletter.*</text>
+<rect x="30" y="472" width="1380" height="120" rx="10" fill="#ddf4de"/>
+<text x="44" y="486" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="500" fill="#888" text-anchor="start" dominant-baseline="hanging">WORKERS  —  Stateless · Typed I/O · JSON Schema validation · Per-stage retry</text>
+<rect x="55" y="506" width="165" height="58" rx="8" fill="#2e9e57"/>
+<text x="137.5" y="535.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Summarizer</text>
+<rect x="240" y="506" width="165" height="58" rx="8" fill="#2e9e57"/>
+<text x="322.5" y="535.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Classifier</text>
+<rect x="425" y="506" width="165" height="58" rx="8" fill="#2e9e57"/>
+<text x="507.5" y="535.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Extractor</text>
+<rect x="610" y="506" width="165" height="58" rx="8" fill="#2e9e57"/>
+<text x="692.5" y="535.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Translator</text>
+<rect x="795" y="506" width="165" height="58" rx="8" fill="#2e9e57"/>
+<text x="877.5" y="535.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">QA</text>
+<rect x="980" y="506" width="165" height="58" rx="8" fill="#2e9e57"/>
+<text x="1062.5" y="535.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Reviewer</text>
+<rect x="1165" y="506" width="165" height="58" rx="8" fill="#5ab86e"/>
+<text x="1247.5" y="535.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Custom...</text>
+<rect x="30" y="622" width="640" height="110" rx="10" fill="#e8e9ec"/>
+<text x="44" y="636" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="500" fill="#888" text-anchor="start" dominant-baseline="hanging">PROCESSING BACKENDS</text>
+<rect x="55" y="654" width="185" height="50" rx="8" fill="#555c70"/>
+<text x="147.5" y="679.0" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Anthropic</text>
+<text x="147" y="718" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#999" text-anchor="middle" dominant-baseline="central">frontier / standard</text>
+<rect x="260" y="654" width="185" height="50" rx="8" fill="#555c70"/>
+<text x="352.5" y="679.0" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">OpenAI</text>
+<text x="352" y="718" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#999" text-anchor="middle" dominant-baseline="central">standard</text>
+<rect x="465" y="654" width="185" height="50" rx="8" fill="#555c70"/>
+<text x="557.5" y="679.0" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Ollama (Local)</text>
+<text x="557" y="718" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#999" text-anchor="middle" dominant-baseline="central">local</text>
+<rect x="700" y="622" width="710" height="110" rx="10" fill="#f2efe8"/>
+<text x="714" y="636" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="500" fill="#888" text-anchor="start" dominant-baseline="hanging">STORAGE &amp; CONFIG</text>
+<rect x="725" y="654" width="195" height="50" rx="8" fill="#997a59"/>
+<text x="822.5" y="679.0" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">DuckDB</text>
+<text x="822" y="718" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#999" text-anchor="middle" dominant-baseline="central">eval results</text>
+<rect x="945" y="654" width="195" height="50" rx="8" fill="#997a59"/>
+<text x="1042.5" y="679.0" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Vector Store</text>
+<text x="1042" y="718" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#999" text-anchor="middle" dominant-baseline="central">RAG chunks</text>
+<rect x="1165" y="654" width="195" height="50" rx="8" fill="#997a59"/>
+<text x="1262.5" y="679.0" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">YAML Configs</text>
+<text x="1262" y="718" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#999" text-anchor="middle" dominant-baseline="central">workers · pipelines</text>
+<rect x="30" y="762" width="1380" height="85" rx="10" fill="#eeeeef"/>
+<text x="44" y="776" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="500" fill="#888" text-anchor="start" dominant-baseline="hanging">OBSERVABILITY &amp; TOOLING</text>
+<rect x="55" y="790" width="238" height="40" rx="8" fill="#858593"/>
+<text x="174.0" y="810.0" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">OpenTelemetry</text>
+<rect x="320" y="790" width="238" height="40" rx="8" fill="#858593"/>
+<text x="439.0" y="810.0" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">I/O Tracing</text>
+<rect x="585" y="790" width="238" height="40" rx="8" fill="#858593"/>
+<text x="704.0" y="810.0" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">request_id Logging</text>
+<rect x="850" y="790" width="238" height="40" rx="8" fill="#858593"/>
+<text x="969.0" y="810.0" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Pre-flight Checks</text>
+<rect x="1115" y="790" width="238" height="40" rx="8" fill="#858593"/>
+<text x="1234.0" y="810.0" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Config Validation</text>
+<text x="40" y="875" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="500" fill="#999" text-anchor="start" dominant-baseline="central">DEPLOYMENT:  Docker Compose  ·  Kubernetes  ·  macOS launchd  ·  Windows NSSM  ·  ZIP App Bundles  ·  mDNS Discovery</text>
+<text x="40" y="898" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#aaa" text-anchor="start" dominant-baseline="central">v0.9.0  ·  1807 tests  ·  90% coverage  ·  MPL 2.0</text>
+<line x1="143" y1="182" x2="143" y2="240" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
+<line x1="333" y1="182" x2="333" y2="240" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
+<line x1="500" y1="182" x2="500" y2="240" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
+<line x1="673" y1="182" x2="673" y2="240" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
+<line x1="893" y1="182" x2="893" y2="240" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
+<line x1="1073" y1="182" x2="1073" y2="240" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
+<line x1="158" y1="332" x2="158" y2="390" stroke="#e8c020" stroke-width="2"/>
+<line x1="380" y1="332" x2="380" y2="390" stroke="#e8c020" stroke-width="2"/>
+<line x1="595" y1="332" x2="595" y2="390" stroke="#e8c020" stroke-width="2"/>
+<line x1="784" y1="332" x2="784" y2="390" stroke="#e8c020" stroke-width="2"/>
+<line x1="970" y1="332" x2="970" y2="390" stroke="#e8c020" stroke-width="2"/>
+<line x1="1175" y1="332" x2="1175" y2="390" stroke="#e8c020" stroke-width="2"/>
+<line x1="137" y1="442" x2="137" y2="472" stroke="#e8c020" stroke-width="2"/>
+<line x1="322" y1="442" x2="322" y2="472" stroke="#e8c020" stroke-width="2"/>
+<line x1="507" y1="442" x2="507" y2="472" stroke="#e8c020" stroke-width="2"/>
+<line x1="692" y1="442" x2="692" y2="472" stroke="#e8c020" stroke-width="2"/>
+<line x1="877" y1="442" x2="877" y2="472" stroke="#e8c020" stroke-width="2"/>
+<line x1="1062" y1="442" x2="1062" y2="472" stroke="#e8c020" stroke-width="2"/>
+<line x1="1247" y1="442" x2="1247" y2="472" stroke="#e8c020" stroke-width="2"/>
+<line x1="148" y1="564" x2="148" y2="622" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
+<line x1="353" y1="564" x2="353" y2="622" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
+<line x1="558" y1="564" x2="558" y2="622" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
+<line x1="822" y1="564" x2="822" y2="622" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
+<line x1="1027" y1="564" x2="1027" y2="622" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
+<line x1="1232" y1="564" x2="1232" y2="622" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
+        </svg>

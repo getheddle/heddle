@@ -6,6 +6,8 @@
 
 ## Overview
 
+![Workshop UI](images/workshop-ui.svg)
+
 The Workshop is a FastAPI web application that lets you build, test, evaluate,
 and deploy LLM workers without touching the NATS actor mesh. It calls LLM
 backends directly, validates I/O contracts, scores outputs against test suites,

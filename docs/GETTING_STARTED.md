@@ -2,6 +2,8 @@
 
 New to Loom? Start with [Concepts](CONCEPTS.md) to understand the mental model.
 
+![Developer Workflow](images/developer-workflow.svg)
+
 ---
 
 ## Quick Start — Try a Worker (No Data Files Needed)

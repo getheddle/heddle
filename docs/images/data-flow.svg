@@ -1,0 +1,117 @@
+        <?xml version="1.0" encoding="UTF-8"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1150" width="1100" height="1150">
+        <defs><marker id="arrow_1" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ccc"/></marker>
+<marker id="arrow_2" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ccc"/></marker>
+<marker id="arrow_3" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ccc"/></marker>
+<marker id="arrow_4" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ccc"/></marker>
+<marker id="arrow_5" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ccc"/></marker>
+<marker id="arrow_6" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#e85c5c"/></marker>
+<marker id="arrow_7" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#cc7333"/></marker>
+<marker id="arrow_8" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#cc7333"/></marker>
+<marker id="arrow_9" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#cc7333"/></marker>
+<marker id="arrow_10" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#8a60d0"/></marker>
+<marker id="arrow_11" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#8a60d0"/></marker>
+<marker id="arrow_12" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#4278d9"/></marker></defs>
+        <rect width="1100" height="1150" rx="12" fill="#fafafb"/>
+<text x="40" y="38" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="700" fill="#1e1e26" text-anchor="start" dominant-baseline="central">Loom — Data Flow</text>
+<text x="40" y="62" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="central">Goal lifecycle:  submit  >  decompose  >  route  >  process  >  collect  >  return</text>
+<circle cx="56" cy="116" r="16" fill="#e85c5c"/>
+<text x="56" y="116" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle" dominant-baseline="central">1</text>
+<text x="80" y="110" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#e85c5c" text-anchor="start" dominant-baseline="hanging">SUBMIT GOAL</text>
+<text x="80" y="130" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="hanging">Client sends a Goal via MCP, CLI, or API</text>
+<line x1="56" y1="155" x2="56" y2="265" stroke="#ccc" stroke-width="2" marker-end="url(#arrow_1)"/>
+<circle cx="56" cy="286" r="16" fill="#cc7333"/>
+<text x="56" y="286" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle" dominant-baseline="central">2</text>
+<text x="80" y="280" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#cc7333" text-anchor="start" dominant-baseline="hanging">DECOMPOSE</text>
+<text x="80" y="300" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="hanging">GoalDecomposer breaks goal into tasks</text>
+<line x1="56" y1="325" x2="56" y2="445" stroke="#ccc" stroke-width="2" marker-end="url(#arrow_2)"/>
+<circle cx="56" cy="466" r="16" fill="#7d52c2"/>
+<text x="56" y="466" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle" dominant-baseline="central">3</text>
+<text x="80" y="460" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#7d52c2" text-anchor="start" dominant-baseline="hanging">ROUTE</text>
+<text x="80" y="480" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="hanging">Router dispatches tasks via NATS subjects</text>
+<line x1="56" y1="505" x2="56" y2="625" stroke="#ccc" stroke-width="2" marker-end="url(#arrow_3)"/>
+<circle cx="56" cy="646" r="16" fill="#2e9e57"/>
+<text x="56" y="646" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle" dominant-baseline="central">4</text>
+<text x="80" y="640" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#2e9e57" text-anchor="start" dominant-baseline="hanging">PROCESS</text>
+<text x="80" y="660" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="hanging">WorkerActor validates, calls backend, validates output</text>
+<line x1="56" y1="685" x2="56" y2="805" stroke="#ccc" stroke-width="2" marker-end="url(#arrow_4)"/>
+<circle cx="56" cy="826" r="16" fill="#4278d9"/>
+<text x="56" y="826" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle" dominant-baseline="central">5</text>
+<text x="80" y="820" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#4278d9" text-anchor="start" dominant-baseline="hanging">COLLECT</text>
+<text x="80" y="840" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="hanging">ResultStream gathers results (early-exit, callbacks)</text>
+<line x1="56" y1="865" x2="56" y2="975" stroke="#ccc" stroke-width="2" marker-end="url(#arrow_5)"/>
+<circle cx="56" cy="996" r="16" fill="#278e94"/>
+<text x="56" y="996" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle" dominant-baseline="central">6</text>
+<text x="80" y="990" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#278e94" text-anchor="start" dominant-baseline="hanging">RETURN</text>
+<text x="80" y="1010" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="hanging">Aggregated results via MCP / CLI / async iterator</text>
+<rect x="80" y="150" width="200" height="50" rx="8" fill="#e85c5c"/>
+<text x="180.0" y="175.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Goal</text>
+<line x1="280" y1="175" x2="340" y2="175" stroke="#e85c5c" stroke-width="2" marker-end="url(#arrow_6)"/>
+<rect x="350" y="142" width="280" height="68" rx="6" fill="#fffaee" stroke="#e6dbb5" stroke-width="1"/>
+<text x="360" y="156" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#888" text-anchor="start" dominant-baseline="central">GoalMessage</text>
+<text x="360" y="172" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#8a7a55" text-anchor="start">
+  <tspan x="360" dy="0">goal_id: str    prompt: str</tspan>
+  <tspan x="360" dy="12.6">context: dict   request_id: str</tspan>
+</text>
+<text x="660" y="162" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="500" fill="#999" text-anchor="start" dominant-baseline="central">Published to:</text>
+<text x="660" y="180" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#d4a820" text-anchor="start" dominant-baseline="central">loom.goals.{goal_id}</text>
+<rect x="80" y="325" width="200" height="50" rx="8" fill="#cc7333"/>
+<text x="180.0" y="350.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">GoalDecomposer</text>
+<line x1="280" y1="350" x2="370" y2="350" stroke="#cc7333" stroke-width="2" marker-end="url(#arrow_7)"/>
+<rect x="370" y="325" width="180" height="50" rx="8" fill="#e8b020"/>
+<text x="460.0" y="350.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#3a2500" text-anchor="middle" dominant-baseline="central">Task A</text>
+<line x1="280" y1="350" x2="580" y2="350" stroke="#cc7333" stroke-width="2" marker-end="url(#arrow_8)"/>
+<rect x="580" y="325" width="180" height="50" rx="8" fill="#e8b020"/>
+<text x="670.0" y="350.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#3a2500" text-anchor="middle" dominant-baseline="central">Task B</text>
+<line x1="280" y1="350" x2="790" y2="350" stroke="#cc7333" stroke-width="2" marker-end="url(#arrow_9)"/>
+<rect x="790" y="325" width="180" height="50" rx="8" fill="#e8b020"/>
+<text x="880.0" y="350.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#3a2500" text-anchor="middle" dominant-baseline="central">Task C</text>
+<rect x="370" y="390" width="280" height="52" rx="6" fill="#fffaee" stroke="#e6dbb5" stroke-width="1"/>
+<text x="380" y="404" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#888" text-anchor="start" dominant-baseline="central">TaskMessage</text>
+<text x="380" y="420" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#8a7a55" text-anchor="start">
+  <tspan x="380" dy="0">task_id  worker_type  payload  tier</tspan>
+</text>
+<rect x="80" y="505" width="200" height="50" rx="8" fill="#7d52c2"/>
+<text x="180.0" y="530.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Router</text>
+<text x="310" y="518" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="500" fill="#999" text-anchor="start" dominant-baseline="central">NATS subject:</text>
+<text x="310" y="536" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#d4a820" text-anchor="start" dominant-baseline="central">loom.tasks.{worker_type}.{tier}</text>
+<rect x="620" y="510" width="340" height="30" rx="4" fill="#f4f0ff" stroke="#d4c8ee" stroke-width="1"/>
+<text x="790.0" y="525.0" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#6b50a0" text-anchor="middle" dominant-baseline="central">Dispatch-side rate limiting (semaphore per worker type)</text>
+<rect x="80" y="685" width="190" height="50" rx="8" fill="#2e9e57"/>
+<text x="175.0" y="710.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">WorkerActor</text>
+<rect x="300" y="675" width="480" height="70" rx="8" fill="#f5f0fa" stroke="#d4c8ee" stroke-width="1"/>
+<text x="310" y="683" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#7d52c2" text-anchor="start" dominant-baseline="hanging">OR: Pipeline Mode</text>
+<rect x="320" y="705" width="125" height="30" rx="8" fill="#8a60d0"/>
+<text x="382.5" y="720.0" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Stage 1</text>
+<line x1="445" y1="720" x2="465" y2="720" stroke="#8a60d0" stroke-width="2" marker-end="url(#arrow_10)"/>
+<rect x="470" y="705" width="125" height="30" rx="8" fill="#8a60d0"/>
+<text x="532.5" y="720.0" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Stage 2</text>
+<line x1="595" y1="720" x2="615" y2="720" stroke="#8a60d0" stroke-width="2" marker-end="url(#arrow_11)"/>
+<rect x="620" y="705" width="125" height="30" rx="8" fill="#8a60d0"/>
+<text x="682.5" y="720.0" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Stage 3</text>
+<rect x="810" y="685" width="200" height="50" rx="8" fill="#555c70"/>
+<text x="910.0" y="710.0" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">LLM Backend Call</text>
+<text x="810" y="748" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#999" text-anchor="start" dominant-baseline="central">input_schema -> LLM -> output_schema</text>
+<rect x="80" y="862" width="200" height="50" rx="8" fill="#4278d9"/>
+<text x="180.0" y="887.0" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">ResultStream</text>
+<line x1="280" y1="887" x2="340" y2="887" stroke="#4278d9" stroke-width="2" marker-end="url(#arrow_12)"/>
+<rect x="350" y="855" width="280" height="62" rx="6" fill="#fffaee" stroke="#e6dbb5" stroke-width="1"/>
+<text x="360" y="869" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#888" text-anchor="start" dominant-baseline="central">TaskResult</text>
+<text x="360" y="885" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#8a7a55" text-anchor="start">
+  <tspan x="360" dy="0">task_id  success  result  model</tspan>
+  <tspan x="360" dy="12.6">latency_ms  tokens</tspan>
+</text>
+<text x="660" y="870" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="500" fill="#999" text-anchor="start" dominant-baseline="central">Published to:</text>
+<text x="660" y="888" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#d4a820" text-anchor="start" dominant-baseline="central">loom.results.{goal_id}</text>
+<rect x="660" y="900" width="350" height="24" rx="4" fill="#fff0f0" stroke="#ecc" stroke-width="1"/>
+<text x="835.0" y="912.0" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#c55" text-anchor="middle" dominant-baseline="central">Failures -> loom.deadletter.* -> Dead Letter Store (bounded FIFO)</text>
+<rect x="80" y="1035" width="190" height="45" rx="8" fill="#278e94"/>
+<text x="175.0" y="1057.5" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">MCP Response</text>
+<rect x="290" y="1035" width="190" height="45" rx="8" fill="#278e94"/>
+<text x="385.0" y="1057.5" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">CLI Output</text>
+<rect x="500" y="1035" width="190" height="45" rx="8" fill="#278e94"/>
+<text x="595.0" y="1057.5" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">Async Iterator</text>
+<rect x="720" y="1035" width="320" height="52" rx="6" fill="#f2f7f7" stroke="#d0e4e4" stroke-width="1"/>
+<text x="730" y="1048" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="600" fill="#278e94" text-anchor="start" dominant-baseline="hanging">Includes _timeline metadata:</text>
+<text x="730" y="1066" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="hanging">Per-stage timing, model, tokens, request_id</text>
+        </svg>
