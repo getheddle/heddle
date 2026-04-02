@@ -1017,7 +1017,7 @@ Pipelines are deterministic: stage A feeds stage B, data flows one way.
 Councils are iterative: agents take turns, react to each other, and
 refine their positions over multiple rounds.
 
-Use pipelines when you need repeatability.  Use councils when you need
+Use pipelines when you need repeatability. Use councils when you need
 depth — architecture reviews, risk assessments, adversarial analysis,
 consensus-building.
 

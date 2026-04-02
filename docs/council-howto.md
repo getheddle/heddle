@@ -1,7 +1,7 @@
 # Multi-Agent Deliberation with Councils
 
 Councils let multiple AI agents discuss a topic iteratively, each with their
-own context, role, and perspective.  Instead of one LLM processing everything,
+own context, role, and perspective. Instead of one LLM processing everything,
 a council runs structured multi-round debates where agents react to each
 other's positions until they converge or hit a round limit.
 
