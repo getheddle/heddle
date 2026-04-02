@@ -498,9 +498,7 @@ def _build_council_bridge(
 
         backends = build_backends_from_env()
     except Exception as exc:
-        logger.warning(
-            "council_bridge.backends_init_failed", reason=str(exc)
-        )
+        logger.warning("council_bridge.backends_init_failed", reason=str(exc))
 
     runner = CouncilRunner(backends=backends)
     return CouncilBridge(runner=runner, configs_dir=configs_dir)
