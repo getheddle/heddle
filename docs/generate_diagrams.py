@@ -6,7 +6,6 @@ Output: docs/images/*.svg
 """
 from __future__ import annotations
 
-import textwrap
 from pathlib import Path
 
 OUT = Path(__file__).parent / "images"
@@ -99,12 +98,13 @@ class SVG:
     def render(self) -> str:
         defs = "\n".join(self.defs)
         body = "\n".join(self.body)
-        return textwrap.dedent(f"""\
-        <?xml version="1.0" encoding="UTF-8"?>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {self.w} {self.h}" width="{self.w}" height="{self.h}">
-        <defs>{defs}</defs>
-        {body}
-        </svg>""")
+        return (
+            f'<?xml version="1.0" encoding="UTF-8"?>\n'
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {self.w} {self.h}" width="{self.w}" height="{self.h}">\n'
+            f'<defs>{defs}</defs>\n'
+            f'{body}\n'
+            f'</svg>'
+        )
 
     def save(self, path: Path):
         path.write_text(self.render(), encoding="utf-8")

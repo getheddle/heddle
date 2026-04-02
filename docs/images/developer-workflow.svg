@@ -1,6 +1,6 @@
-        <?xml version="1.0" encoding="UTF-8"?>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700">
-        <defs><marker id="arrow_1" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#bbb"/></marker>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700">
+<defs><marker id="arrow_1" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#bbb"/></marker>
 <marker id="arrow_2" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#bbb"/></marker>
 <marker id="arrow_3" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#bbb"/></marker>
 <marker id="arrow_4" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#bbb"/></marker>
@@ -12,7 +12,7 @@
 <marker id="arrow_10" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#bbb"/></marker>
 <marker id="arrow_11" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#bbb"/></marker>
 <marker id="arrow_12" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#bbb"/></marker></defs>
-        <rect width="1200" height="700" rx="12" fill="#fafafb"/>
+<rect width="1200" height="700" rx="12" fill="#fafafb"/>
 <text x="40" y="38" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="700" fill="#1e1e26" text-anchor="start" dominant-baseline="central">Loom — Developer Workflow</text>
 <text x="40" y="62" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="central">Define workers, build pipelines, test, evaluate, and deploy</text>
 <rect x="30" y="90" width="1140" height="140" rx="10" fill="#f8f8fa"/>
@@ -75,4 +75,4 @@
   <tspan x="60" dy="0">scripts/build-app.sh</tspan>
   <tspan x="60" dy="12.6">manifest.yaml + configs</tspan>
 </text>
-        </svg>
+</svg>

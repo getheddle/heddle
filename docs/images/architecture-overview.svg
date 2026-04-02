@@ -1,7 +1,7 @@
-        <?xml version="1.0" encoding="UTF-8"?>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1000" width="1440" height="1000">
-        <defs></defs>
-        <rect width="1440" height="1000" rx="12" fill="#fafafb"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1000" width="1440" height="1000">
+<defs></defs>
+<rect width="1440" height="1000" rx="12" fill="#fafafb"/>
 <text x="40" y="38" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="700" fill="#1e1e26" text-anchor="start" dominant-baseline="central">Loom — Architecture Overview</text>
 <text x="40" y="62" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="central">Actor-based LLM orchestration framework  ·  NATS messaging  ·  Typed contracts</text>
 <rect x="30" y="92" width="1380" height="118" rx="10" fill="#e0e8ff"/>
@@ -114,4 +114,4 @@
 <line x1="822" y1="564" x2="822" y2="622" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
 <line x1="1027" y1="564" x2="1027" y2="622" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
 <line x1="1232" y1="564" x2="1232" y2="622" stroke="#bbb" stroke-width="1.5" stroke-dasharray="5 5"/>
-        </svg>
+</svg>

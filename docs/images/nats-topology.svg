@@ -1,11 +1,11 @@
-        <?xml version="1.0" encoding="UTF-8"?>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 600" width="1100" height="600">
-        <defs><marker id="arrow_1" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#e85c5c"/></marker>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 600" width="1100" height="600">
+<defs><marker id="arrow_1" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#e85c5c"/></marker>
 <marker id="arrow_2" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#cc7333"/></marker>
 <marker id="arrow_3" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#4278d9"/></marker>
 <marker id="arrow_4" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#7d52c2"/></marker>
 <marker id="arrow_5" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#999"/></marker></defs>
-        <rect width="1100" height="600" rx="12" fill="#fafafb"/>
+<rect width="1100" height="600" rx="12" fill="#fafafb"/>
 <text x="40" y="38" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="700" fill="#1e1e26" text-anchor="start" dominant-baseline="central">Loom — NATS Subject Topology</text>
 <text x="40" y="62" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="central">Message routing conventions and subject hierarchy</text>
 <rect x="350" y="250" width="400" height="50" rx="8" fill="#f5c72e"/>
@@ -50,4 +50,4 @@
 <rect x="780" y="490" width="280" height="40" rx="4" fill="#f4f0ff" stroke="#d4c8ee" stroke-width="1"/>
 <text x="920.0" y="510.0" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#7d52c2" text-anchor="middle" dominant-baseline="central">loom.control.reload — hot-reload configs
 loom.control.shutdown — graceful stop</text>
-        </svg>
+</svg>

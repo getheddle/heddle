@@ -1,9 +1,9 @@
-        <?xml version="1.0" encoding="UTF-8"?>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 2400" width="1200" height="2400">
-        <defs><marker id="arrow_1" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#bbb"/></marker>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 2400" width="1200" height="2400">
+<defs><marker id="arrow_1" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#bbb"/></marker>
 <marker id="arrow_2" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#bbb"/></marker>
 <marker id="arrow_3" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#bbb"/></marker></defs>
-        <rect width="1200" height="2400" rx="12" fill="#fafafb"/>
+<rect width="1200" height="2400" rx="12" fill="#fafafb"/>
 <text x="40" y="38" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="700" fill="#1e1e26" text-anchor="start" dominant-baseline="central">Loom Workshop — UI Overview</text>
 <text x="40" y="62" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="central">Web-based worker lifecycle management  ·  FastAPI + HTMX + Pico CSS</text>
 <rect x="30" y="100" width="1140" height="50" rx="8" fill="#1a1a2e"/>
@@ -277,4 +277,4 @@
 <rect x="940" y="2155" width="205" height="40" rx="6" fill="#1a1a2e"/>
 <text x="1042" y="2175" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#f5c72e" text-anchor="middle" dominant-baseline="central">Dead Letters</text>
 <text x="1042" y="2205" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#888" text-anchor="middle" dominant-baseline="central">/dead-letters</text>
-        </svg>
+</svg>

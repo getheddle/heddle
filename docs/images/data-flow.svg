@@ -1,6 +1,6 @@
-        <?xml version="1.0" encoding="UTF-8"?>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1150" width="1100" height="1150">
-        <defs><marker id="arrow_1" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ccc"/></marker>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1150" width="1100" height="1150">
+<defs><marker id="arrow_1" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ccc"/></marker>
 <marker id="arrow_2" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ccc"/></marker>
 <marker id="arrow_3" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ccc"/></marker>
 <marker id="arrow_4" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ccc"/></marker>
@@ -12,7 +12,7 @@
 <marker id="arrow_10" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#8a60d0"/></marker>
 <marker id="arrow_11" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#8a60d0"/></marker>
 <marker id="arrow_12" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#4278d9"/></marker></defs>
-        <rect width="1100" height="1150" rx="12" fill="#fafafb"/>
+<rect width="1100" height="1150" rx="12" fill="#fafafb"/>
 <text x="40" y="38" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="700" fill="#1e1e26" text-anchor="start" dominant-baseline="central">Loom — Data Flow</text>
 <text x="40" y="62" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="central">Goal lifecycle:  submit  >  decompose  >  route  >  process  >  collect  >  return</text>
 <circle cx="56" cy="116" r="16" fill="#e85c5c"/>
@@ -114,4 +114,4 @@
 <rect x="720" y="1035" width="320" height="52" rx="6" fill="#f2f7f7" stroke="#d0e4e4" stroke-width="1"/>
 <text x="730" y="1048" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="600" fill="#278e94" text-anchor="start" dominant-baseline="hanging">Includes _timeline metadata:</text>
 <text x="730" y="1066" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="hanging">Per-stage timing, model, tokens, request_id</text>
-        </svg>
+</svg>
