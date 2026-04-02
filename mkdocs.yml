@@ -79,6 +79,7 @@ nav:
     - Workers Reference: workers-reference.md
     - RAG How-To: rag-howto.md
     - Building Workflows: building-workflows.md
+    - Multi-Agent Councils: council-howto.md
     - Adversarial Review: BLIND_AUDIT.md
     - Workshop Architecture: workshop.md
     - Troubleshooting: TROUBLESHOOTING.md

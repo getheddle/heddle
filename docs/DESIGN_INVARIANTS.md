@@ -494,3 +494,67 @@ These are things that must never happen, regardless of how reasonable they sound
 
 8. **Never run multiple instances of a single-writer processor.** The
    per-instance lock does not protect across processes.
+
+---
+
+## Part III — Council & Multi-Agent Invariants
+
+### 16. Council transcript is managed by the orchestrator, not by workers
+
+Workers participating in a council discussion remain fully stateless.
+The multi-round loop, transcript accumulation, and context injection
+all live in `CouncilOrchestrator` (or `CouncilRunner`). Workers receive
+a single `TaskMessage` with the relevant transcript excerpt in the
+payload, process it, and reset.
+
+**Why:** This preserves Invariant 1 (worker statelessness). If workers
+tracked their own position across rounds, horizontal scaling would
+silently break — replica A might process round 1 while replica B
+processes round 2, and replica B would have no memory of round 1.
+
+**How it fails:** Attempting to store "my previous position" in a worker
+instance variable produces correct results in single-replica testing
+and incoherent debates in production.
+
+### 17. Transcript visibility is a security boundary, not a convenience
+
+The `sees_transcript_from` field on each agent config is a hard filter —
+not a hint. When agent C's visibility is set to `["A"]`, agent C never
+sees agent B's contributions. This applies regardless of protocol.
+
+**Why:** This is the council equivalent of knowledge silo isolation.
+In adversarial review, the critic must not see the architect's reasoning
+before forming an independent assessment. In Delphi protocols, participants
+must not know who wrote which position.
+
+**How it fails:** Leaking full transcripts to all agents defeats the
+purpose of structured debate and introduces anchoring bias.
+
+### 18. ChatBridge session state lives in the bridge, not in Loom
+
+ChatBridge adapters maintain per-session conversation history
+internally (or in the external provider's API). The `ChatBridgeBackend`
+wrapper is a standard `ProcessingBackend` — stateless from Loom's
+perspective. The session state is keyed by `session_id` and managed
+by the bridge implementation.
+
+**Why:** This keeps the Loom worker layer clean while supporting
+multi-turn conversations with external LLMs. The bridge is the adapter
+boundary — Loom doesn't need to know whether the backing LLM is
+Claude, GPT-4, Ollama, or a human.
+
+**How it fails:** Storing bridge session state in the worker or
+orchestrator would couple Loom's lifecycle management to external
+provider session semantics.
+
+### 19. Convergence checks must be side-effect-free
+
+Convergence detectors (`position_stability`, `llm_judge`) read the
+transcript and produce a score. They never modify the transcript,
+inject messages, or influence agent behavior directly. The facilitator
+synthesis is a separate step that runs after the deliberation loop ends.
+
+**Why:** Convergence detection is an observation, not an intervention.
+If the convergence check could modify the transcript, it would be
+possible for a runaway LLM judge to terminate discussions prematurely
+by injecting "we all agree" into the record.

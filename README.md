@@ -156,6 +156,8 @@ Scale any component by running more copies — NATS load-balances automatically.
 | **Three Model Tiers** | Local (Ollama), Standard (Claude Sonnet), Frontier (Claude Opus) |
 | **Document Processing** | PDF/DOCX extraction via MarkItDown (fast) or Docling (deep OCR) |
 | **RAG Pipeline** | Telegram channel ingestion, chunking, vector search (DuckDB or LanceDB) |
+| **Multi-Agent Councils** | Multi-round deliberation with protocols (debate, Delphi), convergence detection, transcript management |
+| **ChatBridge Adapters** | Use Claude, GPT-4, Ollama, or humans as council participants with session history |
 | **MCP Gateway** | Expose any workflow as an MCP server with a single YAML config |
 | **Config Wizard** | `loom setup` auto-detects backends; `loom new` scaffolds workers/pipelines |
 | **Live Monitoring** | TUI dashboard, OpenTelemetry tracing, dead-letter inspection |
@@ -182,6 +184,7 @@ Go deeper:
 | Guide | Description |
 |-------|-------------|
 | [RAG Pipeline](docs/rag-howto.md) | Social media stream analysis end-to-end |
+| [Multi-Agent Councils](docs/council-howto.md) | Structured deliberation with multiple LLM agents |
 | [Building Workflows](docs/building-workflows.md) | Custom steps, pipelines, tools, knowledge |
 | [Workshop](docs/workshop.md) | Web UI architecture and enhancement guide |
 | [Architecture](docs/ARCHITECTURE.md) | System design, message flow, NATS subjects |
@@ -202,7 +205,8 @@ Go deeper:
 | RAG pipeline | Complete | Ingest, chunk, embed, search (DuckDB + LanceDB) |
 | Workshop web UI | Complete | Test bench, eval runner, pipeline editor |
 | MCP gateway | Complete | FastMCP 3.x, session tools, workshop tools |
-| Tests | 1643 passing | 90% coverage, no infrastructure needed |
+| Multi-agent deliberation | Complete | Council framework, ChatBridge adapters, 3 protocols |
+| Tests | 1807 passing | 90%+ coverage, no infrastructure needed |
 
 ---
 

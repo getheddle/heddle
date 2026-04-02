@@ -1003,3 +1003,66 @@ run_stdio(server, gateway)
 # or HTTP
 run_streamable_http(server, gateway, host="0.0.0.0", port=8000)
 ```
+
+---
+
+## Multi-agent deliberation with councils
+
+When the answer to a question benefits from **iterative discussion** rather
+than a single pass, use a council instead of a pipeline.
+
+### Council vs. pipeline
+
+Pipelines are deterministic: stage A feeds stage B, data flows one way.
+Councils are iterative: agents take turns, react to each other, and
+refine their positions over multiple rounds.
+
+Use pipelines when you need repeatability.  Use councils when you need
+depth — architecture reviews, risk assessments, adversarial analysis,
+consensus-building.
+
+### Running a council from code
+
+```python
+from loom.worker.backends import build_backends_from_env
+from loom.contrib.council.config import load_council_config
+from loom.contrib.council.runner import CouncilRunner
+
+config = load_council_config("configs/councils/example.yaml")
+runner = CouncilRunner(build_backends_from_env())
+result = await runner.run("Should we use event sourcing?", config=config)
+print(result.synthesis)
+```
+
+### Council as an MCP tool
+
+Add `tools.council` to your MCP gateway config:
+
+```yaml
+tools:
+  council:
+    configs_dir: "configs/councils"
+```
+
+This registers `council.start`, `council.status`, `council.transcript`,
+`council.intervene`, and `council.stop` as MCP tools.
+
+### Mixing vendors
+
+Use ChatBridge adapters to include agents backed by different LLM
+providers in the same discussion:
+
+```yaml
+agents:
+  - name: "claude_view"
+    worker_type: "analyst"
+    tier: "standard"
+  - name: "gpt_view"
+    bridge: "loom.contrib.chatbridge.openai.OpenAIChatBridge"
+    bridge_config:
+      model: "gpt-4o"
+      api_key_env: "OPENAI_API_KEY"
+```
+
+See the full [Council How-To](council-howto.md) for protocols,
+convergence detection, transcript management, and design patterns.

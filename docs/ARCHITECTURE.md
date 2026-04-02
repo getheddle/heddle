@@ -77,11 +77,13 @@ src/loom/
 │   └── mdns.py           # LoomServiceAdvertiser — mDNS/Bonjour LAN service advertisement
 │
 ├── mcp/
-│   ├── config.py        # MCP gateway YAML config loading + validation
-│   ├── discovery.py     # Tool definition generators (worker/pipeline/query → MCP tools)
-│   ├── bridge.py        # MCPBridge — MCP tool calls → NATS dispatch + result collection
-│   ├── resources.py     # WorkspaceResources — workspace files as MCP resources
-│   └── server.py        # create_server(), MCPGateway, run_stdio(), run_streamable_http()
+│   ├── config.py           # MCP gateway YAML config loading + validation
+│   ├── discovery.py        # Tool definition generators (worker/pipeline/query → MCP tools)
+│   ├── bridge.py           # MCPBridge — MCP tool calls → NATS dispatch + result collection
+│   ├── resources.py        # WorkspaceResources — workspace files as MCP resources
+│   ├── server.py           # create_server(), MCPGateway, run_stdio(), run_streamable_http()
+│   ├── council_discovery.py  # council.* MCP tool definitions
+│   └── council_bridge.py    # CouncilBridge — in-process council session dispatch
 │
 ├── workshop/
 │   ├── test_runner.py   # WorkerTestRunner — execute worker configs against LLM backends directly
@@ -99,6 +101,21 @@ src/loom/
 │   └── preflight.py     # Pre-flight checks: NATS connectivity, env vars, config readability
 │
 └── contrib/
+    ├── council/         # Multi-round deliberation framework (optional: uv sync --extra council)
+    │   ├── schemas.py       # AgentConfig, CouncilResult, TranscriptEntry, ConvergenceResult
+    │   ├── config.py        # CouncilConfig Pydantic model, YAML loading + validation
+    │   ├── transcript.py    # TranscriptStore — visibility filtering, token-budget truncation
+    │   ├── protocol.py      # DiscussionProtocol ABC + RoundRobin, StructuredDebate, Delphi
+    │   ├── convergence.py   # ConvergenceDetector — none, position_stability, llm_judge
+    │   ├── runner.py        # CouncilRunner — NATS-free direct execution
+    │   └── orchestrator.py  # CouncilOrchestrator — NATS-connected actor mesh execution
+    ├── chatbridge/      # External chat/LLM session adapters (optional: uv sync --extra chatbridge)
+    │   ├── base.py          # ChatBridge ABC, ChatResponse, SessionInfo
+    │   ├── anthropic.py     # AnthropicChatBridge — Claude with session history
+    │   ├── openai.py        # OpenAIChatBridge — GPT-4 with session history
+    │   ├── ollama.py        # OllamaChatBridge — local models with session history
+    │   ├── manual.py        # ManualChatBridge — human-in-the-loop (callback or queue)
+    │   └── worker.py        # ChatBridgeBackend — wraps any bridge as ProcessingBackend
     ├── duckdb/          # DuckDB tools and backends (optional: uv sync --extra duckdb)
     ├── redis/           # Valkey-backed CheckpointStore (optional: uv sync --extra redis)
     └── rag/             # RAG pipeline: ingestion, chunking, embedding, analysis
@@ -119,6 +136,8 @@ configs/
 │   └── rag_pipeline.yaml       # RAG pipeline orchestrator config
 ├── schedulers/
 │   └── example.yaml            # Reference scheduler config (cron + interval examples)
+├── councils/
+│   └── example.yaml            # Example: 3-agent architecture review council
 ├── mcp/
 │   └── docman.yaml             # Example: document management MCP server config
 └── router_rules.yaml           # Tier overrides and rate limits
