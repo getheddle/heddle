@@ -9,6 +9,7 @@ Commands:
     loom setup        -- Interactive setup wizard (writes ~/.loom/config.yaml)
     loom new          -- Scaffold new worker and pipeline configs
     loom validate     -- Validate config files without starting infrastructure
+    loom council      -- Run or validate multi-agent council deliberations
     loom rag          -- Zero-config RAG pipeline (ingest, search, stats, serve)
     loom worker       -- Start an LLM worker (requires OLLAMA_URL or ANTHROPIC_API_KEY)
     loom processor    -- Start a non-LLM processor worker (e.g., DoclingBackend)
@@ -909,6 +910,7 @@ def dead_letter_monitor(nats_url: str, max_size: int):
 # Progressive-disclosure commands (no NATS needed)
 # ---------------------------------------------------------------------------
 
+from loom.cli.council import council as council_group  # noqa: E402
 from loom.cli.new import new as new_group  # noqa: E402
 from loom.cli.rag import rag as rag_group  # noqa: E402
 from loom.cli.setup import setup as setup_cmd  # noqa: E402
@@ -918,6 +920,7 @@ cli.add_command(setup_cmd)
 cli.add_command(new_group)
 cli.add_command(validate_cmd)
 cli.add_command(rag_group)
+cli.add_command(council_group)
 
 
 if __name__ == "__main__":

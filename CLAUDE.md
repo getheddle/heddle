@@ -113,6 +113,8 @@ src/loom/
                           #   Ollama detection, API key validation, embedding model, data sources
     rag.py                # Zero-config RAG CLI (loom rag ingest/search/stats/serve)
                           #   Direct pipeline execution without NATS/router/actors
+    council.py            # Council deliberation CLI (loom council run/validate)
+                          #   Direct backend execution without NATS (like rag.py)
     new.py                # Interactive scaffolding (loom new worker / loom new pipeline)
                           #   Generates valid YAML from prompts, validates before writing
     validate.py           # Config validation CLI (loom validate configs/*.yaml)
@@ -239,7 +241,7 @@ deploy/
   macos/                  # launchd plist files + install/uninstall scripts
   windows/                # NSSM-based Windows service install/uninstall scripts
 
-tests/                    # 81 test files, 1807 unit tests + 1 integration test (90% coverage)
+tests/                    # 82 test files, 1821 unit tests + 1 integration test (90% coverage)
   test_messages.py        test_contracts.py       test_checkpoint.py
   test_worker.py          test_task_worker.py     test_processor_worker.py
   test_tools.py           test_tool_use.py        test_knowledge_silos.py
@@ -269,6 +271,7 @@ tests/                    # 81 test files, 1807 unit tests + 1 integration test 
   test_tui.py                                     # TUI dashboard domain models and event handlers
   test_cli_config.py      test_cli_setup.py        # CLI config utility, setup wizard
   test_cli_rag.py                                  # CLI RAG pipeline commands
+  test_cli_council.py                              # CLI council deliberation commands
   test_cli_new.py         test_cli_validate.py     # CLI scaffolding, config validation
   test_dead_letter.py     test_preflight.py       # Dead-letter consumer, CLI pre-flight checks
   test_integration.py                             # @pytest.mark.integration (needs NATS)
@@ -349,6 +352,11 @@ uv run loom rag ingest /path/to/telegram/exports/*.json   # ingest Telegram data
 uv run loom rag search "earthquake damage reports"         # semantic search
 uv run loom rag stats                                      # store statistics
 uv run loom rag serve                                      # Workshop with RAG dashboard
+
+# Council deliberation — no NATS needed
+uv run loom council run configs/councils/example.yaml --topic "Should we adopt microservices?"
+uv run loom council run configs/councils/example.yaml --topic topic.txt --output result.json
+uv run loom council validate configs/councils/example.yaml
 
 # Run a worker locally (needs NATS running)
 uv run loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
