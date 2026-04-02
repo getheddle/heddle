@@ -1781,6 +1781,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+chatbridge = [
+    { name = "openai" },
+]
 dev = [
     { name = "croniter" },
     { name = "deepeval" },
@@ -1878,6 +1881,7 @@ requires-dist = [
     { name = "nats-py", specifier = ">=2.7.0" },
     { name = "nats-py", marker = "extra == 'tui'", specifier = ">=2.7.0" },
     { name = "ollama", marker = "extra == 'local'", specifier = ">=0.3.0" },
+    { name = "openai", marker = "extra == 'chatbridge'", specifier = ">=1.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.20.0" },
     { name = "opentelemetry-exporter-otlp", marker = "extra == 'otel'", specifier = ">=1.20.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.20.0" },
@@ -1900,7 +1904,7 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'workshop'", specifier = ">=0.27.0" },
     { name = "zeroconf", marker = "extra == 'mdns'", specifier = ">=0.131.0" },
 ]
-provides-extras = ["redis", "local", "docproc", "duckdb", "rag", "lancedb", "telegram", "scheduler", "mcp", "workshop", "mdns", "otel", "tui", "docs", "eval", "dev"]
+provides-extras = ["redis", "local", "docproc", "duckdb", "rag", "lancedb", "telegram", "scheduler", "mcp", "workshop", "mdns", "otel", "tui", "docs", "eval", "council", "chatbridge", "dev"]
 
 [[package]]
 name = "lxml"
