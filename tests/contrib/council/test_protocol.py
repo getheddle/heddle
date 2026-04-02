@@ -14,22 +14,15 @@ from loom.contrib.council.transcript import TranscriptStore
 
 
 def _agents(n=3):
-    return [
-        AgentConfig(name=f"agent_{i}", worker_type="w", role=f"Role {i}")
-        for i in range(n)
-    ]
+    return [AgentConfig(name=f"agent_{i}", worker_type="w", role=f"Role {i}") for i in range(n)]
 
 
 def _populated_transcript():
     """Build a transcript with one round of entries."""
     store = TranscriptStore()
     store.start_round(1)
-    store.add_entry(
-        TranscriptEntry(round_num=1, agent_name="agent_0", content="Position A")
-    )
-    store.add_entry(
-        TranscriptEntry(round_num=1, agent_name="agent_1", content="Position B")
-    )
+    store.add_entry(TranscriptEntry(round_num=1, agent_name="agent_0", content="Position A"))
+    store.add_entry(TranscriptEntry(round_num=1, agent_name="agent_1", content="Position B"))
     return store
 
 

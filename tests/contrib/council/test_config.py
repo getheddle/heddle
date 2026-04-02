@@ -47,11 +47,7 @@ class TestCouncilConfig:
 
     def test_fewer_than_2_agents_rejected(self):
         with pytest.raises(ValidationError):
-            CouncilConfig(
-                **_minimal_config(
-                    agents=[{"name": "only", "worker_type": "w1"}]
-                )
-            )
+            CouncilConfig(**_minimal_config(agents=[{"name": "only", "worker_type": "w1"}]))
 
     def test_invalid_sees_transcript_from(self):
         with pytest.raises(ValidationError, match="unknown agent"):
@@ -87,9 +83,7 @@ class TestCouncilConfig:
 class TestLoadCouncilConfig:
     def test_load_valid_yaml(self):
         raw = _minimal_config()
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(raw, f)
             path = f.name
 

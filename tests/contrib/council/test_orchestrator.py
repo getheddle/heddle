@@ -42,10 +42,13 @@ def _council_config(max_rounds=2, convergence_method="none"):
         "timeout_seconds": 10,
         "convergence": {"method": convergence_method, "threshold": 0.9},
         "agents": [
-            {"name": "analyst", "worker_type": "test_worker",
-             "tier": "standard", "role": "Analyst"},
-            {"name": "critic", "worker_type": "test_worker",
-             "tier": "standard", "role": "Critic"},
+            {
+                "name": "analyst",
+                "worker_type": "test_worker",
+                "tier": "standard",
+                "role": "Analyst",
+            },
+            {"name": "critic", "worker_type": "test_worker", "tier": "standard", "role": "Critic"},
         ],
         "facilitator": {
             "tier": "standard",

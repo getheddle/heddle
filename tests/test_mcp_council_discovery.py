@@ -16,9 +16,7 @@ class TestDiscoverCouncilTools:
         }
 
     def test_enable_filter(self):
-        tools = discover_council_tools(
-            {"enable": ["start", "status"]}
-        )
+        tools = discover_council_tools({"enable": ["start", "status"]})
         names = {t["name"] for t in tools}
         assert names == {"council.start", "council.status"}
 
@@ -44,9 +42,7 @@ class TestDiscoverCouncilTools:
         assert meta["read_only"] is True
 
     def test_transcript_has_optional_filter(self):
-        tools = discover_council_tools(
-            {"enable": ["transcript"]}
-        )
+        tools = discover_council_tools({"enable": ["transcript"]})
         schema = tools[0]["inputSchema"]
         assert "agent_filter" in schema["properties"]
         assert "agent_filter" not in schema.get("required", [])

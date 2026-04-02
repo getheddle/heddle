@@ -125,9 +125,7 @@ class ConvergenceDetector:
             )
 
         ratios = [
-            difflib.SequenceMatcher(
-                None, previous[name], current[name]
-            ).ratio()
+            difflib.SequenceMatcher(None, previous[name], current[name]).ratio()
             for name in common_agents
         ]
         avg_ratio = sum(ratios) / len(ratios)
@@ -136,10 +134,7 @@ class ConvergenceDetector:
         return ConvergenceResult(
             converged=converged,
             score=avg_ratio,
-            reason=(
-                f"Position stability: {avg_ratio:.3f} "
-                f"(threshold: {self._config.threshold})"
-            ),
+            reason=(f"Position stability: {avg_ratio:.3f} (threshold: {self._config.threshold})"),
             round_num=round_num,
         )
 

@@ -50,8 +50,7 @@ def discover_council_tools(
                     "config_name": {
                         "type": "string",
                         "description": (
-                            "Name of the council config file "
-                            "(without .yaml extension)."
+                            "Name of the council config file (without .yaml extension)."
                         ),
                     },
                 },
@@ -100,10 +99,7 @@ def discover_council_tools(
                     },
                     "agent_filter": {
                         "type": "string",
-                        "description": (
-                            "Optional: only show entries from "
-                            "this agent."
-                        ),
+                        "description": ("Optional: only show entries from this agent."),
                     },
                 },
                 "required": ["council_id"],

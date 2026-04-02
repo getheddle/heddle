@@ -49,10 +49,13 @@ class TestCouncilBridge:
             runner = CouncilRunner(backends={"standard": backend})
             bridge = CouncilBridge(runner=runner, configs_dir=tmpdir)
 
-            result = await bridge.dispatch("start", {
-                "topic": "Test topic",
-                "config_name": "mycouncil",
-            })
+            result = await bridge.dispatch(
+                "start",
+                {
+                    "topic": "Test topic",
+                    "config_name": "mycouncil",
+                },
+            )
 
             assert "council_id" in result
             assert result["status"] == "started"
@@ -63,13 +66,14 @@ class TestCouncilBridge:
             runner = CouncilRunner(backends={})
             bridge = CouncilBridge(runner=runner, configs_dir=tmpdir)
 
-            with pytest.raises(
-                CouncilBridgeError, match="not found"
-            ):
-                await bridge.dispatch("start", {
-                    "topic": "Test",
-                    "config_name": "nonexistent",
-                })
+            with pytest.raises(CouncilBridgeError, match="not found"):
+                await bridge.dispatch(
+                    "start",
+                    {
+                        "topic": "Test",
+                        "config_name": "nonexistent",
+                    },
+                )
 
     async def test_start_missing_topic_raises(self):
         runner = CouncilRunner(backends={})
@@ -82,18 +86,14 @@ class TestCouncilBridge:
         runner = CouncilRunner(backends={})
         bridge = CouncilBridge(runner=runner)
 
-        result = await bridge.dispatch(
-            "status", {"council_id": "unknown"}
-        )
+        result = await bridge.dispatch("status", {"council_id": "unknown"})
         assert "error" in result
 
     async def test_transcript_unknown_id(self):
         runner = CouncilRunner(backends={})
         bridge = CouncilBridge(runner=runner)
 
-        result = await bridge.dispatch(
-            "transcript", {"council_id": "unknown"}
-        )
+        result = await bridge.dispatch("transcript", {"council_id": "unknown"})
         assert "error" in result
 
     async def test_intervene_unknown_id(self):
@@ -110,9 +110,7 @@ class TestCouncilBridge:
         runner = CouncilRunner(backends={})
         bridge = CouncilBridge(runner=runner)
 
-        result = await bridge.dispatch(
-            "stop", {"council_id": "unknown"}
-        )
+        result = await bridge.dispatch("stop", {"council_id": "unknown"})
         assert "error" in result
 
     async def test_unknown_action_raises(self):

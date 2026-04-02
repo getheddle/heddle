@@ -95,9 +95,7 @@ class TranscriptStore:
         for r in self._rounds:
             if up_to_round is not None and r.round_num > up_to_round:
                 break
-            entries.extend(
-                e for e in r.entries if see_all or e.agent_name in sees
-            )
+            entries.extend(e for e in r.entries if see_all or e.agent_name in sees)
         return entries
 
     def get_latest_positions(self) -> dict[str, str]:

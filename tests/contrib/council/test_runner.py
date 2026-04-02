@@ -182,9 +182,7 @@ class TestCouncilRunner:
             ],
             facilitator={"tier": "local"},
         )
-        runner = CouncilRunner(
-            backends={"local": local_backend, "frontier": frontier_backend}
-        )
+        runner = CouncilRunner(backends={"local": local_backend, "frontier": frontier_backend})
 
         result = await runner.run("Topic", config=config)
         assert result.rounds_completed == 1

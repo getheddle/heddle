@@ -66,11 +66,13 @@ class ManualChatBridge(ChatBridge):
                 timeout=self._timeout,
             )
         elif self._prompt_queue is not None and self._response_queue is not None:
-            await self._prompt_queue.put({
-                "message": message,
-                "context": context,
-                "session_id": session_id,
-            })
+            await self._prompt_queue.put(
+                {
+                    "message": message,
+                    "context": context,
+                    "session_id": session_id,
+                }
+            )
             content = await asyncio.wait_for(
                 self._response_queue.get(),
                 timeout=self._timeout,

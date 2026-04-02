@@ -68,12 +68,8 @@ class RoundRobinProtocol(DiscussionProtocol):
     ) -> dict[str, Any]:
         # Get entries visible to this agent, up to previous round.
         prior_round = round_num - 1 if round_num > 1 else None
-        visible = transcript.get_visible_transcript(
-            agent, up_to_round=prior_round
-        )
-        round_context = transcript.format_for_payload(
-            visible, max_chars=transcript._max_chars
-        )
+        visible = transcript.get_visible_transcript(agent, up_to_round=prior_round)
+        round_context = transcript.format_for_payload(visible, max_chars=transcript._max_chars)
 
         if round_num == 1:
             instructions = (
@@ -122,9 +118,7 @@ class StructuredDebateProtocol(DiscussionProtocol):
         visible = transcript.get_visible_transcript(
             agent, up_to_round=round_num - 1 if round_num > 1 else None
         )
-        round_context = transcript.format_for_payload(
-            visible, max_chars=transcript._max_chars
-        )
+        round_context = transcript.format_for_payload(visible, max_chars=transcript._max_chars)
 
         if round_num == 1:
             instructions = (
@@ -255,9 +249,6 @@ def get_protocol(name: str) -> DiscussionProtocol:
     """
     cls = PROTOCOL_REGISTRY.get(name)
     if cls is None:
-        msg = (
-            f"Unknown protocol: '{name}'. "
-            f"Available: {sorted(PROTOCOL_REGISTRY)}"
-        )
+        msg = f"Unknown protocol: '{name}'. Available: {sorted(PROTOCOL_REGISTRY)}"
         raise ValueError(msg)
     return cls()

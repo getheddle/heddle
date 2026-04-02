@@ -43,9 +43,7 @@ class _ActiveCouncil:
     task: asyncio.Task | None = None
     result: CouncilResult | None = None
     transcript: TranscriptStore = field(default_factory=TranscriptStore)
-    started_at: datetime = field(
-        default_factory=lambda: datetime.now(UTC)
-    )
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     error: str | None = None
 
 
@@ -129,9 +127,7 @@ class CouncilBridge:
                 def on_turn(entry: TranscriptEntry) -> None:
                     active.transcript.add_entry(entry)
 
-                result = await self.runner.run(
-                    topic, config=config, on_turn=on_turn
-                )
+                result = await self.runner.run(topic, config=config, on_turn=on_turn)
                 active.result = result
             except Exception as e:
                 active.error = str(e)
@@ -150,9 +146,7 @@ class CouncilBridge:
             "status": "started",
         }
 
-    async def _status(
-        self, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _status(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Get the current status of a council discussion."""
         council_id = arguments.get("council_id", "")
         active = self._active.get(council_id)
@@ -183,9 +177,7 @@ class CouncilBridge:
             "entries_so_far": active.transcript.total_entries,
         }
 
-    async def _transcript(
-        self, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _transcript(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Get the transcript of a council discussion."""
         council_id = arguments.get("council_id", "")
         agent_filter = arguments.get("agent_filter")
@@ -205,34 +197,30 @@ class CouncilBridge:
         for r in transcript_data:
             entries = r.entries if hasattr(r, "entries") else []
             if agent_filter:
-                entries = [
-                    e for e in entries if e.agent_name == agent_filter
-                ]
-            rounds_out.append({
-                "round": r.round_num,
-                "entries": [
-                    {
-                        "agent": e.agent_name,
-                        "role": e.role,
-                        "content": e.content,
-                        "model": e.model_used,
-                    }
-                    for e in entries
-                ],
-                "convergence_score": r.convergence_score,
-            })
+                entries = [e for e in entries if e.agent_name == agent_filter]
+            rounds_out.append(
+                {
+                    "round": r.round_num,
+                    "entries": [
+                        {
+                            "agent": e.agent_name,
+                            "role": e.role,
+                            "content": e.content,
+                            "model": e.model_used,
+                        }
+                        for e in entries
+                    ],
+                    "convergence_score": r.convergence_score,
+                }
+            )
 
         return {
             "council_id": council_id,
             "rounds": rounds_out,
-            "total_entries": sum(
-                len(r["entries"]) for r in rounds_out
-            ),
+            "total_entries": sum(len(r["entries"]) for r in rounds_out),
         }
 
-    async def _intervene(
-        self, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _intervene(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Inject a human message into an active council."""
         council_id = arguments.get("council_id", "")
         message = arguments.get("message", "")
@@ -248,12 +236,14 @@ class CouncilBridge:
         if not active.transcript.rounds:
             active.transcript.start_round(0)
 
-        active.transcript.add_entry(TranscriptEntry(
-            round_num=active.transcript.rounds[-1].round_num,
-            agent_name="human",
-            role="Human intervention",
-            content=message,
-        ))
+        active.transcript.add_entry(
+            TranscriptEntry(
+                round_num=active.transcript.rounds[-1].round_num,
+                agent_name="human",
+                role="Human intervention",
+                content=message,
+            )
+        )
 
         return {
             "council_id": council_id,
@@ -261,9 +251,7 @@ class CouncilBridge:
             "message_length": len(message),
         }
 
-    async def _stop(
-        self, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _stop(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Stop an active council and return current state."""
         council_id = arguments.get("council_id", "")
         active = self._active.get(council_id)

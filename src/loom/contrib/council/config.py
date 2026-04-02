@@ -50,8 +50,7 @@ class CouncilConfig(BaseModel):
             for ref in a.sees_transcript_from:
                 if ref != "all" and ref not in names:
                     msg = (
-                        f"Agent '{a.name}' references unknown agent "
-                        f"'{ref}' in sees_transcript_from"
+                        f"Agent '{a.name}' references unknown agent '{ref}' in sees_transcript_from"
                     )
                     raise ValueError(msg)
 
@@ -97,10 +96,7 @@ def validate_council_config(raw: dict[str, Any]) -> list[str]:
     from loom.contrib.council.protocol import PROTOCOL_REGISTRY
 
     if protocol not in PROTOCOL_REGISTRY:
-        errors.append(
-            f"Unknown protocol '{protocol}'. "
-            f"Available: {sorted(PROTOCOL_REGISTRY)}"
-        )
+        errors.append(f"Unknown protocol '{protocol}'. Available: {sorted(PROTOCOL_REGISTRY)}")
 
     convergence = raw.get("convergence", {})
     if isinstance(convergence, dict):

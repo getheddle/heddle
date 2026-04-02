@@ -129,22 +129,19 @@ class CouncilOrchestrator(BaseActor):
 
                         if agent.worker_type is None:
                             # Bridge agents not supported in NATS mode yet.
-                            msg = (
-                                "Bridge agents require CouncilRunner, "
-                                "not CouncilOrchestrator"
+                            msg = "Bridge agents require CouncilRunner, not CouncilOrchestrator"
+                            transcript.add_entry(
+                                TranscriptEntry(
+                                    round_num=round_num,
+                                    agent_name=agent.name,
+                                    role=agent.role,
+                                    content=f"[{msg}]",
+                                    timestamp=datetime.now(UTC),
+                                )
                             )
-                            transcript.add_entry(TranscriptEntry(
-                                round_num=round_num,
-                                agent_name=agent.name,
-                                role=agent.role,
-                                content=f"[{msg}]",
-                                timestamp=datetime.now(UTC),
-                            ))
                             continue
 
-                        context = protocol.build_agent_context(
-                            agent, transcript, round_num, topic
-                        )
+                        context = protocol.build_agent_context(agent, transcript, round_num, topic)
 
                         with _tracer.start_as_current_span(
                             "council.agent_turn",

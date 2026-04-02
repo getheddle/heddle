@@ -110,9 +110,7 @@ class CouncilRunner:
 
             for turn in turns:
                 agent = turn.agent
-                context = protocol.build_agent_context(
-                    agent, transcript, round_num, topic
-                )
+                context = protocol.build_agent_context(agent, transcript, round_num, topic)
 
                 entry = await self._execute_agent_turn(
                     agent=agent,
@@ -258,8 +256,7 @@ class CouncilRunner:
         parts: list[str] = []
 
         parts.append(
-            f"You are participating in a structured team discussion "
-            f"(council: {config.name})."
+            f"You are participating in a structured team discussion (council: {config.name})."
         )
 
         if agent.role:
