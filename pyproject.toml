@@ -1,6 +1,6 @@
 [project]
 name = "heddle-ai"
-version = "0.9.0"
+version = "0.9.1"
 description = "Lightweight Orchestrated Operational Mesh — Actor-based multi-LLM agent framework"
 readme = "README.md"
 license = {text = "MPL-2.0"}
