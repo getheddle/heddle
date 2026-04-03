@@ -361,7 +361,8 @@ class HeddleDashboard(App):
             self._refresh_tasks_table()
 
         # Update parent goal collected count
-        goal_id = subject.rsplit(".", maxsplit=1)[-1] if subject.startswith("heddle.results.") else ""
+        prefix = "heddle.results."
+        goal_id = subject.rsplit(".", maxsplit=1)[-1] if subject.startswith(prefix) else ""
         if goal_id in self.state.goals:
             goal = self.state.goals[goal_id]
             goal.collected += 1

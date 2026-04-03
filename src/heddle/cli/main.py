@@ -700,7 +700,7 @@ def mcp(config: str, transport: str, host: str, port: int, skip_preflight: bool)
 @click.option("--configs-dir", default="configs/", help="Path to configs directory")
 @click.option("--db-path", default="~/.heddle/workshop.duckdb", help="DuckDB database path")
 @click.option("--nats-url", default=None, help="NATS URL for live metrics (optional)")
-@click.option("--apps-dir", default="~/.heddle/apps", help="Root directory for deployed app bundles")
+@click.option("--apps-dir", default="~/.heddle/apps", help="Deployed app bundles dir")
 def workshop(
     port: int,
     host: str,
