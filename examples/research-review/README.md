@@ -8,6 +8,7 @@ demonstrating workers, pipelines, eval suites, and the blind audit pattern.
 ## Phases
 
 ### Phase 1 — Single Worker
+
 One `claim_extractor` worker that takes a research abstract and returns
 structured claims. Tested in Workshop with an eval suite.
 
@@ -15,6 +16,7 @@ structured claims. Tested in Workshop with an eval suite.
 golden baselines.
 
 ### Phase 2 — Review Pipeline
+
 Three workers chained in a pipeline: `claim_extractor` →
 `methodology_reviewer` → `review_summarizer`. Data flows automatically
 between stages.
@@ -22,6 +24,7 @@ between stages.
 **What you learn:** Pipeline configs, stage dependencies, input mappings.
 
 ### Phase 3 — Blind Adversarial Review
+
 Adds a `terminology_neutralizer` and `blind_reviewer` running in parallel
 with the sighted review. A `review_synthesizer` merges both paths and
 flags where reviewers disagree.
@@ -62,7 +65,7 @@ safety). Each has intentional methodological strengths and weaknesses.
 
 ## Directory Structure
 
-```
+```text
 research-review/
 ├── README.md
 ├── sample-data/

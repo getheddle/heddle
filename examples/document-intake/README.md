@@ -9,6 +9,7 @@ backends, and bias detection through blind audit.
 ## Phases
 
 ### Phase 1 — Single Worker
+
 A `comment_classifier` worker that classifies individual public comments
 by topic, stance, and actionability. Tested in Workshop with an eval suite.
 
@@ -16,6 +17,7 @@ by topic, stance, and actionability. Tested in Workshop with an eval suite.
 domain-specific classification design.
 
 ### Phase 2 — Intake Pipeline with Custom Backend
+
 A custom `CsvReaderBackend` (ProcessingBackend) reads a CSV file. The
 pipeline chains: `csv_reader` → `comment_classifier` → `entity_extractor`
 → `batch_summarizer`.
@@ -24,6 +26,7 @@ pipeline chains: `csv_reader` → `comment_classifier` → `entity_extractor`
 with mixed worker types (processor + LLM), batch processing.
 
 ### Phase 3 — Bias Detection
+
 Adds a `blind_bias_auditor` (sees only classifications, not text) and a
 `fairness_reviewer` (sees both) running in parallel with the intake
 pipeline.
@@ -72,7 +75,7 @@ Loom pipelines.
 
 ## Directory Structure
 
-```
+```text
 document-intake/
 ├── README.md
 ├── sample-data/
