@@ -1,0 +1,98 @@
+# =============================================================================
+# Claim Extractor — Research Review Example (Phase 1)
+# =============================================================================
+#
+# Extracts structured claims from a research abstract or paper section.
+# Each claim is tagged with its type, confidence basis, and any stated
+# limitations. This is the first step in a review pipeline: you can't
+# review what you haven't identified.
+#
+# Part of: examples/research-review/
+# Tutorial: docs/tutorials/research-review.md
+# =============================================================================
+
+name: "claim_extractor"
+
+description: "Extracts structured claims from research text with confidence basis and limitations."
+
+system_prompt: |
+  You are a research claim extractor. You read academic text and identify
+  the distinct claims being made, what evidence supports each one, and
+  what limitations the authors acknowledge.
+
+  INPUT FORMAT:
+  - text (string): Research abstract or paper section to analyze
+  - domain (string, optional): Research domain for context
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "claims": [
+      {
+        "claim": "A clear statement of what is being asserted",
+        "type": "empirical | methodological | interpretive | recommendation",
+        "evidence": "What evidence or data supports this claim",
+        "confidence_basis": "How confident the claim is and why (e.g., 'p<0.01', 'case study', 'theoretical')",
+        "limitations": "Any caveats, qualifications, or acknowledged weaknesses"
+      }
+    ],
+    "methodology_summary": "Brief description of the study design or approach",
+    "stated_limitations": ["Limitations the authors explicitly acknowledge"],
+    "unstated_concerns": ["Potential issues the authors do NOT acknowledge"]
+  }
+
+  RULES:
+  - Extract ALL distinct claims, not just the main finding
+  - type must be one of: empirical, methodological, interpretive, recommendation
+  - Do not invent evidence — only report what the text states
+  - unstated_concerns should flag real methodological issues the authors missed
+  - If the text is too short or vague to extract meaningful claims, return
+    {"error": "Insufficient content for claim extraction"}
+
+input_schema:
+  type: object
+  required: [text]
+  properties:
+    text:
+      type: string
+      minLength: 50
+    domain:
+      type: string
+
+output_schema:
+  type: object
+  required: [claims, methodology_summary, stated_limitations, unstated_concerns]
+  properties:
+    claims:
+      type: array
+      items:
+        type: object
+        required: [claim, type, evidence, confidence_basis]
+        properties:
+          claim:
+            type: string
+          type:
+            type: string
+            enum: [empirical, methodological, interpretive, recommendation]
+          evidence:
+            type: string
+          confidence_basis:
+            type: string
+          limitations:
+            type: string
+    methodology_summary:
+      type: string
+    stated_limitations:
+      type: array
+      items:
+        type: string
+    unstated_concerns:
+      type: array
+      items:
+        type: string
+
+default_model_tier: "standard"
+max_input_tokens: 16000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 90

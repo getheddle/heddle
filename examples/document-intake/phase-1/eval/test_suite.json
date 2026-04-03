@@ -1,0 +1,80 @@
+[
+  {
+    "name": "supportive-with-parking-concern",
+    "input": {
+      "text": "I strongly support the proposed mixed-use development at the former Millbrook factory site. Our neighborhood has needed walkable retail for years, and the inclusion of 40 affordable housing units addresses a real gap. My only concern is parking — the plan shows 180 spaces for 220 residential units plus commercial. Has the developer conducted a traffic impact study? The intersection at Millbrook and Route 9 is already congested during evening commute.",
+      "author": "Resident, Oak Hill neighborhood",
+      "context": "Mixed-use development proposal at former Millbrook factory site"
+    },
+    "expected_output": {
+      "primary_topic": "traffic",
+      "stance": "conditional_support",
+      "actionable": true
+    }
+  },
+  {
+    "name": "business-opposition",
+    "input": {
+      "text": "As the owner of a small restaurant on Main Street, I'm worried this development will pull foot traffic away from downtown. We've already lost three businesses this year. The developer's claim that 'new residents will patronize existing businesses' ignores the fact that they're building retail space that will compete directly with us. I'd like to see a commitment to no food service tenants in the new retail spaces, or at minimum some kind of economic impact assessment for existing downtown businesses.",
+      "author": "Business owner, downtown district",
+      "context": "Mixed-use development proposal at former Millbrook factory site"
+    },
+    "expected_output": {
+      "primary_topic": "economic",
+      "stance": "oppose",
+      "actionable": true
+    }
+  },
+  {
+    "name": "environmental-concerns",
+    "input": {
+      "text": "The Millbrook factory site has documented soil contamination from decades of industrial use. The environmental remediation plan in the proposal references Phase I and Phase II environmental site assessments completed in 2024, but does not include the full reports. We request that these reports be made public before the planning board votes. Additionally, the stormwater management plan relies on bioretention basins that may be insufficient for the 100-year flood events that have become more frequent. The town's own climate resilience plan recommends designing for 500-year events on brownfield sites.",
+      "author": "Environmental advocacy group",
+      "context": "Mixed-use development proposal at former Millbrook factory site"
+    },
+    "expected_output": {
+      "primary_topic": "environment",
+      "stance": "oppose",
+      "actionable": true
+    }
+  },
+  {
+    "name": "school-impact",
+    "input": {
+      "text": "Has anyone considered the impact on our schools? 220 residential units could add 80-100 school-age children. Lincoln Elementary is already at 95% capacity and the middle school portables are falling apart. The developer should be required to contribute to school infrastructure through impact fees. Also, the proposed building height of 5 stories is completely out of character for this neighborhood — nothing else on Millbrook Road is over 3 stories.",
+      "author": "Parent, school district resident",
+      "context": "Mixed-use development proposal at former Millbrook factory site"
+    },
+    "expected_output": {
+      "primary_topic": "schools",
+      "stance": "oppose",
+      "actionable": true
+    }
+  },
+  {
+    "name": "vague-opposition",
+    "input": {
+      "text": "This is just another giveaway to developers. The planning board always approves everything. Wake up people.",
+      "author": "Anonymous",
+      "context": "Mixed-use development proposal at former Millbrook factory site"
+    },
+    "expected_output": {
+      "primary_topic": "general",
+      "stance": "oppose",
+      "actionable": false
+    }
+  },
+  {
+    "name": "conditional-support-with-conditions",
+    "input": {
+      "text": "The Oak Hill Neighborhood Association held a special meeting on January 18th to discuss this proposal. By a vote of 47-12, we resolved to support the development WITH the following conditions: (1) maximum building height reduced from 5 to 4 stories, (2) construction hours limited to 7 AM - 6 PM weekdays only, (3) a community benefit agreement including a neighborhood park and public art installation, (4) dedicated left-turn signals at Millbrook and Route 9 funded by the developer, and (5) first priority for affordable units given to current town residents.",
+      "author": "Neighborhood association president",
+      "context": "Mixed-use development proposal at former Millbrook factory site"
+    },
+    "expected_output": {
+      "primary_topic": "community",
+      "stance": "conditional_support",
+      "actionable": true
+    }
+  }
+]

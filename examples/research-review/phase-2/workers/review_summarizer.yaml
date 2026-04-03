@@ -1,0 +1,131 @@
+# =============================================================================
+# Review Summarizer — Research Review Example (Phase 2)
+# =============================================================================
+#
+# Synthesizes claim extraction and methodology review into a structured
+# review report. This is the final stage of the Phase 2 pipeline —
+# it receives structured data from both prior stages and produces a
+# human-readable assessment.
+#
+# Part of: examples/research-review/
+# Tutorial: docs/tutorials/research-review.md
+# =============================================================================
+
+name: "review_summarizer"
+
+description: "Synthesizes claim extraction and methodology review into a structured report."
+
+system_prompt: |
+  You are a review synthesizer. You receive structured outputs from a
+  claim extractor and a methodology reviewer, and produce a coherent
+  review report.
+
+  Your job is synthesis, not re-analysis. Use the structured data you
+  receive — do not re-evaluate claims or methodology from scratch.
+
+  INPUT FORMAT:
+  - claims (array): Structured claims from extraction
+  - methodology_summary (string): Study design description
+  - stated_limitations (array): Author-acknowledged limitations
+  - unstated_concerns (array): Issues the extractor flagged
+  - claim_reviews (array): Per-claim methodology assessments
+  - overall_methodology_score (number): Holistic methodology score
+  - design_strengths (array): Methodology strengths
+  - design_weaknesses (array): Methodology weaknesses
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "title": "Review of: [inferred paper topic]",
+    "verdict": "accept | revise | reject",
+    "confidence": 0.0-1.0,
+    "summary": "2-3 sentence overall assessment",
+    "strong_claims": ["Claims well-supported by methodology"],
+    "weak_claims": ["Claims not adequately supported"],
+    "key_concerns": ["Most important issues, ranked by severity"],
+    "recommendations": ["Actionable improvements"],
+    "report": "A 2-4 paragraph narrative review suitable for the authors"
+  }
+
+  RULES:
+  - verdict: "accept" = methodology supports main claims, minor issues only;
+    "revise" = some claims unsupported but fixable; "reject" = fundamental
+    methodological problems undermine the main findings
+  - strong_claims and weak_claims should reference specific claims from input
+  - key_concerns should combine unstated_concerns with design_weaknesses,
+    deduplicated and ranked
+  - The report should be constructive — written as if addressing the authors
+  - Do not add new analysis — synthesize what the extraction and review found
+
+input_schema:
+  type: object
+  required: [claims, methodology_summary, claim_reviews, overall_methodology_score]
+  properties:
+    claims:
+      type: array
+      items:
+        type: object
+    methodology_summary:
+      type: string
+    stated_limitations:
+      type: array
+      items:
+        type: string
+    unstated_concerns:
+      type: array
+      items:
+        type: string
+    claim_reviews:
+      type: array
+      items:
+        type: object
+    overall_methodology_score:
+      type: number
+    design_strengths:
+      type: array
+      items:
+        type: string
+    design_weaknesses:
+      type: array
+      items:
+        type: string
+
+output_schema:
+  type: object
+  required: [title, verdict, confidence, summary, strong_claims, weak_claims, key_concerns, report]
+  properties:
+    title:
+      type: string
+    verdict:
+      type: string
+      enum: [accept, revise, reject]
+    confidence:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+    summary:
+      type: string
+    strong_claims:
+      type: array
+      items:
+        type: string
+    weak_claims:
+      type: array
+      items:
+        type: string
+    key_concerns:
+      type: array
+      items:
+        type: string
+    recommendations:
+      type: array
+      items:
+        type: string
+    report:
+      type: string
+
+default_model_tier: "standard"
+max_input_tokens: 16000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 90

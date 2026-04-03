@@ -1,0 +1,129 @@
+# =============================================================================
+# Comment Classifier (Batch) — Document Intake Example (Phase 2)
+# =============================================================================
+#
+# Batch-aware version of the Phase 1 classifier. Takes an array of records
+# (from the csv_reader) and classifies each one, returning an array of
+# classifications.
+#
+# Why a batch version? The csv_reader returns all records at once. In a
+# pipeline, each stage processes one payload per goal — so this worker
+# needs to handle the full batch. For Workshop testing of individual
+# comments, use the Phase 1 single-item classifier.
+#
+# Part of: examples/document-intake/
+# Tutorial: docs/tutorials/document-intake.md
+# =============================================================================
+
+name: "comment_classifier"
+
+description: "Classifies a batch of public comments by topic, stance, and actionability."
+
+system_prompt: |
+  You are a public comment classifier. You receive a batch of comments
+  submitted about a development proposal and classify each one by topic,
+  stance, and whether it contains actionable requests.
+
+  INPUT FORMAT:
+  - records (array of objects): Each object has at least a "text" field,
+    and may include "id", "author", "date"
+  - text_column (string): Which field in each record contains the comment text
+  - context (string, optional): What the comments are about
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "classifications": [
+      {
+        "id": "Record ID or index",
+        "primary_topic": "One of the categories below",
+        "secondary_topics": ["Other relevant categories"],
+        "stance": "support | oppose | conditional_support | neutral | off_topic",
+        "actionable": true/false,
+        "action_items": ["Specific requests or demands"],
+        "key_phrases": ["Important phrases from the comment"],
+        "confidence": 0.0-1.0
+      }
+    ],
+    "total_classified": 0
+  }
+
+  TOPIC CATEGORIES:
+  - traffic: Traffic, parking, road infrastructure, commute impact
+  - environment: Environmental contamination, remediation, stormwater, climate
+  - housing: Affordable housing, density, building height, character
+  - schools: School capacity, impact fees, children
+  - economic: Business impact, property values, jobs, tax revenue
+  - infrastructure: Utilities, sewer, water, structural engineering
+  - historic: Historic preservation, architectural character, adaptive reuse
+  - process: Planning process, public notice, transparency, timeline
+  - health: Public health, contamination exposure, air quality
+  - community: Community benefits, parks, public spaces, arts
+  - general: General support/opposition without specific topic focus
+
+  RULES:
+  - Classify EVERY record — do not skip any
+  - Use the text_column field to find the comment text in each record
+  - Use the record's "id" field if available, otherwise use the array index
+  - stance definitions: support (clearly in favor), oppose (clearly against),
+    conditional_support (in favor IF conditions met), neutral (informational),
+    off_topic (not about the proposal)
+  - actionable = true if the comment makes specific requests that could be acted on
+
+input_schema:
+  type: object
+  required: [records, text_column]
+  properties:
+    records:
+      type: array
+      items:
+        type: object
+    text_column:
+      type: string
+    context:
+      type: string
+
+output_schema:
+  type: object
+  required: [classifications, total_classified]
+  properties:
+    classifications:
+      type: array
+      items:
+        type: object
+        required: [primary_topic, stance, actionable, confidence]
+        properties:
+          id:
+            type: string
+          primary_topic:
+            type: string
+            enum: [traffic, environment, housing, schools, economic, infrastructure, historic, process, health, community, general]
+          secondary_topics:
+            type: array
+            items:
+              type: string
+          stance:
+            type: string
+            enum: [support, oppose, conditional_support, neutral, off_topic]
+          actionable:
+            type: boolean
+          action_items:
+            type: array
+            items:
+              type: string
+          key_phrases:
+            type: array
+            items:
+              type: string
+          confidence:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+    total_classified:
+      type: integer
+
+default_model_tier: "standard"
+max_input_tokens: 32000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 120

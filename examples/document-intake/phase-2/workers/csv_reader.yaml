@@ -1,0 +1,57 @@
+# =============================================================================
+# CSV Reader — Document Intake Example (Phase 2)
+# =============================================================================
+#
+# Processor worker (non-LLM) that reads a CSV file and returns rows as
+# structured records. Demonstrates how to wire a custom ProcessingBackend
+# into a Loom pipeline.
+#
+# Note: worker_kind is "processor" — this worker runs Python code, not
+# an LLM. No system_prompt, no model tier, no token limits. But it uses
+# the same I/O contract validation as LLM workers.
+#
+# The backend class (CsvReaderBackend) is in processing/csv_reader.py.
+#
+# Part of: examples/document-intake/
+# Tutorial: docs/tutorials/document-intake.md
+# =============================================================================
+
+name: "csv_reader"
+
+description: "Reads a CSV file and returns rows as structured records."
+
+worker_kind: "processor"
+
+processing_backend: "examples.document_intake.processing.csv_reader.CsvReaderBackend"
+
+input_schema:
+  type: object
+  required: [source_path, text_column]
+  properties:
+    source_path:
+      type: string
+    text_column:
+      type: string
+    id_column:
+      type: string
+    max_rows:
+      type: integer
+      minimum: 1
+
+output_schema:
+  type: object
+  required: [records, total_count, columns]
+  properties:
+    records:
+      type: array
+      items:
+        type: object
+    total_count:
+      type: integer
+    columns:
+      type: array
+      items:
+        type: string
+
+reset_after_task: true
+timeout_seconds: 30

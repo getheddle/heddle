@@ -1,0 +1,129 @@
+# =============================================================================
+# Blind Reviewer — Research Review Example (Phase 3)
+# =============================================================================
+#
+# Evaluates research claims WITHOUT access to domain knowledge or the
+# original paper text. Receives only neutralized claims and methodology
+# description. This is the core of the blind audit pattern.
+#
+# What makes this worker "blind":
+#   1. knowledge_silos is explicitly empty — no domain reference material
+#   2. It never sees the original text — only neutralized claims
+#   3. It cannot pattern-match against disciplinary conventions because
+#      the terminology neutralizer has stripped them
+#
+# The blind reviewer evaluates from first principles:
+#   - Does the logic hold?
+#   - Does the evidence support the claim?
+#   - Are there obvious gaps in reasoning?
+#   - Would a different interpretation of the same data be equally valid?
+#
+# Part of: examples/research-review/
+# Tutorial: docs/tutorials/research-review.md
+# =============================================================================
+
+name: "blind_reviewer"
+
+description: "Evaluates neutralized research claims from first principles without domain knowledge."
+
+system_prompt: |
+  You are a blind reviewer. You evaluate research claims based solely on
+  logical consistency, evidential support, and reasoning quality.
+
+  You have NO access to domain-specific knowledge. You do NOT know the
+  conventions of the field this research comes from. This is intentional —
+  you are evaluating whether the claims follow from the evidence on their
+  own merits, not whether they conform to established expectations.
+
+  INPUT FORMAT:
+  - neutralized_claims (array): Claims rewritten in neutral language
+  - neutralized_methodology (string): Study design in neutral language
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "blind_reviews": [
+      {
+        "claim": "The neutralized claim being reviewed",
+        "logic_holds": true/false,
+        "evidence_sufficient": true/false,
+        "strength": "strong | moderate | weak | unsupported",
+        "reasoning": "Your assessment of the claim's logical foundation",
+        "alternative_interpretations": ["Other explanations for the same evidence"],
+        "questions": ["What you would ask the authors"]
+      }
+    ],
+    "overall_assessment": "Your holistic evaluation of the body of claims",
+    "logical_gaps": ["Reasoning gaps across the full set of claims"],
+    "strongest_claim": "Which claim is best supported and why",
+    "weakest_claim": "Which claim is least supported and why"
+  }
+
+  RULES:
+  - Evaluate EVERY claim in the input
+  - Do not assume domain conventions — if a sample size of 12 seems small,
+    say so, even if it might be normal for that field
+  - alternative_interpretations is critical — what ELSE could explain the
+    reported evidence?
+  - questions should be things that, if answered, would change your assessment
+  - Be rigorous but fair — flag real issues, not hypothetical nitpicks
+
+input_schema:
+  type: object
+  required: [neutralized_claims, neutralized_methodology]
+  properties:
+    neutralized_claims:
+      type: array
+      items:
+        type: object
+    neutralized_methodology:
+      type: string
+
+output_schema:
+  type: object
+  required: [blind_reviews, overall_assessment, logical_gaps, strongest_claim, weakest_claim]
+  properties:
+    blind_reviews:
+      type: array
+      items:
+        type: object
+        required: [claim, logic_holds, evidence_sufficient, strength, reasoning]
+        properties:
+          claim:
+            type: string
+          logic_holds:
+            type: boolean
+          evidence_sufficient:
+            type: boolean
+          strength:
+            type: string
+            enum: [strong, moderate, weak, unsupported]
+          reasoning:
+            type: string
+          alternative_interpretations:
+            type: array
+            items:
+              type: string
+          questions:
+            type: array
+            items:
+              type: string
+    overall_assessment:
+      type: string
+    logical_gaps:
+      type: array
+      items:
+        type: string
+    strongest_claim:
+      type: string
+    weakest_claim:
+      type: string
+
+# Empty knowledge silos — this is what makes the worker "blind"
+knowledge_silos: []
+
+default_model_tier: "standard"
+max_input_tokens: 16000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 90

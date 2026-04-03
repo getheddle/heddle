@@ -1,0 +1,93 @@
+# =============================================================================
+# Document Intake Pipeline — Phase 3 (With Bias Audit)
+# =============================================================================
+#
+# Extends the Phase 2 pipeline with two parallel audit workers:
+#
+#   read_csv ──► classify ──┬──► extract ──► summarize
+#                           │
+#                           ├──► blind_bias_auditor
+#                           │
+#                           └──► fairness_reviewer
+#
+# After classify completes, three paths run IN PARALLEL:
+#   1. extract → summarize (the intake path from Phase 2)
+#   2. blind_bias_auditor (sees only classifications, not text)
+#   3. fairness_reviewer (sees both text and classifications)
+#
+# Loom infers the parallelism automatically:
+#   - extract depends on read_csv + classify
+#   - blind_bias_auditor depends on classify
+#   - fairness_reviewer depends on read_csv + classify
+#   Since none of these depend on each other, they run concurrently.
+#
+# The pipeline produces three independent outputs:
+#   - summarize: the intake summary report
+#   - bias_audit: statistical bias analysis
+#   - fairness_review: content-level consistency check
+#
+# Part of: examples/document-intake/
+# Tutorial: docs/tutorials/document-intake.md
+# =============================================================================
+
+name: "document_intake_audited"
+
+description: "Document intake pipeline with parallel blind bias audit and fairness review."
+
+timeout_seconds: 300
+
+pipeline_stages:
+  # --- Stage 1: Read CSV (processor) ---
+  - name: "read_csv"
+    worker_type: "csv_reader"
+    tier: "local"
+    input_mapping:
+      source_path: "goal.context.source_path"
+      text_column: "goal.context.text_column"
+
+  # --- Stage 2: Classify all comments ---
+  - name: "classify"
+    worker_type: "comment_classifier"
+    tier: "standard"
+    input_mapping:
+      records: "read_csv.output.records"
+      text_column: "goal.context.text_column"
+      context: "goal.context.description"
+
+  # --- Stage 3a: Extract entities (parallel with 3b and 3c) ---
+  - name: "extract"
+    worker_type: "entity_extractor"
+    tier: "standard"
+    input_mapping:
+      records: "read_csv.output.records"
+      text_column: "goal.context.text_column"
+      classifications: "classify.output.classifications"
+
+  # --- Stage 3b: Blind bias audit (parallel with 3a and 3c) ---
+  # Receives ONLY classifications — cannot see original text.
+  - name: "bias_audit"
+    worker_type: "blind_bias_auditor"
+    tier: "standard"
+    input_mapping:
+      classifications: "classify.output.classifications"
+      total_count: "classify.output.total_classified"
+
+  # --- Stage 3c: Fairness review (parallel with 3a and 3b) ---
+  # Receives both original text AND classifications.
+  - name: "fairness_review"
+    worker_type: "fairness_reviewer"
+    tier: "standard"
+    input_mapping:
+      records: "read_csv.output.records"
+      text_column: "goal.context.text_column"
+      classifications: "classify.output.classifications"
+
+  # --- Stage 4: Summarize (waits for extract, which waits for classify) ---
+  - name: "summarize"
+    worker_type: "batch_summarizer"
+    tier: "standard"
+    input_mapping:
+      classifications: "classify.output.classifications"
+      extractions: "extract.output.extractions"
+      total_comments: "read_csv.output.total_count"
+      context: "goal.context.description"

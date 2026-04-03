@@ -1,0 +1,121 @@
+# =============================================================================
+# Comment Classifier — Document Intake Example (Phase 1)
+# =============================================================================
+#
+# Classifies public comments into topic categories. Unlike the shipped
+# classifier worker (which takes categories as input), this one has
+# the categories built into the prompt — tailored to the zoning proposal
+# domain. This demonstrates how to specialize a generic concept.
+#
+# You could also use the shipped classifier by passing categories in the
+# input payload. Both approaches work. A built-in category set is better
+# when the taxonomy is stable; dynamic categories are better when the
+# same worker serves different projects.
+#
+# Part of: examples/document-intake/
+# Tutorial: docs/tutorials/document-intake.md
+# =============================================================================
+
+name: "comment_classifier"
+
+description: "Classifies public comments by topic, stance, and actionability."
+
+system_prompt: |
+  You are a public comment classifier. You read a comment submitted about
+  a development proposal and classify it by topic, stance, and whether it
+  contains actionable requests.
+
+  INPUT FORMAT:
+  - text (string): The comment text
+  - author (string, optional): Who submitted the comment
+  - context (string, optional): Brief description of what the comments are about
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "primary_topic": "One of the categories below",
+    "secondary_topics": ["Other relevant categories"],
+    "stance": "support | oppose | conditional_support | neutral | off_topic",
+    "actionable": true/false,
+    "action_items": ["Specific requests or demands made in the comment"],
+    "key_phrases": ["Important phrases that capture the comment's main points"],
+    "confidence": 0.0-1.0,
+    "reasoning": "Brief explanation of classification decisions"
+  }
+
+  TOPIC CATEGORIES:
+  - traffic: Traffic, parking, road infrastructure, commute impact
+  - environment: Environmental contamination, remediation, stormwater, climate
+  - housing: Affordable housing, density, building height, character
+  - schools: School capacity, impact fees, children
+  - economic: Business impact, property values, jobs, tax revenue
+  - infrastructure: Utilities, sewer, water, structural engineering
+  - historic: Historic preservation, architectural character, adaptive reuse
+  - process: Planning process, public notice, transparency, timeline
+  - health: Public health, contamination exposure, air quality
+  - community: Community benefits, parks, public spaces, arts
+  - general: General support/opposition without specific topic focus
+
+  RULES:
+  - primary_topic must be the single most relevant category
+  - secondary_topics may include 0-3 additional relevant categories
+  - stance definitions:
+    - support: clearly in favor
+    - oppose: clearly against
+    - conditional_support: in favor IF specific conditions are met
+    - neutral: informational or asking questions without taking a position
+    - off_topic: not substantively about the proposal
+  - actionable = true if the comment makes specific requests, demands, or
+    recommendations that could be acted on
+  - action_items should be extracted verbatim or near-verbatim from the text
+  - If the comment is too vague to classify meaningfully, use "general" and
+    set confidence below 0.5
+
+input_schema:
+  type: object
+  required: [text]
+  properties:
+    text:
+      type: string
+      minLength: 10
+    author:
+      type: string
+    context:
+      type: string
+
+output_schema:
+  type: object
+  required: [primary_topic, stance, actionable, confidence, reasoning]
+  properties:
+    primary_topic:
+      type: string
+      enum: [traffic, environment, housing, schools, economic, infrastructure, historic, process, health, community, general]
+    secondary_topics:
+      type: array
+      items:
+        type: string
+    stance:
+      type: string
+      enum: [support, oppose, conditional_support, neutral, off_topic]
+    actionable:
+      type: boolean
+    action_items:
+      type: array
+      items:
+        type: string
+    key_phrases:
+      type: array
+      items:
+        type: string
+    confidence:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+    reasoning:
+      type: string
+
+default_model_tier: "local"
+max_input_tokens: 4000
+max_output_tokens: 1000
+reset_after_task: true
+timeout_seconds: 30

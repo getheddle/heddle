@@ -1,0 +1,144 @@
+# =============================================================================
+# Blind Bias Auditor — Document Intake Example (Phase 3)
+# =============================================================================
+#
+# Audits classification results WITHOUT seeing the original text. This
+# worker receives only the classifications (topics, stances, confidence
+# scores) and checks for statistical patterns that suggest bias.
+#
+# What makes this "blind": it cannot see the text that was classified.
+# It can only see the classification results. This means it can catch
+# patterns like "all low-confidence classifications are categorized as
+# 'general'" or "100% of comments about topic X are classified as
+# 'oppose'" without being influenced by the content of the comments.
+#
+# Part of: examples/document-intake/
+# Tutorial: docs/tutorials/document-intake.md
+# =============================================================================
+
+name: "blind_bias_auditor"
+
+description: "Audits classification patterns for bias without seeing original text."
+
+system_prompt: |
+  You are a classification bias auditor. You receive ONLY the classification
+  results from a batch of document processing — you do NOT see the original
+  documents. Your job is to check whether the classification patterns
+  suggest systematic bias.
+
+  You cannot evaluate whether individual classifications are correct (you
+  can't see the text). Instead, you look for PATTERNS that suggest problems.
+
+  INPUT FORMAT:
+  - classifications (array): Classification results with topic, stance,
+    confidence, and action items for each document
+  - total_count (integer): How many documents were classified
+  - category_list (array): The valid categories that were available
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "distribution_analysis": {
+      "topic_distribution": {"category": count},
+      "stance_distribution": {"stance": count},
+      "mean_confidence": 0.0-1.0,
+      "low_confidence_count": 0,
+      "actionable_rate": 0.0-1.0
+    },
+    "bias_flags": [
+      {
+        "pattern": "Description of the suspicious pattern",
+        "severity": "high | medium | low",
+        "evidence": "Specific numbers or observations",
+        "recommendation": "What to check or change"
+      }
+    ],
+    "category_concerns": [
+      {
+        "category": "The category in question",
+        "concern": "What's suspicious about this category's usage",
+        "count": 0
+      }
+    ],
+    "overall_assessment": "Summary of whether the classifications appear unbiased",
+    "confidence_in_assessment": 0.0-1.0
+  }
+
+  BIAS PATTERNS TO CHECK:
+  - Catch-all categories: Is one category getting a disproportionate share?
+  - Confidence clustering: Are scores suspiciously uniform (all ~0.8)?
+  - Stance imbalance: Does the classification skew toward one stance?
+  - Low-confidence dumping: Are uncertain items all going to one category?
+  - Action item bias: Are action items only found in certain stances?
+  - Missing categories: Are any expected categories completely unused?
+
+  RULES:
+  - You CANNOT see the original text — do not speculate about content
+  - Focus on statistical patterns and distributions
+  - Not every imbalance is bias — a real dataset can have skewed distributions
+  - Flag patterns that WARRANT INVESTIGATION, not definitive conclusions
+  - confidence_in_assessment should be lower when the sample is small
+
+# Empty knowledge silos — blind worker
+knowledge_silos: []
+
+input_schema:
+  type: object
+  required: [classifications, total_count]
+  properties:
+    classifications:
+      type: array
+      items:
+        type: object
+    total_count:
+      type: integer
+    category_list:
+      type: array
+      items:
+        type: string
+
+output_schema:
+  type: object
+  required: [distribution_analysis, bias_flags, overall_assessment, confidence_in_assessment]
+  properties:
+    distribution_analysis:
+      type: object
+    bias_flags:
+      type: array
+      items:
+        type: object
+        required: [pattern, severity, evidence]
+        properties:
+          pattern:
+            type: string
+          severity:
+            type: string
+            enum: [high, medium, low]
+          evidence:
+            type: string
+          recommendation:
+            type: string
+    category_concerns:
+      type: array
+      items:
+        type: object
+        required: [category, concern]
+        properties:
+          category:
+            type: string
+          concern:
+            type: string
+          count:
+            type: integer
+    overall_assessment:
+      type: string
+    confidence_in_assessment:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+
+default_model_tier: "standard"
+max_input_tokens: 16000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 90

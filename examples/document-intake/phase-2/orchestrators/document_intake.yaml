@@ -1,0 +1,81 @@
+# =============================================================================
+# Document Intake Pipeline — Phase 2
+# =============================================================================
+#
+# Four-stage pipeline that reads a CSV of public comments, classifies each
+# one, extracts entities, and produces a summary report.
+#
+#   read_csv ──► classify ──► extract ──► summarize
+#
+# Stage 1 (read_csv) is a processor worker — it runs Python code, not an
+# LLM. Stages 2-4 are LLM workers. This demonstrates mixing worker types
+# in a single pipeline.
+#
+# Data flow:
+#   - read_csv returns records (array) and columns (array)
+#   - classify takes records + text_column, returns classifications (array)
+#   - extract takes records + text_column + classifications, returns extractions
+#   - summarize takes classifications + extractions + total count, returns report
+#
+# Run in Workshop:
+#   loom workshop → Pipeline List → document_intake → test
+#
+# Submit a goal:
+#   loom submit "Process comments" \
+#       --context source_path="examples/document-intake/sample-data/public_comments.csv" \
+#       --context text_column="text"
+#
+# Part of: examples/document-intake/
+# Tutorial: docs/tutorials/document-intake.md
+# =============================================================================
+
+name: "document_intake"
+
+description: "Reads a CSV of public comments, classifies, extracts entities, and summarizes."
+
+timeout_seconds: 300
+
+pipeline_stages:
+  # --- Stage 1: Read CSV ---
+  # Processor worker (no LLM). Reads a CSV file and returns all rows
+  # as structured records.
+  - name: "read_csv"
+    worker_type: "csv_reader"
+    tier: "local"
+    input_mapping:
+      source_path: "goal.context.source_path"
+      text_column: "goal.context.text_column"
+
+  # --- Stage 2: Classify ---
+  # LLM worker. Takes all records from read_csv and classifies each one.
+  # Depends on: read_csv (auto-inferred from "read_csv.output.records")
+  - name: "classify"
+    worker_type: "comment_classifier"
+    tier: "standard"
+    input_mapping:
+      records: "read_csv.output.records"
+      text_column: "goal.context.text_column"
+      context: "goal.context.description"
+
+  # --- Stage 3: Extract Entities ---
+  # LLM worker. Takes records + classifications and extracts entities.
+  # Depends on: read_csv AND classify (auto-inferred)
+  - name: "extract"
+    worker_type: "entity_extractor"
+    tier: "standard"
+    input_mapping:
+      records: "read_csv.output.records"
+      text_column: "goal.context.text_column"
+      classifications: "classify.output.classifications"
+
+  # --- Stage 4: Summarize ---
+  # LLM worker. Aggregates all results into a summary report.
+  # Depends on: read_csv, classify, extract (auto-inferred)
+  - name: "summarize"
+    worker_type: "batch_summarizer"
+    tier: "standard"
+    input_mapping:
+      classifications: "classify.output.classifications"
+      extractions: "extract.output.extractions"
+      total_comments: "read_csv.output.total_count"
+      context: "goal.context.description"

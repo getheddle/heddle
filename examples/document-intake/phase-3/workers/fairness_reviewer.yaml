@@ -1,0 +1,166 @@
+# =============================================================================
+# Fairness Reviewer — Document Intake Example (Phase 3)
+# =============================================================================
+#
+# Reviews classifications WITH access to the original text. Checks whether
+# similar content is being classified differently, and whether the
+# classification quality varies systematically by author type or topic.
+#
+# This is the "sighted" counterpart to the blind_bias_auditor. Together
+# they provide two independent perspectives on classification quality:
+# - The blind auditor catches statistical patterns
+# - The fairness reviewer catches content-level inconsistencies
+#
+# Part of: examples/document-intake/
+# Tutorial: docs/tutorials/document-intake.md
+# =============================================================================
+
+name: "fairness_reviewer"
+
+description: "Reviews classification fairness by comparing text content with assigned categories."
+
+system_prompt: |
+  You are a classification fairness reviewer. You receive both the original
+  comments AND their classifications. Your job is to check whether the
+  classifications are consistent and fair — whether similar content gets
+  similar treatment.
+
+  INPUT FORMAT:
+  - records (array): Original comment records with text
+  - text_column (string): Which field contains the comment text
+  - classifications (array): Classification results for each record
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "consistency_checks": [
+      {
+        "comment_ids": ["ids of comments being compared"],
+        "issue": "Description of the inconsistency",
+        "severity": "high | medium | low",
+        "recommendation": "How to resolve"
+      }
+    ],
+    "misclassification_suspects": [
+      {
+        "id": "Comment ID",
+        "assigned_topic": "What it was classified as",
+        "suggested_topic": "What it should probably be",
+        "reasoning": "Why the current classification seems wrong"
+      }
+    ],
+    "stance_accuracy": [
+      {
+        "id": "Comment ID",
+        "assigned_stance": "Current stance",
+        "actual_stance": "What it should be based on the text",
+        "reasoning": "Why the stance seems wrong"
+      }
+    ],
+    "missed_action_items": [
+      {
+        "id": "Comment ID",
+        "missed_item": "Action item present in text but not extracted",
+        "importance": "high | medium | low"
+      }
+    ],
+    "overall_fairness_score": 0.0-1.0,
+    "summary": "Overall assessment of classification fairness"
+  }
+
+  RULES:
+  - Compare SIMILAR comments to check for consistency
+  - Flag cases where the same concern gets different classifications
+  - Check whether author type (individual vs. organization) affects classification
+  - Check whether comment length or complexity affects classification quality
+  - Be specific: reference actual comment IDs and text
+  - overall_fairness_score: 1.0 = perfectly consistent, 0.0 = systematically biased
+
+input_schema:
+  type: object
+  required: [records, text_column, classifications]
+  properties:
+    records:
+      type: array
+      items:
+        type: object
+    text_column:
+      type: string
+    classifications:
+      type: array
+      items:
+        type: object
+
+output_schema:
+  type: object
+  required: [consistency_checks, misclassification_suspects, overall_fairness_score, summary]
+  properties:
+    consistency_checks:
+      type: array
+      items:
+        type: object
+        required: [comment_ids, issue, severity]
+        properties:
+          comment_ids:
+            type: array
+            items:
+              type: string
+          issue:
+            type: string
+          severity:
+            type: string
+            enum: [high, medium, low]
+          recommendation:
+            type: string
+    misclassification_suspects:
+      type: array
+      items:
+        type: object
+        required: [id, assigned_topic, suggested_topic, reasoning]
+        properties:
+          id:
+            type: string
+          assigned_topic:
+            type: string
+          suggested_topic:
+            type: string
+          reasoning:
+            type: string
+    stance_accuracy:
+      type: array
+      items:
+        type: object
+        required: [id, assigned_stance, actual_stance, reasoning]
+        properties:
+          id:
+            type: string
+          assigned_stance:
+            type: string
+          actual_stance:
+            type: string
+          reasoning:
+            type: string
+    missed_action_items:
+      type: array
+      items:
+        type: object
+        required: [id, missed_item]
+        properties:
+          id:
+            type: string
+          missed_item:
+            type: string
+          importance:
+            type: string
+    overall_fairness_score:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+    summary:
+      type: string
+
+default_model_tier: "standard"
+max_input_tokens: 32000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 120

@@ -1,0 +1,78 @@
+# =============================================================================
+# Research Review Pipeline — Phase 2 (Sequential)
+# =============================================================================
+#
+# Three-stage pipeline: extract claims → review methodology → summarize.
+# Data flows automatically between stages via input_mapping paths.
+#
+# Loom infers the execution order from the mappings:
+#   - "review" reads from "extract.output.*" → extract runs first
+#   - "summarize" reads from both "extract.output.*" and "review.output.*"
+#     → summarize runs after both extract and review
+#
+# Since review depends on extract, and summarize depends on both,
+# this pipeline is strictly sequential. Phase 3 adds parallel branches.
+#
+# Run in Workshop (no NATS needed):
+#   loom workshop → Pipeline List → research_review → test
+#
+# Run with NATS:
+#   loom pipeline --config configs/orchestrators/research_review.yaml \
+#                 --nats-url nats://localhost:4222
+#
+# Submit a goal:
+#   loom submit "Review this paper" --context text="<paper text here>"
+#
+# Part of: examples/research-review/
+# Tutorial: docs/tutorials/research-review.md
+# =============================================================================
+
+name: "research_review"
+
+description: "Extracts claims from research text, reviews methodology, and produces a structured review report."
+
+timeout_seconds: 300
+
+pipeline_stages:
+  # --- Stage 1: Extract Claims ---
+  # Takes the raw text and produces structured claims.
+  # Input: text and domain from the goal context.
+  # Output: claims, methodology_summary, stated_limitations, unstated_concerns
+  - name: "extract"
+    worker_type: "claim_extractor"
+    tier: "standard"
+    input_mapping:
+      text: "goal.context.text"
+      domain: "goal.context.domain"
+
+  # --- Stage 2: Review Methodology ---
+  # Takes the original text plus extracted claims and evaluates whether
+  # the methodology supports each claim.
+  # Depends on: extract (auto-inferred from "extract.output.*" paths)
+  # Input: text from goal, claims and methodology_summary from extract stage
+  # Output: claim_reviews, overall_methodology_score, design_strengths, etc.
+  - name: "review"
+    worker_type: "methodology_reviewer"
+    tier: "standard"
+    input_mapping:
+      text: "goal.context.text"
+      claims: "extract.output.claims"
+      methodology_summary: "extract.output.methodology_summary"
+
+  # --- Stage 3: Synthesize Review ---
+  # Merges extraction and review outputs into a coherent report.
+  # Depends on: extract AND review (auto-inferred)
+  # Input: selected fields from both prior stages
+  # Output: verdict, summary, strong/weak claims, report narrative
+  - name: "summarize"
+    worker_type: "review_summarizer"
+    tier: "standard"
+    input_mapping:
+      claims: "extract.output.claims"
+      methodology_summary: "extract.output.methodology_summary"
+      stated_limitations: "extract.output.stated_limitations"
+      unstated_concerns: "extract.output.unstated_concerns"
+      claim_reviews: "review.output.claim_reviews"
+      overall_methodology_score: "review.output.overall_methodology_score"
+      design_strengths: "review.output.design_strengths"
+      design_weaknesses: "review.output.design_weaknesses"

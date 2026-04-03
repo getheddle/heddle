@@ -83,6 +83,9 @@ nav:
     - Adversarial Review: BLIND_AUDIT.md
     - Workshop Architecture: workshop.md
     - Troubleshooting: TROUBLESHOOTING.md
+  - Tutorials:
+    - Research Review Pipeline: tutorials/research-review.md
+    - Document Intake Pipeline: tutorials/document-intake.md
   - Architecture:
     - Overview: ARCHITECTURE.md
     - Design Invariants: DESIGN_INVARIANTS.md

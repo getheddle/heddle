@@ -1,0 +1,157 @@
+# =============================================================================
+# Batch Summarizer — Document Intake Example (Phase 2)
+# =============================================================================
+#
+# Aggregates classification and extraction results across multiple
+# comments into a category-by-category summary report. This is the
+# final stage of the Phase 2 pipeline — it receives structured data
+# from all prior stages and produces an actionable summary.
+#
+# Part of: examples/document-intake/
+# Tutorial: docs/tutorials/document-intake.md
+# =============================================================================
+
+name: "batch_summarizer"
+
+description: "Aggregates classified and extracted comment data into a summary report."
+
+system_prompt: |
+  You are a public comment summarizer. You receive structured data from
+  multiple processed comments — classifications, extracted entities, and
+  action items — and produce a summary report for planning staff.
+
+  INPUT FORMAT:
+  - classifications (array): Classification results for each comment
+  - extractions (array): Entity extraction results for each comment
+  - total_comments (integer): How many comments were processed
+  - context (string, optional): What the comments are about
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "executive_summary": "2-3 sentence overview of public sentiment",
+    "topic_breakdown": [
+      {
+        "topic": "Category name",
+        "count": 0,
+        "sentiment_balance": "mostly_support | mostly_oppose | mixed | neutral",
+        "key_themes": ["Main themes within this category"],
+        "representative_concerns": ["Specific concerns raised"]
+      }
+    ],
+    "stance_summary": {
+      "support": 0,
+      "oppose": 0,
+      "conditional_support": 0,
+      "neutral": 0,
+      "off_topic": 0
+    },
+    "all_action_items": [
+      {
+        "action": "What is being requested",
+        "frequency": 0,
+        "directed_to": "Who should act",
+        "urgency": "immediate | before_vote | ongoing"
+      }
+    ],
+    "items_requiring_verification": ["Claims that need fact-checking"],
+    "notable_patterns": ["Cross-cutting themes or unexpected patterns"],
+    "staff_recommendations": ["Suggested follow-up actions for planning staff"]
+  }
+
+  RULES:
+  - topic_breakdown should cover every category that appears in the input
+  - all_action_items should deduplicate similar requests and track frequency
+  - items_requiring_verification should combine all references_to_verify
+    from extractions, deduplicated
+  - staff_recommendations should be practical and specific
+  - Do not editorialize — report what commenters said, not what you think
+
+input_schema:
+  type: object
+  required: [classifications, extractions, total_comments]
+  properties:
+    classifications:
+      type: array
+      items:
+        type: object
+    extractions:
+      type: array
+      items:
+        type: object
+    total_comments:
+      type: integer
+    context:
+      type: string
+
+output_schema:
+  type: object
+  required: [executive_summary, topic_breakdown, stance_summary, all_action_items]
+  properties:
+    executive_summary:
+      type: string
+    topic_breakdown:
+      type: array
+      items:
+        type: object
+        required: [topic, count, sentiment_balance]
+        properties:
+          topic:
+            type: string
+          count:
+            type: integer
+          sentiment_balance:
+            type: string
+          key_themes:
+            type: array
+            items:
+              type: string
+          representative_concerns:
+            type: array
+            items:
+              type: string
+    stance_summary:
+      type: object
+      properties:
+        support:
+          type: integer
+        oppose:
+          type: integer
+        conditional_support:
+          type: integer
+        neutral:
+          type: integer
+        off_topic:
+          type: integer
+    all_action_items:
+      type: array
+      items:
+        type: object
+        required: [action, directed_to]
+        properties:
+          action:
+            type: string
+          frequency:
+            type: integer
+          directed_to:
+            type: string
+          urgency:
+            type: string
+    items_requiring_verification:
+      type: array
+      items:
+        type: string
+    notable_patterns:
+      type: array
+      items:
+        type: string
+    staff_recommendations:
+      type: array
+      items:
+        type: string
+
+default_model_tier: "standard"
+max_input_tokens: 32000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 120

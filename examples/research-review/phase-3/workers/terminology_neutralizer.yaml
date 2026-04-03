@@ -1,0 +1,110 @@
+# =============================================================================
+# Terminology Neutralizer — Research Review Example (Phase 3)
+# =============================================================================
+#
+# Strips discipline-specific vocabulary and authorial framing from
+# extracted claims so the blind reviewer isn't primed by loaded language.
+#
+# Example: "statistically significant inverse correlation (r=-0.67, p<0.01)"
+# becomes "the study found a negative relationship (correlation -0.67,
+# statistical test shows this is unlikely to be random)" — preserving the
+# facts while removing the rhetorical weight of "significant."
+#
+# This is a key component of the blind audit pattern. Without
+# neutralization, a blind reviewer still absorbs the original paper's
+# framing through the claim language itself.
+#
+# Part of: examples/research-review/
+# Tutorial: docs/tutorials/research-review.md
+# =============================================================================
+
+name: "terminology_neutralizer"
+
+description: "Strips discipline-specific framing from claims for blind review."
+
+system_prompt: |
+  You are a terminology neutralizer. You rewrite research claims in plain
+  language, preserving all factual content while removing:
+
+  - Discipline-specific jargon that implies authority ("statistically
+    significant", "validated instrument", "established framework")
+  - Hedging language that minimizes limitations ("somewhat", "partially")
+  - Framing that presupposes conclusions ("as expected", "consistent with
+    the literature", "confirming our hypothesis")
+  - Rhetorical emphasis ("critically", "notably", "importantly")
+
+  You are NOT simplifying for a general audience. The reader is a skilled
+  reviewer. You are removing language that could bias their evaluation.
+
+  INPUT FORMAT:
+  - claims (array): Structured claims to neutralize
+  - methodology_summary (string): Study design description to neutralize
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "neutralized_claims": [
+      {
+        "original_claim": "The claim as received",
+        "neutralized_claim": "The claim rewritten in neutral language",
+        "type": "empirical | methodological | interpretive | recommendation",
+        "evidence": "Evidence rewritten in neutral language",
+        "confidence_basis": "Confidence basis rewritten neutrally"
+      }
+    ],
+    "neutralized_methodology": "Study design described without evaluative language",
+    "framing_flags": ["Instances of loaded language found in the input"]
+  }
+
+  RULES:
+  - Preserve ALL factual content — numbers, measurements, sample sizes,
+    p-values, effect sizes. Change nothing about the data.
+  - Only change the LANGUAGE around the facts
+  - Do not add your own assessment or interpretation
+  - framing_flags should list specific phrases you neutralized and why
+  - If a claim is already neutral, copy it unchanged and note "no changes needed"
+
+input_schema:
+  type: object
+  required: [claims, methodology_summary]
+  properties:
+    claims:
+      type: array
+      items:
+        type: object
+    methodology_summary:
+      type: string
+
+output_schema:
+  type: object
+  required: [neutralized_claims, neutralized_methodology, framing_flags]
+  properties:
+    neutralized_claims:
+      type: array
+      items:
+        type: object
+        required: [original_claim, neutralized_claim, type, evidence]
+        properties:
+          original_claim:
+            type: string
+          neutralized_claim:
+            type: string
+          type:
+            type: string
+            enum: [empirical, methodological, interpretive, recommendation]
+          evidence:
+            type: string
+          confidence_basis:
+            type: string
+    neutralized_methodology:
+      type: string
+    framing_flags:
+      type: array
+      items:
+        type: string
+
+default_model_tier: "standard"
+max_input_tokens: 16000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 90

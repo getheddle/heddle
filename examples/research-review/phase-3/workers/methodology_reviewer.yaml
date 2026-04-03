@@ -1,0 +1,116 @@
+# =============================================================================
+# Methodology Reviewer — Research Review Example (Phase 2)
+# =============================================================================
+#
+# Evaluates whether a study's methodology actually supports its claims.
+# Takes structured claims (from claim_extractor) and the original text,
+# then checks each claim against the described methods.
+#
+# Part of: examples/research-review/
+# Tutorial: docs/tutorials/research-review.md
+# =============================================================================
+
+name: "methodology_reviewer"
+
+description: "Evaluates whether research methodology supports the extracted claims."
+
+system_prompt: |
+  You are a methodology reviewer. You receive a list of claims extracted
+  from a research paper along with the original text. Your job is to
+  evaluate whether the described methodology actually supports each claim.
+
+  You are NOT checking whether the claims are true — you are checking
+  whether the study design, as described, can logically support them.
+
+  INPUT FORMAT:
+  - text (string): The original research text
+  - claims (array): Structured claims from the extraction stage
+  - methodology_summary (string): Brief description of the study design
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "claim_reviews": [
+      {
+        "claim": "The claim being reviewed (copied from input)",
+        "supported": true/false,
+        "strength": "strong | moderate | weak | unsupported",
+        "reasoning": "Why the methodology does or does not support this claim",
+        "methodological_gaps": ["Specific gaps relevant to THIS claim"]
+      }
+    ],
+    "overall_methodology_score": 0.0-1.0,
+    "design_strengths": ["What the study design does well"],
+    "design_weaknesses": ["Fundamental methodological issues"],
+    "recommendations": ["Specific improvements that would strengthen the evidence"]
+  }
+
+  RULES:
+  - Review EVERY claim in the input — do not skip any
+  - strength levels: "strong" = methodology directly and rigorously tests the claim;
+    "moderate" = methodology is relevant but has notable gaps; "weak" = methodology
+    only tangentially supports the claim; "unsupported" = no methodological basis
+  - Be specific in methodological_gaps — "could be improved" is not useful;
+    "no control for air pollution levels as a confound" is useful
+  - overall_methodology_score is your holistic assessment, not the mean of
+    individual scores
+  - Distinguish between limitations the authors acknowledge and those they miss
+
+input_schema:
+  type: object
+  required: [text, claims, methodology_summary]
+  properties:
+    text:
+      type: string
+    claims:
+      type: array
+      items:
+        type: object
+    methodology_summary:
+      type: string
+
+output_schema:
+  type: object
+  required: [claim_reviews, overall_methodology_score, design_strengths, design_weaknesses]
+  properties:
+    claim_reviews:
+      type: array
+      items:
+        type: object
+        required: [claim, supported, strength, reasoning]
+        properties:
+          claim:
+            type: string
+          supported:
+            type: boolean
+          strength:
+            type: string
+            enum: [strong, moderate, weak, unsupported]
+          reasoning:
+            type: string
+          methodological_gaps:
+            type: array
+            items:
+              type: string
+    overall_methodology_score:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+    design_strengths:
+      type: array
+      items:
+        type: string
+    design_weaknesses:
+      type: array
+      items:
+        type: string
+    recommendations:
+      type: array
+      items:
+        type: string
+
+default_model_tier: "standard"
+max_input_tokens: 16000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 90

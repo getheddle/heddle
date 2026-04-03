@@ -1,0 +1,85 @@
+# =============================================================================
+# Research Review Pipeline — Phase 3 (Parallel Blind Audit)
+# =============================================================================
+#
+# Five-stage pipeline with parallel sighted and blind review branches:
+#
+#   extract ──┬──► sighted_review ────────────────┐
+#             │                                    ├──► synthesize
+#             └──► neutralize ──► blind_review ───┘
+#
+# Loom infers the execution plan from input_mapping paths:
+#   - sighted_review depends on extract (reads extract.output.*)
+#   - neutralize depends on extract (reads extract.output.*)
+#   - blind_review depends on neutralize (reads neutralize.output.*)
+#   - synthesize depends on extract, sighted_review, neutralize, blind_review
+#
+# Since sighted_review and neutralize both depend only on extract,
+# they run IN PARALLEL automatically. blind_review waits for neutralize.
+# synthesize waits for all four prior stages.
+#
+# Part of: examples/research-review/
+# Tutorial: docs/tutorials/research-review.md
+# =============================================================================
+
+name: "research_review_blind"
+
+description: "Research review with parallel sighted and blind audit branches."
+
+timeout_seconds: 300
+
+pipeline_stages:
+  # --- Stage 1: Extract Claims ---
+  # Same as Phase 2. Takes raw text, produces structured claims.
+  - name: "extract"
+    worker_type: "claim_extractor"
+    tier: "standard"
+    input_mapping:
+      text: "goal.context.text"
+      domain: "goal.context.domain"
+
+  # --- Stage 2a: Sighted Methodology Review ---
+  # The "sighted" path — reviewer has full context.
+  # Runs in PARALLEL with Stage 2b (neutralize) because both
+  # depend only on extract, not on each other.
+  - name: "sighted_review"
+    worker_type: "methodology_reviewer"
+    tier: "standard"
+    input_mapping:
+      text: "goal.context.text"
+      claims: "extract.output.claims"
+      methodology_summary: "extract.output.methodology_summary"
+
+  # --- Stage 2b: Neutralize Claims ---
+  # The first step of the "blind" path. Strips loaded language.
+  # Runs in PARALLEL with Stage 2a (sighted_review).
+  - name: "neutralize"
+    worker_type: "terminology_neutralizer"
+    tier: "standard"
+    input_mapping:
+      claims: "extract.output.claims"
+      methodology_summary: "extract.output.methodology_summary"
+
+  # --- Stage 3: Blind Review ---
+  # Evaluates neutralized claims without domain knowledge.
+  # Depends on: neutralize (auto-inferred).
+  # Does NOT see the original text — only neutralized content.
+  - name: "blind_review"
+    worker_type: "blind_reviewer"
+    tier: "standard"
+    input_mapping:
+      neutralized_claims: "neutralize.output.neutralized_claims"
+      neutralized_methodology: "neutralize.output.neutralized_methodology"
+
+  # --- Stage 4: Synthesize ---
+  # Merges sighted and blind reviews into a unified report.
+  # Depends on: extract, sighted_review, neutralize, blind_review (all auto-inferred).
+  - name: "synthesize"
+    worker_type: "review_synthesizer"
+    tier: "standard"
+    input_mapping:
+      claims: "extract.output.claims"
+      methodology_summary: "extract.output.methodology_summary"
+      sighted_review: "sighted_review.output"
+      blind_review: "blind_review.output"
+      framing_flags: "neutralize.output.framing_flags"

@@ -1,0 +1,140 @@
+# =============================================================================
+# Entity Extractor (Batch) — Document Intake Example (Phase 2)
+# =============================================================================
+#
+# Batch-aware version that processes all comments at once. Takes records
+# and their classifications, extracts entities from each, returns an array.
+#
+# Part of: examples/document-intake/
+# Tutorial: docs/tutorials/document-intake.md
+# =============================================================================
+
+name: "entity_extractor"
+
+description: "Extracts entities, dates, locations, and requests from a batch of classified comments."
+
+system_prompt: |
+  You are an entity extractor for public comments on development proposals.
+  You receive a batch of comments along with their classifications and
+  extract structured data from each one.
+
+  INPUT FORMAT:
+  - records (array of objects): The original comment records with "text" field
+  - text_column (string): Which field contains the comment text
+  - classifications (array): Classification results matching the records
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "extractions": [
+      {
+        "id": "Record ID or index",
+        "entities": {
+          "people": ["Named individuals"],
+          "organizations": ["Named organizations, agencies, committees"],
+          "locations": ["Street names, neighborhoods, specific sites"],
+          "dates": ["Specific dates or time references"],
+          "documents": ["Referenced reports, studies, plans"],
+          "quantities": ["Numbers with context: amounts, measurements, counts"]
+        },
+        "requests": [
+          {
+            "action": "What is being asked for",
+            "directed_to": "Who should act",
+            "urgency": "immediate | before_vote | ongoing | unspecified"
+          }
+        ],
+        "references_to_verify": ["Claims or citations to fact-check"]
+      }
+    ],
+    "total_extracted": 0
+  }
+
+  RULES:
+  - Extract from EVERY record — do not skip any
+  - Use the text_column field to find the comment text
+  - Match each extraction to its record by id or index
+  - people: only named individuals, not roles
+  - organizations: include government bodies, committees, companies by name
+  - quantities: include units and context ("180 parking spaces", "47-12 vote")
+  - requests: must be specific and actionable
+  - references_to_verify: flag external sources, statistics, or regulations
+
+input_schema:
+  type: object
+  required: [records, text_column, classifications]
+  properties:
+    records:
+      type: array
+      items:
+        type: object
+    text_column:
+      type: string
+    classifications:
+      type: array
+      items:
+        type: object
+
+output_schema:
+  type: object
+  required: [extractions, total_extracted]
+  properties:
+    extractions:
+      type: array
+      items:
+        type: object
+        required: [entities, requests]
+        properties:
+          id:
+            type: string
+          entities:
+            type: object
+            properties:
+              people:
+                type: array
+                items:
+                  type: string
+              organizations:
+                type: array
+                items:
+                  type: string
+              locations:
+                type: array
+                items:
+                  type: string
+              dates:
+                type: array
+                items:
+                  type: string
+              documents:
+                type: array
+                items:
+                  type: string
+              quantities:
+                type: array
+                items:
+                  type: string
+          requests:
+            type: array
+            items:
+              type: object
+              required: [action, directed_to]
+              properties:
+                action:
+                  type: string
+                directed_to:
+                  type: string
+                urgency:
+                  type: string
+          references_to_verify:
+            type: array
+            items:
+              type: string
+    total_extracted:
+      type: integer
+
+default_model_tier: "standard"
+max_input_tokens: 32000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 120

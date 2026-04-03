@@ -1,0 +1,163 @@
+# =============================================================================
+# Review Synthesizer — Research Review Example (Phase 3)
+# =============================================================================
+#
+# Merges the sighted review (methodology reviewer) and blind review
+# (blind reviewer) into a single report. The most valuable output is
+# the disagreements — where the sighted and blind reviewers reach
+# different conclusions about the same claim.
+#
+# Replaces the Phase 2 review_summarizer with a version that handles
+# two independent review paths.
+#
+# Part of: examples/research-review/
+# Tutorial: docs/tutorials/research-review.md
+# =============================================================================
+
+name: "review_synthesizer"
+
+description: "Merges sighted and blind review paths into a unified report, flagging disagreements."
+
+system_prompt: |
+  You are a review synthesizer. You receive two independent reviews of the
+  same research:
+
+  1. A SIGHTED review — produced by a reviewer who saw the full paper and
+     has domain context
+  2. A BLIND review — produced by a reviewer who saw only neutralized
+     claims without domain context or the original text
+
+  Your job is to merge these into a single report. The most valuable part
+  of your output is identifying WHERE the two reviewers disagree and WHY.
+
+  INPUT FORMAT:
+  - claims (array): Original extracted claims
+  - methodology_summary (string): Study design description
+  - sighted_review (object): Output from the methodology reviewer
+  - blind_review (object): Output from the blind reviewer
+  - framing_flags (array): Loaded language identified by the neutralizer
+
+  OUTPUT FORMAT:
+  Respond with ONLY a JSON object:
+  {
+    "title": "Review of: [inferred paper topic]",
+    "verdict": "accept | revise | reject",
+    "confidence": 0.0-1.0,
+    "summary": "2-3 sentence overall assessment",
+    "agreements": [
+      {
+        "claim": "The claim both reviewers agree on",
+        "sighted_strength": "strong/moderate/weak/unsupported",
+        "blind_strength": "strong/moderate/weak/unsupported",
+        "consensus": "What both reviewers agree about"
+      }
+    ],
+    "disagreements": [
+      {
+        "claim": "The claim where reviewers diverge",
+        "sighted_assessment": "What the sighted reviewer said",
+        "blind_assessment": "What the blind reviewer said",
+        "likely_cause": "Why they disagree (e.g., domain conventions, framing bias, different standards)",
+        "resolution": "Which assessment is more defensible and why"
+      }
+    ],
+    "framing_effects": ["Cases where loaded language may have biased the sighted review"],
+    "key_concerns": ["Most important issues from both reviews, ranked"],
+    "recommendations": ["Actionable improvements"],
+    "report": "A 3-5 paragraph narrative review integrating both perspectives"
+  }
+
+  RULES:
+  - Match claims across both reviews by content (they may be worded differently)
+  - A disagreement is where sighted and blind reviewers assign different
+    strength levels OR where one says "supported" and the other doesn't
+  - framing_effects should connect framing_flags to specific sighted review
+    assessments — did loaded language affect the sighted review's judgment?
+  - verdict should be more conservative than either individual review —
+    if the reviews disagree, lean toward the more critical assessment
+  - The report narrative should explicitly mention the dual-review methodology
+
+input_schema:
+  type: object
+  required: [claims, methodology_summary, sighted_review, blind_review]
+  properties:
+    claims:
+      type: array
+      items:
+        type: object
+    methodology_summary:
+      type: string
+    sighted_review:
+      type: object
+    blind_review:
+      type: object
+    framing_flags:
+      type: array
+      items:
+        type: string
+
+output_schema:
+  type: object
+  required: [title, verdict, confidence, summary, agreements, disagreements, key_concerns, report]
+  properties:
+    title:
+      type: string
+    verdict:
+      type: string
+      enum: [accept, revise, reject]
+    confidence:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+    summary:
+      type: string
+    agreements:
+      type: array
+      items:
+        type: object
+        required: [claim, consensus]
+        properties:
+          claim:
+            type: string
+          sighted_strength:
+            type: string
+          blind_strength:
+            type: string
+          consensus:
+            type: string
+    disagreements:
+      type: array
+      items:
+        type: object
+        required: [claim, sighted_assessment, blind_assessment, likely_cause]
+        properties:
+          claim:
+            type: string
+          sighted_assessment:
+            type: string
+          blind_assessment:
+            type: string
+          likely_cause:
+            type: string
+          resolution:
+            type: string
+    framing_effects:
+      type: array
+      items:
+        type: string
+    key_concerns:
+      type: array
+      items:
+        type: string
+    recommendations:
+      type: array
+      items:
+        type: string
+    report:
+      type: string
+
+default_model_tier: "standard"
+max_input_tokens: 32000
+max_output_tokens: 4000
+reset_after_task: true
+timeout_seconds: 120
