@@ -187,7 +187,7 @@ loom validate configs/workers/claim_extractor.yaml
 
 You should see:
 
-```
+```text
 ✓ configs/workers/claim_extractor.yaml — valid worker config
 ```
 
