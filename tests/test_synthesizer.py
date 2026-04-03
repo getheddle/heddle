@@ -16,9 +16,9 @@ import json
 
 import pytest
 
-from loom.core.messages import TaskResult, TaskStatus
-from loom.orchestrator.synthesizer import ResultSynthesizer
-from loom.worker.backends import LLMBackend
+from heddle.core.messages import TaskResult, TaskStatus
+from heddle.orchestrator.synthesizer import ResultSynthesizer
+from heddle.worker.backends import LLMBackend
 
 # ---------------------------------------------------------------------------
 # Helpers

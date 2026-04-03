@@ -2,7 +2,7 @@
 """
 RAG Pipeline Demo — Telegram Channel Analysis
 ================================================
-Demonstrates the loom.contrib.rag module end-to-end:
+Demonstrates the heddle.contrib.rag module end-to-end:
 
   1. Ingest 4 Telegram channel exports
   2. Normalize Persian/RTL text
@@ -18,7 +18,7 @@ Usage:
               Without this flag, chunks are stored without embeddings.
 
 Requires:
-    pip install loom[rag]
+    pip install heddle-ai[rag]
 """
 from __future__ import annotations
 
@@ -48,14 +48,14 @@ def main() -> None:
     do_embed = "--embed" in sys.argv
 
     print("=" * 70)
-    print("  loom.contrib.rag — Telegram Channel Analysis Demo")
+    print("  heddle.contrib.rag — Telegram Channel Analysis Demo")
     print("=" * 70)
 
     # ------------------------------------------------------------------
     # Step 1: Ingest Telegram exports
     # ------------------------------------------------------------------
     print("\n[1/5] Ingesting Telegram exports...")
-    from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor, DEFAULT_PROFILES
+    from heddle.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor, DEFAULT_PROFILES
 
     ingestors = []
     for path in TELEGRAM_EXPORTS:
@@ -81,7 +81,7 @@ def main() -> None:
     # Step 2: Normalize text (RTL / Persian)
     # ------------------------------------------------------------------
     print("\n[2/5] Normalizing text (RTL / Persian)...")
-    from loom.contrib.rag.tools.rtl_normalizer import normalize
+    from heddle.contrib.rag.tools.rtl_normalizer import normalize
 
     sample_count = 0
     for ingestor in ingestors:
@@ -95,8 +95,8 @@ def main() -> None:
     # Step 3: Multiplex streams
     # ------------------------------------------------------------------
     print("\n[3/5] Multiplexing streams into chronological order...")
-    from loom.contrib.rag.mux.stream_mux import merge_from_ingestors
-    from loom.contrib.rag.schemas.mux import MuxWindowConfig
+    from heddle.contrib.rag.mux.stream_mux import merge_from_ingestors
+    from heddle.contrib.rag.schemas.mux import MuxWindowConfig
 
     t0 = time.perf_counter()
     window_config = MuxWindowConfig(window_duration=timedelta(hours=WINDOW_HOURS))
@@ -123,7 +123,7 @@ def main() -> None:
     # Step 4: Chunk posts
     # ------------------------------------------------------------------
     print(f"\n[4/5] Chunking posts (target={CHUNK_TARGET}, max={CHUNK_MAX})...")
-    from loom.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_mux_entry
+    from heddle.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_mux_entry
 
     chunk_cfg = ChunkConfig(target_chars=CHUNK_TARGET, max_chars=CHUNK_MAX)
     all_chunks = []
@@ -141,8 +141,8 @@ def main() -> None:
     # Step 5: Store in DuckDB
     # ------------------------------------------------------------------
     print(f"\n[5/5] Storing chunks in DuckDB ({DB_PATH})...")
-    from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
-    from loom.contrib.rag.schemas.embedding import EmbeddedChunk
+    from heddle.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+    from heddle.contrib.rag.schemas.embedding import EmbeddedChunk
 
     store = DuckDBVectorStore(db_path=DB_PATH).initialize()
 

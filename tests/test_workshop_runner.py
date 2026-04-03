@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from loom.worker.backends import LLMBackend
-from loom.workshop.test_runner import WorkerTestResult, WorkerTestRunner
+from heddle.worker.backends import LLMBackend
+from heddle.workshop.test_runner import WorkerTestResult, WorkerTestRunner
 
 # ---------------------------------------------------------------------------
 # Mock backends
@@ -292,7 +292,7 @@ class TestKnowledgeInjection:
         runner = WorkerTestRunner({"local": backend})
 
         with patch(
-            "loom.worker.knowledge.load_knowledge_silos",
+            "heddle.worker.knowledge.load_knowledge_silos",
             return_value="SILO CONTEXT",
         ):
             result = await runner.run(config, {"text": "test"})
@@ -311,7 +311,7 @@ class TestKnowledgeInjection:
         runner = WorkerTestRunner({"local": backend})
 
         with patch(
-            "loom.worker.knowledge.load_knowledge_silos",
+            "heddle.worker.knowledge.load_knowledge_silos",
             return_value="",
         ):
             result = await runner.run(config, {"text": "test"})
@@ -329,7 +329,7 @@ class TestKnowledgeInjection:
         runner = WorkerTestRunner({"local": backend})
 
         with patch(
-            "loom.worker.knowledge.load_knowledge_silos",
+            "heddle.worker.knowledge.load_knowledge_silos",
             side_effect=Exception("silo read error"),
         ):
             result = await runner.run(config, {"text": "test"})
@@ -348,7 +348,7 @@ class TestKnowledgeInjection:
         runner = WorkerTestRunner({"local": backend})
 
         with patch(
-            "loom.worker.knowledge.load_knowledge_sources",
+            "heddle.worker.knowledge.load_knowledge_sources",
             return_value="KNOWLEDGE CONTEXT",
         ):
             result = await runner.run(config, {"text": "test"})
@@ -366,7 +366,7 @@ class TestKnowledgeInjection:
         runner = WorkerTestRunner({"local": backend})
 
         with patch(
-            "loom.worker.knowledge.load_knowledge_sources",
+            "heddle.worker.knowledge.load_knowledge_sources",
             return_value="",
         ):
             result = await runner.run(config, {"text": "test"})
@@ -384,7 +384,7 @@ class TestKnowledgeInjection:
         runner = WorkerTestRunner({"local": backend})
 
         with patch(
-            "loom.worker.knowledge.load_knowledge_sources",
+            "heddle.worker.knowledge.load_knowledge_sources",
             side_effect=Exception("file not found"),
         ):
             result = await runner.run(config, {"text": "test"})
@@ -414,7 +414,7 @@ class TestFileRefResolution:
         mock_ws.read_json.return_value = {"key": "value"}
 
         with patch(
-            "loom.core.workspace.WorkspaceManager",
+            "heddle.core.workspace.WorkspaceManager",
             return_value=mock_ws,
         ):
             result = await runner.run(config, {"text": "test", "doc_ref": "file.json"})
@@ -436,7 +436,7 @@ class TestFileRefResolution:
         mock_ws = MagicMock()
 
         with patch(
-            "loom.core.workspace.WorkspaceManager",
+            "heddle.core.workspace.WorkspaceManager",
             return_value=mock_ws,
         ):
             # payload does NOT contain "doc_ref"
@@ -460,7 +460,7 @@ class TestFileRefResolution:
         mock_ws.read_json.side_effect = Exception("file not found")
 
         with patch(
-            "loom.core.workspace.WorkspaceManager",
+            "heddle.core.workspace.WorkspaceManager",
             return_value=mock_ws,
         ):
             result = await runner.run(config, {"text": "test", "doc_ref": "missing.json"})

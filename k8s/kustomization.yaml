@@ -1,20 +1,20 @@
-# Kustomize overlay for the Loom framework.
+# Kustomize overlay for the Heddle framework.
 # Deploy: kubectl apply -k k8s/
 #
 # Prerequisites:
-#   1. Create the loom-secrets secret with your Anthropic API key:
-#      kubectl -n loom create secret generic loom-secrets \
+#   1. Create the heddle-secrets secret with your Anthropic API key:
+#      kubectl -n heddle create secret generic heddle-secrets \
 #        --from-literal=anthropic-api-key=sk-ant-...
 #   2. If using local models, deploy Ollama separately (see ollama-deployment.yaml)
 #   3. Images use imagePullPolicy: Never (for Minikube local builds)
 #
 # Build all images before deploying:
-#   docker build -f Dockerfile.router       -t loom-router .
-#   docker build -f Dockerfile.orchestrator -t loom-orchestrator .
+#   docker build -f Dockerfile.router       -t heddle-router .
+#   docker build -f Dockerfile.orchestrator -t heddle-orchestrator .
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: loom
+namespace: heddle
 
 resources:
   - namespace.yaml
@@ -27,5 +27,5 @@ resources:
   # - ollama-deployment.yaml     # Uncomment if running local models in-cluster
 
 commonLabels:
-  app.kubernetes.io/part-of: loom
+  app.kubernetes.io/part-of: heddle
   app.kubernetes.io/managed-by: kustomize

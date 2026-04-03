@@ -1349,6 +1349,146 @@ wheels = [
 ]
 
 [[package]]
+name = "heddle-ai"
+version = "0.9.0"
+source = { editable = "." }
+dependencies = [
+    { name = "click" },
+    { name = "httpx" },
+    { name = "nats-py" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "structlog" },
+    { name = "tiktoken" },
+]
+
+[package.optional-dependencies]
+chatbridge = [
+    { name = "openai" },
+]
+dev = [
+    { name = "croniter" },
+    { name = "deepeval" },
+    { name = "duckdb" },
+    { name = "fastmcp" },
+    { name = "lancedb" },
+    { name = "mkdocs-material" },
+    { name = "mkdocstrings", extra = ["python"] },
+    { name = "pyarrow" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "redis" },
+    { name = "ruff" },
+]
+docproc = [
+    { name = "docling" },
+]
+docs = [
+    { name = "mkdocs-material" },
+    { name = "mkdocstrings", extra = ["python"] },
+]
+duckdb = [
+    { name = "duckdb" },
+]
+eval = [
+    { name = "deepeval" },
+]
+lancedb = [
+    { name = "lancedb" },
+    { name = "pyarrow" },
+]
+local = [
+    { name = "ollama" },
+]
+mcp = [
+    { name = "fastmcp" },
+]
+mdns = [
+    { name = "zeroconf" },
+]
+otel = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp" },
+    { name = "opentelemetry-sdk" },
+]
+rag = [
+    { name = "duckdb" },
+    { name = "requests" },
+]
+redis = [
+    { name = "redis" },
+]
+scheduler = [
+    { name = "croniter" },
+]
+telegram = [
+    { name = "telethon" },
+]
+tui = [
+    { name = "nats-py" },
+    { name = "textual" },
+]
+workshop = [
+    { name = "duckdb" },
+    { name = "fastapi" },
+    { name = "jinja2" },
+    { name = "python-multipart" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.1.0" },
+    { name = "croniter", marker = "extra == 'dev'", specifier = ">=2.0.0" },
+    { name = "croniter", marker = "extra == 'scheduler'", specifier = ">=2.0.0" },
+    { name = "deepeval", marker = "extra == 'dev'", specifier = ">=3.8.0" },
+    { name = "deepeval", marker = "extra == 'eval'", specifier = ">=3.8.0" },
+    { name = "docling", marker = "extra == 'docproc'", specifier = ">=2.0.0" },
+    { name = "duckdb", marker = "extra == 'dev'", specifier = ">=1.0.0" },
+    { name = "duckdb", marker = "extra == 'duckdb'", specifier = ">=1.0.0" },
+    { name = "duckdb", marker = "extra == 'rag'", specifier = ">=1.0.0" },
+    { name = "duckdb", marker = "extra == 'workshop'", specifier = ">=1.0.0" },
+    { name = "fastapi", marker = "extra == 'workshop'", specifier = ">=0.110.0" },
+    { name = "fastmcp", marker = "extra == 'dev'", specifier = ">=3.1" },
+    { name = "fastmcp", marker = "extra == 'mcp'", specifier = ">=3.1" },
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "jinja2", marker = "extra == 'workshop'", specifier = ">=3.1.0" },
+    { name = "lancedb", marker = "extra == 'dev'", specifier = ">=0.15.0" },
+    { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.15.0" },
+    { name = "mkdocs-material", marker = "extra == 'dev'", specifier = ">=9.5" },
+    { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5" },
+    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.24" },
+    { name = "nats-py", specifier = ">=2.7.0" },
+    { name = "nats-py", marker = "extra == 'tui'", specifier = ">=2.7.0" },
+    { name = "ollama", marker = "extra == 'local'", specifier = ">=0.3.0" },
+    { name = "openai", marker = "extra == 'chatbridge'", specifier = ">=1.0.0" },
+    { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.20.0" },
+    { name = "opentelemetry-exporter-otlp", marker = "extra == 'otel'", specifier = ">=1.20.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.20.0" },
+    { name = "pyarrow", marker = "extra == 'dev'", specifier = ">=15.0.0" },
+    { name = "pyarrow", marker = "extra == 'lancedb'", specifier = ">=15.0.0" },
+    { name = "pydantic", specifier = ">=2.5.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
+    { name = "python-multipart", marker = "extra == 'workshop'", specifier = ">=0.0.9" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "redis", marker = "extra == 'dev'", specifier = ">=5.0.0" },
+    { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0.0" },
+    { name = "requests", marker = "extra == 'rag'", specifier = ">=2.31.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
+    { name = "structlog", specifier = ">=24.1.0" },
+    { name = "telethon", marker = "extra == 'telegram'", specifier = ">=1.36.0" },
+    { name = "textual", marker = "extra == 'tui'", specifier = ">=3.0.0" },
+    { name = "tiktoken", specifier = ">=0.7.0" },
+    { name = "uvicorn", marker = "extra == 'workshop'", specifier = ">=0.27.0" },
+    { name = "zeroconf", marker = "extra == 'mdns'", specifier = ">=0.131.0" },
+]
+provides-extras = ["redis", "local", "docproc", "duckdb", "rag", "lancedb", "telegram", "scheduler", "mcp", "workshop", "mdns", "otel", "tui", "docs", "eval", "council", "chatbridge", "dev"]
+
+[[package]]
 name = "hf-xet"
 version = "1.4.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1765,146 +1905,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/2e/c9/06ea13676ef354f0a
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b4/de/88b3be5c31b22333b3ca2f6ff1de4e863d8fe45aaea7485f591970ec1d3e/linkify_it_py-2.1.0-py3-none-any.whl", hash = "sha256:0d252c1594ecba2ecedc444053db5d3a9b7ec1b0dd929c8f1d74dce89f86c05e", size = 19878, upload-time = "2026-03-01T07:48:46.098Z" },
 ]
-
-[[package]]
-name = "loom-ai"
-version = "0.9.0"
-source = { editable = "." }
-dependencies = [
-    { name = "click" },
-    { name = "httpx" },
-    { name = "nats-py" },
-    { name = "pydantic" },
-    { name = "pyyaml" },
-    { name = "structlog" },
-    { name = "tiktoken" },
-]
-
-[package.optional-dependencies]
-chatbridge = [
-    { name = "openai" },
-]
-dev = [
-    { name = "croniter" },
-    { name = "deepeval" },
-    { name = "duckdb" },
-    { name = "fastmcp" },
-    { name = "lancedb" },
-    { name = "mkdocs-material" },
-    { name = "mkdocstrings", extra = ["python"] },
-    { name = "pyarrow" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "redis" },
-    { name = "ruff" },
-]
-docproc = [
-    { name = "docling" },
-]
-docs = [
-    { name = "mkdocs-material" },
-    { name = "mkdocstrings", extra = ["python"] },
-]
-duckdb = [
-    { name = "duckdb" },
-]
-eval = [
-    { name = "deepeval" },
-]
-lancedb = [
-    { name = "lancedb" },
-    { name = "pyarrow" },
-]
-local = [
-    { name = "ollama" },
-]
-mcp = [
-    { name = "fastmcp" },
-]
-mdns = [
-    { name = "zeroconf" },
-]
-otel = [
-    { name = "opentelemetry-api" },
-    { name = "opentelemetry-exporter-otlp" },
-    { name = "opentelemetry-sdk" },
-]
-rag = [
-    { name = "duckdb" },
-    { name = "requests" },
-]
-redis = [
-    { name = "redis" },
-]
-scheduler = [
-    { name = "croniter" },
-]
-telegram = [
-    { name = "telethon" },
-]
-tui = [
-    { name = "nats-py" },
-    { name = "textual" },
-]
-workshop = [
-    { name = "duckdb" },
-    { name = "fastapi" },
-    { name = "jinja2" },
-    { name = "python-multipart" },
-    { name = "uvicorn" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "click", specifier = ">=8.1.0" },
-    { name = "croniter", marker = "extra == 'dev'", specifier = ">=2.0.0" },
-    { name = "croniter", marker = "extra == 'scheduler'", specifier = ">=2.0.0" },
-    { name = "deepeval", marker = "extra == 'dev'", specifier = ">=3.8.0" },
-    { name = "deepeval", marker = "extra == 'eval'", specifier = ">=3.8.0" },
-    { name = "docling", marker = "extra == 'docproc'", specifier = ">=2.0.0" },
-    { name = "duckdb", marker = "extra == 'dev'", specifier = ">=1.0.0" },
-    { name = "duckdb", marker = "extra == 'duckdb'", specifier = ">=1.0.0" },
-    { name = "duckdb", marker = "extra == 'rag'", specifier = ">=1.0.0" },
-    { name = "duckdb", marker = "extra == 'workshop'", specifier = ">=1.0.0" },
-    { name = "fastapi", marker = "extra == 'workshop'", specifier = ">=0.110.0" },
-    { name = "fastmcp", marker = "extra == 'dev'", specifier = ">=3.1" },
-    { name = "fastmcp", marker = "extra == 'mcp'", specifier = ">=3.1" },
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "jinja2", marker = "extra == 'workshop'", specifier = ">=3.1.0" },
-    { name = "lancedb", marker = "extra == 'dev'", specifier = ">=0.15.0" },
-    { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.15.0" },
-    { name = "mkdocs-material", marker = "extra == 'dev'", specifier = ">=9.5" },
-    { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5" },
-    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'dev'", specifier = ">=0.24" },
-    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.24" },
-    { name = "nats-py", specifier = ">=2.7.0" },
-    { name = "nats-py", marker = "extra == 'tui'", specifier = ">=2.7.0" },
-    { name = "ollama", marker = "extra == 'local'", specifier = ">=0.3.0" },
-    { name = "openai", marker = "extra == 'chatbridge'", specifier = ">=1.0.0" },
-    { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.20.0" },
-    { name = "opentelemetry-exporter-otlp", marker = "extra == 'otel'", specifier = ">=1.20.0" },
-    { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.20.0" },
-    { name = "pyarrow", marker = "extra == 'dev'", specifier = ">=15.0.0" },
-    { name = "pyarrow", marker = "extra == 'lancedb'", specifier = ">=15.0.0" },
-    { name = "pydantic", specifier = ">=2.5.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
-    { name = "python-multipart", marker = "extra == 'workshop'", specifier = ">=0.0.9" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "redis", marker = "extra == 'dev'", specifier = ">=5.0.0" },
-    { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0.0" },
-    { name = "requests", marker = "extra == 'rag'", specifier = ">=2.31.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
-    { name = "structlog", specifier = ">=24.1.0" },
-    { name = "telethon", marker = "extra == 'telegram'", specifier = ">=1.36.0" },
-    { name = "textual", marker = "extra == 'tui'", specifier = ">=3.0.0" },
-    { name = "tiktoken", specifier = ">=0.7.0" },
-    { name = "uvicorn", marker = "extra == 'workshop'", specifier = ">=0.27.0" },
-    { name = "zeroconf", marker = "extra == 'mdns'", specifier = ">=0.131.0" },
-]
-provides-extras = ["redis", "local", "docproc", "duckdb", "rag", "lancedb", "telegram", "scheduler", "mcp", "workshop", "mdns", "otel", "tui", "docs", "eval", "council", "chatbridge", "dev"]
 
 [[package]]
 name = "lxml"

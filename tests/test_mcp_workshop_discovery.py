@@ -1,6 +1,6 @@
-"""Tests for loom.mcp.workshop_discovery — Workshop MCP tool definitions."""
+"""Tests for heddle.mcp.workshop_discovery — Workshop MCP tool definitions."""
 
-from loom.mcp.workshop_discovery import discover_workshop_tools
+from heddle.mcp.workshop_discovery import discover_workshop_tools
 
 
 class TestDiscoverWorkshopTools:
@@ -47,22 +47,22 @@ class TestDiscoverWorkshopTools:
         tools = discover_workshop_tools({"enable": []})
         assert tools == []
 
-    def test_loom_metadata_present(self):
+    def test_heddle_metadata_present(self):
         tools = discover_workshop_tools({"enable": ["worker"]})
         for tool in tools:
-            assert "_loom" in tool
-            assert tool["_loom"]["kind"] == "workshop"
-            assert "action" in tool["_loom"]
+            assert "_heddle" in tool
+            assert tool["_heddle"]["kind"] == "workshop"
+            assert "action" in tool["_heddle"]
 
     def test_deadletter_replay_marked_destructive(self):
         tools = discover_workshop_tools({"enable": ["deadletter"]})
         replay = next(t for t in tools if t["name"] == "workshop.deadletter.replay")
-        assert replay["_loom"]["destructive"] is True
+        assert replay["_heddle"]["destructive"] is True
 
     def test_deadletter_list_not_destructive(self):
         tools = discover_workshop_tools({"enable": ["deadletter"]})
         dl_list = next(t for t in tools if t["name"] == "workshop.deadletter.list")
-        assert "destructive" not in dl_list["_loom"]
+        assert "destructive" not in dl_list["_heddle"]
 
     def test_tool_schemas_are_valid(self):
         """All tools have proper JSON Schema structure."""
@@ -89,7 +89,7 @@ class TestDiscoverWorkshopTools:
         assert "required" not in by_name["workshop.worker.list"]["inputSchema"]
 
     def test_read_only_flags(self):
-        """Read-only tools have read_only=True in _loom metadata."""
+        """Read-only tools have read_only=True in _heddle metadata."""
         all_groups = ["worker", "test", "eval", "impact", "deadletter"]
         tools = discover_workshop_tools({"enable": all_groups})
         by_name = {t["name"]: t for t in tools}
@@ -103,18 +103,18 @@ class TestDiscoverWorkshopTools:
             "workshop.deadletter.list",
         ]
         for name in read_only_tools:
-            assert by_name[name]["_loom"].get("read_only") is True, f"{name} should be read_only"
+            assert by_name[name]["_heddle"].get("read_only") is True, f"{name} should be read_only"
 
         # These should NOT be read_only.
-        assert "read_only" not in by_name["workshop.worker.update"]["_loom"]
-        assert "read_only" not in by_name["workshop.eval.run"]["_loom"]
-        assert "read_only" not in by_name["workshop.deadletter.replay"]["_loom"]
+        assert "read_only" not in by_name["workshop.worker.update"]["_heddle"]
+        assert "read_only" not in by_name["workshop.eval.run"]["_heddle"]
+        assert "read_only" not in by_name["workshop.deadletter.replay"]["_heddle"]
 
     def test_eval_run_marked_long_running(self):
-        """eval.run has long_running=True in _loom metadata."""
+        """eval.run has long_running=True in _heddle metadata."""
         tools = discover_workshop_tools({"enable": ["eval"]})
         eval_run = next(t for t in tools if t["name"] == "workshop.eval.run")
-        assert eval_run["_loom"]["long_running"] is True
+        assert eval_run["_heddle"]["long_running"] is True
 
     def test_tool_count_per_group(self):
         """Verify expected tool counts per group."""

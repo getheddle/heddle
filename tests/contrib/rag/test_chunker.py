@@ -1,8 +1,8 @@
-"""Unit tests for loom.contrib.rag.chunker — sentence chunker."""
+"""Unit tests for heddle.contrib.rag.chunker — sentence chunker."""
 
 from datetime import UTC, datetime
 
-from loom.contrib.rag.schemas.post import NormalizedPost
+from heddle.contrib.rag.schemas.post import NormalizedPost
 
 
 def _make_post(text: str, gid: str = "1:1") -> NormalizedPost:
@@ -19,19 +19,19 @@ def _make_post(text: str, gid: str = "1:1") -> NormalizedPost:
 
 class TestSentenceChunker:
     def test_empty_text(self):
-        from loom.contrib.rag.chunker.sentence_chunker import chunk_post
+        from heddle.contrib.rag.chunker.sentence_chunker import chunk_post
 
         post = _make_post("")
         assert chunk_post(post) == []
 
     def test_whitespace_only(self):
-        from loom.contrib.rag.chunker.sentence_chunker import chunk_post
+        from heddle.contrib.rag.chunker.sentence_chunker import chunk_post
 
         post = _make_post("   \n\n   ")
         assert chunk_post(post) == []
 
     def test_short_text_single_chunk(self):
-        from loom.contrib.rag.chunker.sentence_chunker import chunk_post
+        from heddle.contrib.rag.chunker.sentence_chunker import chunk_post
 
         post = _make_post("This is a short sentence.")
         chunks = chunk_post(post)
@@ -41,8 +41,8 @@ class TestSentenceChunker:
         assert chunks[0].total_chunks == 1
 
     def test_whole_post_strategy(self):
-        from loom.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post
-        from loom.contrib.rag.schemas.chunk import ChunkStrategy
+        from heddle.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post
+        from heddle.contrib.rag.schemas.chunk import ChunkStrategy
 
         text = "First sentence. Second sentence. Third sentence."
         post = _make_post(text)
@@ -52,8 +52,8 @@ class TestSentenceChunker:
         assert chunks[0].text == text
 
     def test_paragraph_split(self):
-        from loom.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post
-        from loom.contrib.rag.schemas.chunk import ChunkStrategy
+        from heddle.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post
+        from heddle.contrib.rag.schemas.chunk import ChunkStrategy
 
         text = (
             "First paragraph with enough text to meet minimum."
@@ -65,7 +65,7 @@ class TestSentenceChunker:
         assert len(chunks) >= 1
 
     def test_chunk_ids_sequential(self):
-        from loom.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post
+        from heddle.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post
 
         text = "A" * 200 + ".\n\n" + "B" * 200 + ".\n\n" + "C" * 200 + "."
         post = _make_post(text, gid="100:5")
@@ -77,7 +77,7 @@ class TestSentenceChunker:
             assert c.total_chunks == len(chunks)
 
     def test_source_provenance(self):
-        from loom.contrib.rag.chunker.sentence_chunker import chunk_post
+        from heddle.contrib.rag.chunker.sentence_chunker import chunk_post
 
         post = _make_post("A sentence with enough chars for one chunk.", gid="999:42")
         chunks = chunk_post(post)
@@ -86,8 +86,8 @@ class TestSentenceChunker:
         assert chunks[0].source_channel_name == "test_ch"
 
     def test_chunk_mux_entry(self):
-        from loom.contrib.rag.chunker.sentence_chunker import chunk_mux_entry
-        from loom.contrib.rag.schemas.mux import MuxEntry
+        from heddle.contrib.rag.chunker.sentence_chunker import chunk_mux_entry
+        from heddle.contrib.rag.schemas.mux import MuxEntry
 
         post = _make_post("Enough text for a chunk here definitely.")
         entry = MuxEntry(mux_seq=0, post=post)
@@ -95,8 +95,8 @@ class TestSentenceChunker:
         assert len(chunks) >= 1
 
     def test_fixed_char_strategy(self):
-        from loom.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post
-        from loom.contrib.rag.schemas.chunk import ChunkStrategy
+        from heddle.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post
+        from heddle.contrib.rag.schemas.chunk import ChunkStrategy
 
         text = "X" * 1500
         post = _make_post(text)

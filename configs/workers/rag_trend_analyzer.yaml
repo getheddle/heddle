@@ -7,16 +7,16 @@
 # formatted post batches to an LLM for analysis and receives structured JSON.
 #
 # Component:  LLM worker (worker_kind: "llm")
-# Source:     src/loom/worker/runner.py (LLMWorker)
-# Analysis:   src/loom/contrib/rag/analysis/llm_analyzers.py (TrendAnalyzer)
-# Loaded by:  loom.core.config.load_config()
-# Validated:  loom.core.contracts.py (I/O schema enforcement)
+# Source:     src/heddle/worker/runner.py (LLMWorker)
+# Analysis:   src/heddle/contrib/rag/analysis/llm_analyzers.py (TrendAnalyzer)
+# Loaded by:  heddle.core.config.load_config()
+# Validated:  heddle.core.contracts.py (I/O schema enforcement)
 #
 # Run with:
-#   loom worker --config configs/workers/rag_trend_analyzer.yaml --tier local
-#   loom worker --config configs/workers/rag_trend_analyzer.yaml --tier standard
+#   heddle worker --config configs/workers/rag_trend_analyzer.yaml --tier local
+#   heddle worker --config configs/workers/rag_trend_analyzer.yaml --tier standard
 #
-# NATS subject:  loom.tasks.rag_trend_analyzer.{tier}
+# NATS subject:  heddle.tasks.rag_trend_analyzer.{tier}
 #
 # This worker is designed for Persian (Farsi) content but works with any language.
 # The system prompt instructs the LLM to preserve Persian text and handle RTL.

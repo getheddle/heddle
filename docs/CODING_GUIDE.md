@@ -1,7 +1,7 @@
-# Loom Coding, Documentation & Style Guide
+# Heddle Coding, Documentation & Style Guide
 
 This guide defines the coding, commenting, and documentation standards for all
-Loom contributors. Code that does not conform will be flagged during review or
+Heddle contributors. Code that does not conform will be flagged during review or
 by the automated linter.
 
 Read [`CONTRIBUTING.md`](CONTRIBUTING.md) first for architectural invariants and
@@ -76,8 +76,8 @@ uv run ruff check src/ tests/ --fix
 | Private members | Leading underscore | `_running`, `_refill()` |
 | Type variables | `PascalCase` + `T` suffix | `MessageT` |
 | Pydantic fields | `snake_case` | `worker_type`, `goal_id` |
-| NATS subjects | `dot.separated.lowercase` | `loom.tasks.incoming` |
-| CLI commands | `kebab-case` (Click default) | `loom workshop` |
+| NATS subjects | `dot.separated.lowercase` | `heddle.tasks.incoming` |
+| CLI commands | `kebab-case` (Click default) | `heddle workshop` |
 | Config keys (YAML) | `snake_case` | `max_concurrent_goals` |
 
 **Abbreviations:** Avoid unless universally understood (`url`, `id`, `db`).
@@ -105,9 +105,9 @@ import structlog
 import yaml
 from pydantic import BaseModel, Field
 
-# 4. Local (loom package)
-from loom.core.actor import BaseActor
-from loom.core.messages import TaskMessage, TaskResult
+# 4. Local (heddle package)
+from heddle.core.actor import BaseActor
+from heddle.core.messages import TaskMessage, TaskResult
 ```
 
 **Rules:**
@@ -121,7 +121,7 @@ from loom.core.messages import TaskMessage, TaskResult
 ```python
 # Good — only imported when needed, avoids hard dep
 async def process(self, ...):
-    from loom.worker.knowledge import load_knowledge_silos
+    from heddle.worker.knowledge import load_knowledge_silos
     ...
 ```
 
@@ -179,14 +179,14 @@ code.
 One-line summary of what this module does.
 
 Longer description providing architectural context: how this module fits into
-Loom, what calls it, what it calls. Explain the core abstraction or pattern.
+Heddle, what calls it, what it calls. Explain the core abstraction or pattern.
 
 Design note: why this approach was chosen over alternatives. For example,
 why we use our own JSON Schema validator instead of the jsonschema library.
 
 See also:
-    loom.core.messages — the message types this module processes
-    loom.bus.nats_adapter — the production bus implementation
+    heddle.core.messages — the message types this module processes
+    heddle.bus.nats_adapter — the production bus implementation
 """
 ```
 
@@ -194,9 +194,9 @@ See also:
 
 ```python
 """
-Base actor class — the foundation of Loom's actor model.
+Base actor class — the foundation of Heddle's actor model.
 
-All Loom actors (workers, orchestrators, routers) inherit from BaseActor.
+All Heddle actors (workers, orchestrators, routers) inherit from BaseActor.
 This class handles the message bus subscription lifecycle, message dispatch,
 signal-based shutdown, and error isolation. Each actor is an independent
 process with no shared memory.
@@ -265,7 +265,7 @@ async def call_worker(
 ) -> dict[str, Any]:
     """Dispatch a task to a worker and wait for the result.
 
-    Publishes a TaskMessage to loom.tasks.incoming and subscribes to
+    Publishes a TaskMessage to heddle.tasks.incoming and subscribes to
     the result subject. Blocks until a matching TaskResult arrives or
     the timeout expires.
 
@@ -422,7 +422,7 @@ logger.info(f"Routing task {task.task_id} to tier {tier.value}")
 
 ### File naming
 
-- Test file: `test_{module_name}.py` (mirrors `src/loom/{package}/{module}.py`)
+- Test file: `test_{module_name}.py` (mirrors `src/heddle/{package}/{module}.py`)
 - Test class: `Test{ClassName}` (e.g., `TestPipelineOrchestrator`)
 - Test function: `test_{behavior_description}` (e.g.,
   `test_stage_timeout_produces_failed_result`)
@@ -430,10 +430,10 @@ logger.info(f"Routing task {task.task_id} to tier {tier.value}")
 ### Test organization
 
 ```python
-"""Tests for loom.orchestrator.pipeline — PipelineOrchestrator."""
+"""Tests for heddle.orchestrator.pipeline — PipelineOrchestrator."""
 import pytest
 
-from loom.orchestrator.pipeline import PipelineOrchestrator, PipelineStageError
+from heddle.orchestrator.pipeline import PipelineOrchestrator, PipelineStageError
 
 
 class TestBuildExecutionLevels:
@@ -527,13 +527,13 @@ references when writing new code:
 
 | Pattern | Reference file |
 |---------|---------------|
-| Module docstring with architecture context | `src/loom/orchestrator/pipeline.py` |
-| Class with lifecycle documentation | `src/loom/core/actor.py` |
-| Function with Args/Returns/Raises | `src/loom/worker/runner.py` (`execute_with_tools`) |
-| Custom exception hierarchy | `src/loom/orchestrator/pipeline.py` |
-| ABC with usage examples in docstring | `src/loom/bus/base.py` |
-| Pydantic models with field documentation | `src/loom/core/messages.py` |
-| Section headers in long classes | `src/loom/orchestrator/pipeline.py` |
-| Structured logging conventions | `src/loom/router/router.py` |
-| Contract validation with design rationale | `src/loom/core/contracts.py` |
-| Contrib backend with config docs | `src/loom/contrib/rag/backends.py` |
+| Module docstring with architecture context | `src/heddle/orchestrator/pipeline.py` |
+| Class with lifecycle documentation | `src/heddle/core/actor.py` |
+| Function with Args/Returns/Raises | `src/heddle/worker/runner.py` (`execute_with_tools`) |
+| Custom exception hierarchy | `src/heddle/orchestrator/pipeline.py` |
+| ABC with usage examples in docstring | `src/heddle/bus/base.py` |
+| Pydantic models with field documentation | `src/heddle/core/messages.py` |
+| Section headers in long classes | `src/heddle/orchestrator/pipeline.py` |
+| Structured logging conventions | `src/heddle/router/router.py` |
+| Contract validation with design rationale | `src/heddle/core/contracts.py` |
+| Contrib backend with config docs | `src/heddle/contrib/rag/backends.py` |

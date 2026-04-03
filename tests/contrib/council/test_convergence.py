@@ -2,9 +2,9 @@
 
 from unittest.mock import AsyncMock
 
-from loom.contrib.council.convergence import ConvergenceDetector, _parse_json
-from loom.contrib.council.schemas import ConvergenceConfig, TranscriptEntry
-from loom.contrib.council.transcript import TranscriptStore
+from heddle.contrib.council.convergence import ConvergenceDetector, _parse_json
+from heddle.contrib.council.schemas import ConvergenceConfig, TranscriptEntry
+from heddle.contrib.council.transcript import TranscriptStore
 
 
 def _store_with_rounds(*round_data):

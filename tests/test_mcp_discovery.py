@@ -1,10 +1,10 @@
-"""Tests for loom.mcp.discovery — tool definition generation."""
+"""Tests for heddle.mcp.discovery — tool definition generation."""
 
 import os
 
 import yaml
 
-from loom.mcp.discovery import (
+from heddle.mcp.discovery import (
     discover_pipeline_tools,
     discover_query_tools,
     discover_worker_tools,
@@ -67,12 +67,12 @@ class TestDiscoverWorkerTools:
         assert tool["description"] == "Summarize the input document."
         assert tool["inputSchema"]["required"] == ["text"]
 
-        # Verify _loom metadata.
-        loom = tool["_loom"]
-        assert loom["kind"] == "worker"
-        assert loom["worker_type"] == "summarizer"
-        assert loom["tier"] == "standard"
-        assert loom["timeout"] == 120
+        # Verify _heddle metadata.
+        heddle_meta_val = tool["_heddle"]
+        assert heddle_meta_val["kind"] == "worker"
+        assert heddle_meta_val["worker_type"] == "summarizer"
+        assert heddle_meta_val["tier"] == "standard"
+        assert heddle_meta_val["timeout"] == 120
 
     def test_name_and_description_override(self, tmp_path):
         worker_cfg = {
@@ -94,7 +94,7 @@ class TestDiscoverWorkerTools:
 
         assert tools[0]["name"] == "classify_document"
         assert tools[0]["description"] == "Custom description"
-        assert tools[0]["_loom"]["tier"] == "local"
+        assert tools[0]["_heddle"]["tier"] == "local"
 
     def test_description_from_worker_config(self, tmp_path):
         """Worker config 'description' field is used when no MCP override."""
@@ -184,9 +184,9 @@ class TestDiscoverPipelineTools:
         assert "file_ref" in schema["properties"]
         assert "file_ref" in schema["required"]
 
-        loom = tool["_loom"]
-        assert loom["kind"] == "pipeline"
-        assert loom["timeout"] == 600
+        heddle_meta_val = tool["_heddle"]
+        assert heddle_meta_val["kind"] == "pipeline"
+        assert heddle_meta_val["timeout"] == 600
 
     def test_multi_stage_context_fields(self, tmp_path):
         """goal.context.* refs in later stages should also appear in schema."""
@@ -271,7 +271,7 @@ class TestDiscoverQueryTools:
     def test_basic_query_tools(self, monkeypatch):
         """Test query tool discovery with a mock backend."""
         # Monkeypatch _instantiate_backend to return our mock.
-        import loom.mcp.discovery as disc
+        import heddle.mcp.discovery as disc
 
         monkeypatch.setattr(disc, "_instantiate_backend", lambda path, cfg: _MockQueryBackend())
 
@@ -289,7 +289,7 @@ class TestDiscoverQueryTools:
         assert names == {"docs_search", "docs_filter", "docs_stats", "docs_get"}
 
     def test_search_schema(self, monkeypatch):
-        import loom.mcp.discovery as disc
+        import heddle.mcp.discovery as disc
 
         monkeypatch.setattr(disc, "_instantiate_backend", lambda path, cfg: _MockQueryBackend())
 
@@ -307,7 +307,7 @@ class TestDiscoverQueryTools:
         assert "query" in schema["properties"]
 
     def test_filter_schema_infers_types(self, monkeypatch):
-        import loom.mcp.discovery as disc
+        import heddle.mcp.discovery as disc
 
         monkeypatch.setattr(disc, "_instantiate_backend", lambda path, cfg: _MockQueryBackend())
 
@@ -330,7 +330,7 @@ class TestDiscoverQueryTools:
         assert schema["properties"]["doc_type"]["type"] == "string"
 
     def test_stats_schema(self, monkeypatch):
-        import loom.mcp.discovery as disc
+        import heddle.mcp.discovery as disc
 
         monkeypatch.setattr(disc, "_instantiate_backend", lambda path, cfg: _MockQueryBackend())
 
@@ -347,7 +347,7 @@ class TestDiscoverQueryTools:
         assert "group_by" in schema["properties"]
 
     def test_get_schema_uses_id_column(self, monkeypatch):
-        import loom.mcp.discovery as disc
+        import heddle.mcp.discovery as disc
 
         monkeypatch.setattr(disc, "_instantiate_backend", lambda path, cfg: _MockQueryBackend())
 
@@ -365,7 +365,7 @@ class TestDiscoverQueryTools:
         assert "doc_id" in schema["properties"]
 
     def test_unknown_action_skipped(self, monkeypatch):
-        import loom.mcp.discovery as disc
+        import heddle.mcp.discovery as disc
 
         monkeypatch.setattr(disc, "_instantiate_backend", lambda path, cfg: _MockQueryBackend())
 
@@ -382,7 +382,7 @@ class TestDiscoverQueryTools:
         assert tools[0]["name"] == "docs_search"
 
     def test_backend_instantiation_failure_skips(self, monkeypatch):
-        import loom.mcp.discovery as disc
+        import heddle.mcp.discovery as disc
 
         monkeypatch.setattr(disc, "_instantiate_backend", lambda path, cfg: None)
 
@@ -397,8 +397,8 @@ class TestDiscoverQueryTools:
         tools = discover_query_tools(entries)
         assert tools == []
 
-    def test_loom_metadata(self, monkeypatch):
-        import loom.mcp.discovery as disc
+    def test_heddle_metadata(self, monkeypatch):
+        import heddle.mcp.discovery as disc
 
         monkeypatch.setattr(disc, "_instantiate_backend", lambda path, cfg: _MockQueryBackend())
 
@@ -413,11 +413,11 @@ class TestDiscoverQueryTools:
             }
         ]
         tools = discover_query_tools(entries)
-        loom = tools[0]["_loom"]
-        assert loom["kind"] == "query"
-        assert loom["worker_type"] == "docs_query"
-        assert loom["action"] == "search"
-        assert loom["timeout"] == 45
+        heddle_meta_val = tools[0]["_heddle"]
+        assert heddle_meta_val["kind"] == "query"
+        assert heddle_meta_val["worker_type"] == "docs_query"
+        assert heddle_meta_val["action"] == "search"
+        assert heddle_meta_val["timeout"] == 45
 
 
 # ---------------------------------------------------------------------------
@@ -522,26 +522,26 @@ class TestLoadStagePropertyTypes:
 
 class TestInstantiateBackend:
     def test_no_dot_in_path_returns_none(self):
-        from loom.mcp.discovery import _instantiate_backend
+        from heddle.mcp.discovery import _instantiate_backend
 
         result = _instantiate_backend("NoDotPath", {})
         assert result is None
 
     def test_import_error_returns_none(self):
-        from loom.mcp.discovery import _instantiate_backend
+        from heddle.mcp.discovery import _instantiate_backend
 
         result = _instantiate_backend("nonexistent.module.ClassName", {})
         assert result is None
 
     def test_class_not_found_returns_none(self):
-        from loom.mcp.discovery import _instantiate_backend
+        from heddle.mcp.discovery import _instantiate_backend
 
         # os module exists but has no class named 'FakeClassName'
         result = _instantiate_backend("os.FakeClassName", {})
         assert result is None
 
     def test_init_failure_returns_none(self):
-        from loom.mcp.discovery import _instantiate_backend
+        from heddle.mcp.discovery import _instantiate_backend
 
         # int() with bad kwargs will raise TypeError
         result = _instantiate_backend("builtins.int", {"bad_kwarg": "value"})
@@ -561,7 +561,7 @@ class _NoHandlersBackend:
 
 class TestQueryNoHandlers:
     def test_backend_without_get_handlers_skipped(self, monkeypatch):
-        import loom.mcp.discovery as disc
+        import heddle.mcp.discovery as disc
 
         monkeypatch.setattr(disc, "_instantiate_backend", lambda path, cfg: _NoHandlersBackend())
 
@@ -599,7 +599,7 @@ class _VectorBackend:
 
 class TestQueryActionSchemaVectorAndUnknown:
     def test_vector_search_schema(self, monkeypatch):
-        import loom.mcp.discovery as disc
+        import heddle.mcp.discovery as disc
 
         monkeypatch.setattr(disc, "_instantiate_backend", lambda path, cfg: _VectorBackend())
 
@@ -618,7 +618,7 @@ class TestQueryActionSchemaVectorAndUnknown:
         assert "limit" in schema["properties"]
 
     def test_unknown_action_schema_fallback(self, monkeypatch):
-        import loom.mcp.discovery as disc
+        import heddle.mcp.discovery as disc
 
         monkeypatch.setattr(disc, "_instantiate_backend", lambda path, cfg: _VectorBackend())
 
@@ -652,7 +652,7 @@ class _NoStatsGroupsBackend:
 
 class TestStatsSchemaNoGroups:
     def test_stats_schema_empty_groups(self, monkeypatch):
-        import loom.mcp.discovery as disc
+        import heddle.mcp.discovery as disc
 
         monkeypatch.setattr(disc, "_instantiate_backend", lambda path, cfg: _NoStatsGroupsBackend())
 
@@ -677,16 +677,16 @@ class TestStatsSchemaNoGroups:
 
 class TestFirstLine:
     def test_empty_string(self):
-        from loom.mcp.discovery import _first_line
+        from heddle.mcp.discovery import _first_line
 
         assert _first_line("") == ""
 
     def test_whitespace_only(self):
-        from loom.mcp.discovery import _first_line
+        from heddle.mcp.discovery import _first_line
 
         assert _first_line("   \n\n  \n") == ""
 
     def test_leading_blank_lines(self):
-        from loom.mcp.discovery import _first_line
+        from heddle.mcp.discovery import _first_line
 
         assert _first_line("\n\n  Hello world\nSecond") == "Hello world"

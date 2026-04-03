@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from loom.worker.embeddings import EmbeddingProvider, OllamaEmbeddingProvider
+from heddle.worker.embeddings import EmbeddingProvider, OllamaEmbeddingProvider
 
 
 class TestEmbeddingProviderABC:

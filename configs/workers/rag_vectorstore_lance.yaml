@@ -9,19 +9,19 @@
 # search over large vector collections compared to DuckDB's exact search.
 #
 # Component:  Processor worker (worker_kind: "processor")
-# Backend:    src/loom/contrib/rag/backends.py (VectorStoreBackend)
-# Engine:     src/loom/contrib/lancedb/store.py (LanceDBVectorStore)
-# Embeddings: src/loom/worker/embeddings.py (OllamaEmbeddingProvider)
+# Backend:    src/heddle/contrib/rag/backends.py (VectorStoreBackend)
+# Engine:     src/heddle/contrib/lancedb/store.py (LanceDBVectorStore)
+# Embeddings: src/heddle/worker/embeddings.py (OllamaEmbeddingProvider)
 #
 # Prerequisites:
-#   - pip install loom[lancedb]
+#   - pip install heddle-ai[lancedb]
 #   - Ollama running with the embedding model pulled:
 #     ollama pull nomic-embed-text
 #
 # Run with:
-#   loom processor --config configs/workers/rag_vectorstore_lance.yaml
+#   heddle processor --config configs/workers/rag_vectorstore_lance.yaml
 #
-# NATS subject:  loom.tasks.rag_vectorstore_lance.local
+# NATS subject:  heddle.tasks.rag_vectorstore_lance.local
 # =============================================================================
 
 name: "rag_vectorstore_lance"
@@ -30,13 +30,13 @@ description: "LanceDB vector store for embedding storage and ANN semantic search
 
 worker_kind: "processor"
 
-processing_backend: "loom.contrib.rag.backends.VectorStoreBackend"
+processing_backend: "heddle.contrib.rag.backends.VectorStoreBackend"
 
 backend_config:
   db_path: "/tmp/rag-vectors.lance"
   embedding_model: "nomic-embed-text"
   ollama_url: "http://localhost:11434"
-  store_class: "loom.contrib.lancedb.store.LanceDBVectorStore"
+  store_class: "heddle.contrib.lancedb.store.LanceDBVectorStore"
 
 input_schema:
   type: object

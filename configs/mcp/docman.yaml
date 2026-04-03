@@ -6,18 +6,18 @@
 # (Model Context Protocol) tools. Any MCP client (Claude Desktop, Cursor, etc.)
 # can connect and use these tools without MCP-specific code.
 #
-# Component:  src/loom/mcp/server.py (MCPGateway, create_server)
-# Config:     src/loom/mcp/config.py (validation)
-# Discovery:  src/loom/mcp/discovery.py (tool definition generators)
-# Bridge:     src/loom/mcp/bridge.py (MCPBridge — tool calls -> NATS dispatch)
-# Resources:  src/loom/mcp/resources.py (workspace files as MCP resources)
+# Component:  src/heddle/mcp/server.py (MCPGateway, create_server)
+# Config:     src/heddle/mcp/config.py (validation)
+# Discovery:  src/heddle/mcp/discovery.py (tool definition generators)
+# Bridge:     src/heddle/mcp/bridge.py (MCPBridge — tool calls -> NATS dispatch)
+# Resources:  src/heddle/mcp/resources.py (workspace files as MCP resources)
 #
 # Run with:
 #   # stdio transport (for Claude Desktop, pipe-based clients)
-#   loom mcp --config configs/mcp/docman.yaml
+#   heddle mcp --config configs/mcp/docman.yaml
 #
 #   # Streamable HTTP transport (for web-based clients, multi-client)
-#   loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
+#   heddle mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
 #
 # Prerequisites:
 #   uv sync --extra mcp --extra duckdb
@@ -96,14 +96,14 @@ tools:
   # become individual MCP tools with auto-generated schemas.
   #
   # Available backends:
-  #   loom.contrib.duckdb.query_backend.DuckDBQueryBackend
+  #   heddle.contrib.duckdb.query_backend.DuckDBQueryBackend
   #     Actions: search (FTS), filter (parameterized), stats (aggregates), get (by ID)
   #     Also: vector (semantic similarity, if embedding config provided)
   queries:
     # backend (str, required)
     # Fully qualified Python class path for the query backend.
     # Must implement _get_handlers() returning action -> handler mappings.
-    - backend: "loom.contrib.duckdb.query_backend.DuckDBQueryBackend"
+    - backend: "heddle.contrib.duckdb.query_backend.DuckDBQueryBackend"
 
       # actions (list[str], required)
       # Which backend actions to expose as MCP tools.
@@ -180,7 +180,7 @@ tools:
 # resources (dict, optional)
 # Workspace files exposed as MCP resources (workspace:/// URIs).
 # MCP clients can browse and read these files.
-# Source: src/loom/mcp/resources.py (WorkspaceResources)
+# Source: src/heddle/mcp/resources.py (WorkspaceResources)
 resources:
   # workspace_dir (str, required)
   # Base directory for resource files. Must be an absolute path.

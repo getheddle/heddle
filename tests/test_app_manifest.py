@@ -1,9 +1,9 @@
-"""Tests for loom.core.manifest — app manifest schema and validation."""
+"""Tests for heddle.core.manifest — app manifest schema and validation."""
 
 import pytest
 import yaml
 
-from loom.core.manifest import AppManifest, load_manifest, validate_app_manifest
+from heddle.core.manifest import AppManifest, load_manifest, validate_app_manifest
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -13,7 +13,7 @@ VALID_MANIFEST = {
     "name": "test-app",
     "version": "1.0.0",
     "description": "A test application",
-    "loom_version": ">=0.4.0",
+    "heddle_version": ">=0.4.0",
     "required_extras": ["duckdb", "mcp"],
     "entry_configs": {
         "workers": [
@@ -123,7 +123,7 @@ class TestAppManifest:
 
     def test_defaults(self):
         m = AppManifest(name="test", version="1.0.0", description="Test")
-        assert m.loom_version == ">=0.4.0"
+        assert m.heddle_version == ">=0.4.0"
         assert m.required_extras == []
         assert m.python_package is None
         assert m.entry_configs.workers == []

@@ -1,6 +1,6 @@
 """Tests for council MCP tool discovery."""
 
-from loom.mcp.council_discovery import discover_council_tools
+from heddle.mcp.council_discovery import discover_council_tools
 
 
 class TestDiscoverCouncilTools:
@@ -29,16 +29,16 @@ class TestDiscoverCouncilTools:
         assert "config_name" in schema["properties"]
         assert schema["required"] == ["topic", "config_name"]
 
-    def test_loom_metadata(self):
+    def test_heddle_metadata(self):
         tools = discover_council_tools({"enable": ["start"]})
-        meta = tools[0]["_loom"]
+        meta = tools[0]["_heddle"]
         assert meta["kind"] == "council"
         assert meta["action"] == "start"
         assert meta["long_running"] is True
 
     def test_status_is_read_only(self):
         tools = discover_council_tools({"enable": ["status"]})
-        meta = tools[0]["_loom"]
+        meta = tools[0]["_heddle"]
         assert meta["read_only"] is True
 
     def test_transcript_has_optional_filter(self):

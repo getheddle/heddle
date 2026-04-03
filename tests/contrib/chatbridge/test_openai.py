@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from loom.contrib.chatbridge.openai import OpenAIChatBridge
+from heddle.contrib.chatbridge.openai import OpenAIChatBridge
 
 
 def _mock_response(content="Sure!", prompt_tokens=40, completion_tokens=15):

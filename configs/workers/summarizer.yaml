@@ -5,15 +5,15 @@
 # Compresses text into structured summaries with key points extraction.
 #
 # Component:  LLM worker (worker_kind: "llm", the default)
-# Source:     src/loom/worker/runner.py (LLMWorker)
-# Loaded by:  loom.core.config.load_config()
-# Validated:  loom.core.contracts.py (I/O schema enforcement)
+# Source:     src/heddle/worker/runner.py (LLMWorker)
+# Loaded by:  heddle.core.config.load_config()
+# Validated:  heddle.core.contracts.py (I/O schema enforcement)
 #
 # Run with:
-#   loom worker --config configs/workers/summarizer.yaml --tier local
-#   loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
+#   heddle worker --config configs/workers/summarizer.yaml --tier local
+#   heddle worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
 #
-# NATS subject:  loom.tasks.summarizer.local  (tier forced by router_rules.yaml)
+# NATS subject:  heddle.tasks.summarizer.local  (tier forced by router_rules.yaml)
 # Queue group:   Workers auto-join queue groups, so multiple replicas load-balance.
 #
 # Router override: tier_overrides in configs/router_rules.yaml forces this to "local"

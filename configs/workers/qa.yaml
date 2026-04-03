@@ -10,7 +10,7 @@
 # Tier:       local (fast for straightforward QA; use standard for complex reasoning)
 #
 # Run with:
-#   loom worker --config configs/workers/qa.yaml --tier local
+#   heddle worker --config configs/workers/qa.yaml --tier local
 # =============================================================================
 
 name: "qa"

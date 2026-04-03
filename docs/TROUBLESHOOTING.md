@@ -1,12 +1,12 @@
 # Troubleshooting
 
-Common issues and solutions when running Loom.
+Common issues and solutions when running Heddle.
 
 ---
 
 ## Setup & Configuration
 
-### `loom setup` can't detect Ollama
+### `heddle setup` can't detect Ollama
 
 **Symptom:** Setup wizard reports "Ollama not detected" even though Ollama is running.
 
@@ -17,7 +17,7 @@ Common issues and solutions when running Loom.
 - Check firewall isn't blocking port 11434
 - If using Docker Ollama: `docker run -p 11434:11434 ollama/ollama`
 
-### `loom setup` Anthropic key validation fails
+### `heddle setup` Anthropic key validation fails
 
 **Symptom:** Setup reports "Key validation failed" after entering an API key.
 
@@ -30,11 +30,11 @@ Common issues and solutions when running Loom.
 
 ### Config file not picked up
 
-**Symptom:** Settings from `~/.loom/config.yaml` don't take effect.
+**Symptom:** Settings from `~/.heddle/config.yaml` don't take effect.
 
 **Fix:**
 
-- Check the file exists: `cat ~/.loom/config.yaml`
+- Check the file exists: `cat ~/.heddle/config.yaml`
 - Env vars override config file values — check for conflicting `OLLAMA_URL`, `ANTHROPIC_API_KEY`
 - Priority: CLI flags > env vars > config.yaml > defaults
 - See [Configuration](CONFIG.md) for the full priority chain
@@ -43,7 +43,7 @@ Common issues and solutions when running Loom.
 
 ## RAG Pipeline
 
-### `loom rag ingest` fails with "No valid exports found"
+### `heddle rag ingest` fails with "No valid exports found"
 
 **Symptom:** Ingest exits immediately without processing any files.
 
@@ -52,9 +52,9 @@ Common issues and solutions when running Loom.
 - Verify files exist: `ls /path/to/exports/result*.json`
 - Telegram exports must be JSON format (not HTML)
 - Use Telegram Desktop → Export Chat → JSON format
-- File paths are passed as arguments: `loom rag ingest file1.json file2.json`
+- File paths are passed as arguments: `heddle rag ingest file1.json file2.json`
 
-### Embedding fails during `loom rag ingest`
+### Embedding fails during `heddle rag ingest`
 
 **Symptom:** Ingest hangs or errors at the "Storing chunks" step.
 
@@ -63,20 +63,20 @@ Common issues and solutions when running Loom.
 - Check Ollama is running: `curl http://localhost:11434/api/tags`
 - Check embedding model is installed: `ollama list | grep nomic-embed-text`
 - Pull the model: `ollama pull nomic-embed-text`
-- Use `--no-embed` to skip embeddings: `loom rag ingest --no-embed files...`
-- Check Ollama URL in config: `cat ~/.loom/config.yaml | grep ollama_url`
+- Use `--no-embed` to skip embeddings: `heddle rag ingest --no-embed files...`
+- Check Ollama URL in config: `cat ~/.heddle/config.yaml | grep ollama_url`
 
-### `loom rag search` returns no results
+### `heddle rag search` returns no results
 
 **Symptom:** Search returns "No results found" even after ingesting data.
 
 **Fix:**
 
-- Check the store has data: `loom rag stats`
+- Check the store has data: `heddle rag stats`
 - If you ingested with `--no-embed`, search won't work (embeddings required)
-- Re-ingest with embeddings: `loom rag ingest --embed files...`
-- Lower the score threshold: `loom rag search "query" --min-score 0.0`
-- Check you're using the same store path: `loom rag --db-path /path/to/store.duckdb search "query"`
+- Re-ingest with embeddings: `heddle rag ingest --embed files...`
+- Lower the score threshold: `heddle rag search "query" --min-score 0.0`
+- Check you're using the same store path: `heddle rag --db-path /path/to/store.duckdb search "query"`
 
 ### LanceDB import errors
 
@@ -136,7 +136,7 @@ docker compose up -d
 - Ensure workers are running *before* publishing tasks
 - Start actors in the right order: workers → router → orchestrator/pipeline
 - Check that `worker_type` in the task matches the worker's subscription (case-sensitive)
-- Check `loom.tasks.dead_letter` for unroutable tasks: `loom dead-letter monitor`
+- Check `heddle.tasks.dead_letter` for unroutable tasks: `heddle dead-letter monitor`
 
 ---
 
@@ -149,8 +149,8 @@ docker compose up -d
 **Fix:**
 
 - Check the worker's system prompt — it must instruct the LLM to output valid JSON matching the schema
-- Use the Workshop test bench to test the worker in isolation: `loom workshop --port 8080`
-- Enable trace logging to see full I/O: `LOOM_TRACE=1 loom worker --config ...`
+- Use the Workshop test bench to test the worker in isolation: `heddle workshop --port 8080`
+- Enable trace logging to see full I/O: `HEDDLE_TRACE=1 heddle worker --config ...`
 - Verify the LLM backend is responding correctly (try a direct API call)
 
 ### ANTHROPIC_API_KEY not set
@@ -236,7 +236,7 @@ ollama pull llama3.2
 
 ### Tasks going to dead letter
 
-**Symptom:** Tasks appear in `loom.tasks.dead_letter` instead of reaching workers.
+**Symptom:** Tasks appear in `heddle.tasks.dead_letter` instead of reaching workers.
 
 **Cause:** Router can't find a matching route for the `worker_type` + `model_tier` combination.
 
@@ -245,7 +245,7 @@ ollama pull llama3.2
 - Check `configs/router_rules.yaml` for tier overrides
 - Verify the `worker_type` in the task matches a running worker's config `name`
 - Check rate limits — rate-limited tasks may be dead-lettered
-- Monitor dead letters: `loom dead-letter monitor --nats-url nats://localhost:4222`
+- Monitor dead letters: `heddle dead-letter monitor --nats-url nats://localhost:4222`
 
 ---
 
@@ -253,7 +253,7 @@ ollama pull llama3.2
 
 ### Workshop won't start
 
-**Symptom:** `loom workshop` fails with import errors.
+**Symptom:** `heddle workshop` fails with import errors.
 
 **Fix:**
 
@@ -298,9 +298,9 @@ uv sync --all-extras
 
 **Fix:**
 
-- Bind to `0.0.0.0` not `127.0.0.1`: `loom workshop --host 0.0.0.0 --port 8080`
+- Bind to `0.0.0.0` not `127.0.0.1`: `heddle workshop --host 0.0.0.0 --port 8080`
 - Docker: expose the port: `-p 8080:8080`
-- Kubernetes: use NodePort (30080) or port-forward: `kubectl port-forward svc/loom-workshop 8080:8080`
+- Kubernetes: use NodePort (30080) or port-forward: `kubectl port-forward svc/heddle-workshop 8080:8080`
 
 ---
 
@@ -312,15 +312,15 @@ uv sync --all-extras
 
 ```bash
 # Check service status
-launchctl list | grep loom
+launchctl list | grep heddle
 
 # Check logs
-cat ~/Library/Logs/loom/workshop.err
-cat ~/Library/Logs/loom/router.err
+cat ~/Library/Logs/heddle/workshop.err
+cat ~/Library/Logs/heddle/router.err
 
 # Reload services
-launchctl unload ~/Library/LaunchAgents/com.loom.workshop.plist
-launchctl load ~/Library/LaunchAgents/com.loom.workshop.plist
+launchctl unload ~/Library/LaunchAgents/com.heddle.workshop.plist
+launchctl load ~/Library/LaunchAgents/com.heddle.workshop.plist
 ```
 
 ### Permission denied
@@ -328,7 +328,7 @@ launchctl load ~/Library/LaunchAgents/com.loom.workshop.plist
 **Fix:**
 
 - launchd user agents don't need sudo — run as your user
-- If `loom` binary is in a restricted path, move it or adjust the plist
+- If `heddle` binary is in a restricted path, move it or adjust the plist
 
 ---
 
@@ -340,14 +340,14 @@ launchctl load ~/Library/LaunchAgents/com.loom.workshop.plist
 
 ```powershell
 # Check service status
-nssm status LoomWorkshop
-nssm status LoomRouter
+nssm status HeddleWorkshop
+nssm status HeddleRouter
 
 # Check logs
-Get-Content "$env:LOCALAPPDATA\loom\logs\workshop.err"
+Get-Content "$env:LOCALAPPDATA\heddle\logs\workshop.err"
 
 # Restart
-nssm restart LoomWorkshop
+nssm restart HeddleWorkshop
 ```
 
 ### NSSM not found
@@ -424,7 +424,7 @@ choco install nssm
 
 ### TUI won't start
 
-**Symptom:** `loom ui` fails with import errors.
+**Symptom:** `heddle ui` fails with import errors.
 
 **Fix:**
 
@@ -443,9 +443,9 @@ uv sync --all-extras
 **Fix:**
 
 - Check that NATS is running: `nats-server --version` or `docker ps | grep nats`
-- Verify the URL: `loom ui --nats-url nats://localhost:4222` (default)
+- Verify the URL: `heddle ui --nats-url nats://localhost:4222` (default)
 - Check for firewall rules blocking port 4222
-- The TUI needs NATS running — it subscribes to `loom.>` to observe traffic
+- The TUI needs NATS running — it subscribes to `heddle.>` to observe traffic
 
 ### TUI shows no events
 
@@ -456,7 +456,7 @@ uv sync --all-extras
 - The TUI is a passive observer — it only shows traffic that occurs while it's running
 - Submit a goal or run a pipeline to generate traffic
 - Check that actors (router, workers, orchestrator/pipeline) are running
-- The TUI subscribes to `loom.>` which catches all Loom NATS subjects
+- The TUI subscribes to `heddle.>` which catches all Heddle NATS subjects
 
 ### Pipeline stages not appearing
 
@@ -466,7 +466,7 @@ uv sync --all-extras
 
 - Pipeline stage data comes from `_timeline` in result output — only pipeline orchestrators produce this
 - Dynamic orchestrators (OrchestratorActor) don't produce timeline data; use pipeline orchestrators for stage visibility
-- Check that the pipeline is producing results (look in the Events tab for `loom.results.*` messages)
+- Check that the pipeline is producing results (look in the Events tab for `heddle.results.*` messages)
 
 ---
 
@@ -489,14 +489,14 @@ python -c "from opentelemetry import trace; print('OTel available')"
 Then initialize tracing at startup:
 
 ```python
-from loom.tracing import init_tracing
-init_tracing(service_name="loom")
+from heddle.tracing import init_tracing
+init_tracing(service_name="heddle")
 ```
 
 Or set the standard OTel environment variables:
 
 ```bash
-export OTEL_SERVICE_NAME=loom
+export OTEL_SERVICE_NAME=heddle
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 ```
 
@@ -506,7 +506,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 
 **Fix:**
 
-- Loom propagates trace context via a `_trace_context` key in NATS messages (W3C traceparent format)
+- Heddle propagates trace context via a `_trace_context` key in NATS messages (W3C traceparent format)
 - Both the sender and receiver must have OTel installed for propagation to work
 - Check that `inject_trace_context()` and `extract_trace_context()` are being called (they are in `BaseActor._process_one()` and all publish methods)
 - If using custom actors, ensure you call `inject_trace_context(data)` before publishing and `extract_trace_context(data)` when receiving
@@ -517,7 +517,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 
 **Fix:**
 
-- This is handled automatically. The `loom.tracing` module uses runtime feature detection — if OTel SDK is not installed, all functions become no-ops. No code changes needed. See Design Invariant #9.
+- This is handled automatically. The `heddle.tracing` module uses runtime feature detection — if OTel SDK is not installed, all functions become no-ops. No code changes needed. See Design Invariant #9.
 
 ### LLM spans missing prompt/completion text
 
@@ -525,10 +525,10 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 
 **Fix:**
 
-Set the `LOOM_TRACE_CONTENT` environment variable to enable prompt and completion recording:
+Set the `HEDDLE_TRACE_CONTENT` environment variable to enable prompt and completion recording:
 
 ```bash
-export LOOM_TRACE_CONTENT=1
+export HEDDLE_TRACE_CONTENT=1
 ```
 
 With this enabled, LLM call spans include two span events:
@@ -538,7 +538,7 @@ With this enabled, LLM call spans include two span events:
 
 This is disabled by default to avoid storing sensitive data in your tracing backend.
 
-**Note:** Even without `LOOM_TRACE_CONTENT`, all LLM call spans include these `gen_ai.*` attributes per the OpenTelemetry GenAI semantic conventions:
+**Note:** Even without `HEDDLE_TRACE_CONTENT`, all LLM call spans include these `gen_ai.*` attributes per the OpenTelemetry GenAI semantic conventions:
 
 | Attribute | Description |
 |-----------|-------------|

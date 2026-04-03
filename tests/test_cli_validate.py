@@ -1,5 +1,5 @@
 """
-Tests for loom validate command — config file validation.
+Tests for heddle validate command — config file validation.
 
 All tests use tmp_path for isolation. No external services needed.
 """
@@ -10,7 +10,7 @@ import structlog
 from click.testing import CliRunner
 
 _saved_structlog_config = structlog.get_config()
-from loom.cli.validate import _detect_config_type, validate  # noqa: E402
+from heddle.cli.validate import _detect_config_type, validate  # noqa: E402
 
 structlog.configure(**_saved_structlog_config)
 
@@ -226,7 +226,7 @@ def test_validate_unknown_type(tmp_path):
 def test_validate_real_configs():
     """Validate the shipped worker configs (smoke test)."""
     result = CliRunner().invoke(validate, ["--all", "--configs-dir", "configs/"])
-    # If we're running from the loom root, this should find and validate configs
+    # If we're running from the heddle root, this should find and validate configs
     if result.exit_code == 0:
         assert "valid" in result.output
     # If configs/ doesn't exist in CWD (e.g., running from test dir), skip gracefully

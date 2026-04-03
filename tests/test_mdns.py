@@ -1,13 +1,13 @@
-"""Tests for loom.discovery.mdns — mDNS service advertisement."""
+"""Tests for heddle.discovery.mdns — mDNS service advertisement."""
 
 from unittest.mock import MagicMock
 
 import pytest
 
-from loom.discovery.mdns import LoomServiceAdvertiser
+from heddle.discovery.mdns import HeddleServiceAdvertiser
 
 
-class TestLoomServiceAdvertiser:
+class TestHeddleServiceAdvertiser:
     @pytest.mark.asyncio
     async def test_register_and_stop(self):
         """Register services and stop should unregister all."""
@@ -20,7 +20,7 @@ class TestLoomServiceAdvertiser:
         mock_zeroconf_module = MagicMock()
         mock_zeroconf_module.ServiceInfo.return_value = mock_service_info
 
-        advertiser = LoomServiceAdvertiser()
+        advertiser = HeddleServiceAdvertiser()
         advertiser._zeroconf = mock_zc_instance
 
         # Temporarily inject mock zeroconf module
@@ -56,7 +56,7 @@ class TestLoomServiceAdvertiser:
         original = sys.modules.get("zeroconf")
         sys.modules["zeroconf"] = mock_module
         try:
-            advertiser = LoomServiceAdvertiser()
+            advertiser = HeddleServiceAdvertiser()
             await advertiser.start()
             mock_zc_class.assert_called_once()
             assert advertiser._zeroconf is mock_zc_class.return_value
@@ -73,7 +73,7 @@ class TestLoomServiceAdvertiser:
         mock_zc_instance = MagicMock()
         mock_module = MagicMock()
 
-        advertiser = LoomServiceAdvertiser()
+        advertiser = HeddleServiceAdvertiser()
         advertiser._zeroconf = mock_zc_instance
 
         original = sys.modules.get("zeroconf")
@@ -92,9 +92,9 @@ class TestLoomServiceAdvertiser:
 
     def test_register_without_start_logs_warning(self):
         """Registering before start() should not crash."""
-        from loom.discovery.mdns import LoomServiceAdvertiser
+        from heddle.discovery.mdns import HeddleServiceAdvertiser
 
-        advertiser = LoomServiceAdvertiser()
+        advertiser = HeddleServiceAdvertiser()
         # Should log a warning but not raise
         advertiser.register_workshop(port=8080)
         assert len(advertiser._infos) == 0
@@ -102,7 +102,7 @@ class TestLoomServiceAdvertiser:
     @pytest.mark.asyncio
     async def test_stop_without_start(self):
         """Stopping before start should be a no-op."""
-        from loom.discovery.mdns import LoomServiceAdvertiser
+        from heddle.discovery.mdns import HeddleServiceAdvertiser
 
-        advertiser = LoomServiceAdvertiser()
+        advertiser = HeddleServiceAdvertiser()
         await advertiser.stop()  # should not raise

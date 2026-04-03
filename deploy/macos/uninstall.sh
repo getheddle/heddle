@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Uninstall Loom background services from macOS launchd.
+# Uninstall Heddle background services from macOS launchd.
 set -euo pipefail
 
 PLIST_DIR="$HOME/Library/LaunchAgents"
 
-for service in com.loom.workshop com.loom.router; do
+for service in com.heddle.workshop com.heddle.router; do
     plist="$PLIST_DIR/${service}.plist"
     if [ -f "$plist" ]; then
         launchctl unload "$plist" 2>/dev/null || true
@@ -16,5 +16,5 @@ for service in com.loom.workshop com.loom.router; do
 done
 
 echo ""
-echo "Loom services uninstalled."
-echo "Logs remain at: ~/Library/Logs/loom/"
+echo "Heddle services uninstalled."
+echo "Logs remain at: ~/Library/Logs/heddle/"

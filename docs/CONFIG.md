@@ -2,16 +2,16 @@
 
 ## Overview
 
-Loom stores user defaults in `~/.loom/config.yaml`. This file is created
-automatically by `loom setup` or can be written by hand. Every setting in it
+Heddle stores user defaults in `~/.heddle/config.yaml`. This file is created
+automatically by `heddle setup` or can be written by hand. Every setting in it
 can be overridden at runtime via environment variables or CLI flags.
 
 ## Priority Chain
 
-When Loom resolves a setting, the first source that provides a value wins:
+When Heddle resolves a setting, the first source that provides a value wins:
 
 ```text
-CLI flags  >  environment variables  >  ~/.loom/config.yaml  >  built-in defaults
+CLI flags  >  environment variables  >  ~/.heddle/config.yaml  >  built-in defaults
 ```
 
 **Example:** if `config.yaml` sets `ollama_url: "http://host1:11434"` and the
@@ -31,13 +31,13 @@ backends:
 rag:
   rag_data_dir: "/path/to/exports"
   rag_vector_store: "duckdb"    # or "lancedb"
-  rag_db_path: "~/.loom/rag.duckdb"
+  rag_db_path: "~/.heddle/rag.duckdb"
 
 workshop:
   workshop_port: 8080
 ```
 
-All sections and keys are optional. Loom falls back to sensible built-in
+All sections and keys are optional. Heddle falls back to sensible built-in
 defaults for anything omitted.
 
 ## Environment Variables
@@ -59,7 +59,7 @@ CLI-flag only.
 **Interactive wizard** (recommended for first-time setup):
 
 ```bash
-loom setup
+heddle setup
 ```
 
 Walks through backends, RAG paths, and Workshop port with sensible defaults.
@@ -67,40 +67,40 @@ Walks through backends, RAG paths, and Workshop port with sensible defaults.
 **Non-interactive** (CI / automation):
 
 ```bash
-loom setup --non-interactive
+heddle setup --non-interactive
 ```
 
 Writes a config with all built-in defaults. Combine with env vars to
 customize:
 
 ```bash
-OLLAMA_URL=http://gpu-box:11434 loom setup --non-interactive
+OLLAMA_URL=http://gpu-box:11434 heddle setup --non-interactive
 ```
 
 **Manual creation** -- just write the YAML file directly:
 
 ```bash
-mkdir -p ~/.loom
-cat > ~/.loom/config.yaml << 'EOF'
+mkdir -p ~/.heddle
+cat > ~/.heddle/config.yaml << 'EOF'
 backends:
   ollama_url: "http://localhost:11434"
   ollama_model: "command-r7b:latest"
 EOF
-chmod 600 ~/.loom/config.yaml
+chmod 600 ~/.heddle/config.yaml
 ```
 
 ## Security
 
-- File permissions are set to `0o600` (owner read/write only) by `loom setup`.
+- File permissions are set to `0o600` (owner read/write only) by `heddle setup`.
   Enforce this manually if you create the file by hand.
 - API keys are stored in **plaintext**. On shared machines, prefer setting
   `ANTHROPIC_API_KEY` as an environment variable instead.
 - Never commit `config.yaml` to version control. The project `.gitignore`
-  already excludes `~/.loom/`.
+  already excludes `~/.heddle/`.
 
-## The ~/.loom Directory
+## The ~/.heddle Directory
 
-Everything Loom persists locally lives under `~/.loom/`:
+Everything Heddle persists locally lives under `~/.heddle/`:
 
 | Path                  | Purpose                                      |
 |-----------------------|----------------------------------------------|
@@ -113,14 +113,14 @@ Everything Loom persists locally lives under `~/.loom/`:
 ## Programmatic Access
 
 ```python
-from loom.cli.config import (
+from heddle.cli.config import (
     load_config,
     resolve_config,
     apply_config_to_env,
-    LoomConfig,
+    HeddleConfig,
 )
 
-# Load ~/.loom/config.yaml (returns LoomConfig dataclass)
+# Load ~/.heddle/config.yaml (returns HeddleConfig dataclass)
 config = load_config()
 
 # Merge CLI overrides with env vars and config file
@@ -131,4 +131,4 @@ apply_config_to_env(config)
 ```
 
 `resolve_config` applies the full priority chain (CLI > env > file > defaults)
-and returns a single `LoomConfig` with every field populated.
+and returns a single `HeddleConfig` with every field populated.

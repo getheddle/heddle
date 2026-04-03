@@ -1,5 +1,5 @@
 [project]
-name = "loom-ai"
+name = "heddle-ai"
 version = "0.9.0"
 description = "Lightweight Orchestrated Operational Mesh — Actor-based multi-LLM agent framework"
 readme = "README.md"
@@ -33,10 +33,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/IranTransitionProject/loom"
-Documentation = "https://irantransitionproject.github.io/loom/"
-Repository = "https://github.com/IranTransitionProject/loom"
-Issues = "https://github.com/IranTransitionProject/loom/issues"
+Homepage = "https://github.com/getheddle/heddle"
+Documentation = "https://getheddle.github.io/heddle/"
+Repository = "https://github.com/getheddle/heddle"
+Issues = "https://github.com/getheddle/heddle/issues"
 
 [project.optional-dependencies]
 redis = [
@@ -117,7 +117,7 @@ dev = [
 ]
 
 [project.scripts]
-loom = "loom.cli.main:cli"
+heddle = "heddle.cli.main:cli"
 
 [build-system]
 requires = ["hatchling"]
@@ -134,7 +134,7 @@ markers = [
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-source = ["loom"]
+source = ["heddle"]
 branch = true
 
 [tool.coverage.report]
@@ -199,7 +199,7 @@ ignore = [
     "B008",   # Function call in default arg (Click uses this pattern extensively)
 
     # --- Imports ---
-    "PLC0415",# import not at top of file — Loom uses conditional imports for optional deps
+    "PLC0415",# import not at top of file — Heddle uses conditional imports for optional deps
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -218,11 +218,11 @@ ignore = [
     "PERF102",# Unnecessary dict key check — clarity > perf in tests
     "RET504", # Unnecessary assignment before return — clarity in tests
 ]
-"src/loom/cli/**/*.py" = [
+"src/heddle/cli/**/*.py" = [
     "T20",    # print() OK in CLI commands (user-facing output)
     "ANN",    # Click decorators make annotation enforcement noisy
 ]
-"src/loom/workshop/app.py" = [
+"src/heddle/workshop/app.py" = [
     "ANN",    # FastAPI route handlers — types inferred from dependencies
 ]
 
@@ -230,7 +230,7 @@ ignore = [
 convention = "google"
 
 [tool.ruff.lint.isort]
-known-first-party = ["loom"]
+known-first-party = ["heddle"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -255,4 +255,4 @@ style = "dash"
 style = "ordered"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/loom"]
+packages = ["src/heddle"]

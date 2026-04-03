@@ -7,28 +7,28 @@ class TestRAGManager:
     """Test RAGManager without a real vector store."""
 
     def test_init_no_store(self):
-        from loom.workshop.rag_manager import RAGManager
+        from heddle.workshop.rag_manager import RAGManager
 
         mgr = RAGManager()
         assert mgr.store is None
         assert mgr.channel_count() == 0
 
     def test_stats_no_store(self):
-        from loom.workshop.rag_manager import RAGManager
+        from heddle.workshop.rag_manager import RAGManager
 
         mgr = RAGManager()
         stats = mgr.get_store_stats()
         assert stats["status"] == "not_configured"
 
     def test_search_no_store(self):
-        from loom.workshop.rag_manager import RAGManager
+        from heddle.workshop.rag_manager import RAGManager
 
         mgr = RAGManager()
         results = mgr.search("test query")
         assert results == []
 
     def test_channels_by_faction(self):
-        from loom.workshop.rag_manager import ChannelInfo, RAGManager
+        from heddle.workshop.rag_manager import ChannelInfo, RAGManager
 
         mgr = RAGManager()
         mgr._channels = [
@@ -41,7 +41,7 @@ class TestRAGManager:
         assert len(groups["opposition"]) == 1
 
     def test_channels_by_priority(self):
-        from loom.workshop.rag_manager import ChannelInfo, RAGManager
+        from heddle.workshop.rag_manager import ChannelInfo, RAGManager
 
         mgr = RAGManager()
         mgr._channels = [
@@ -54,7 +54,7 @@ class TestRAGManager:
         assert len(groups["high"]) == 1
 
     def test_get_channel(self):
-        from loom.workshop.rag_manager import ChannelInfo, RAGManager
+        from heddle.workshop.rag_manager import ChannelInfo, RAGManager
 
         mgr = RAGManager()
         mgr._channels = [
@@ -66,7 +66,7 @@ class TestRAGManager:
         assert mgr.get_channel("@nonexistent") is None
 
     def test_verified_channel_count(self):
-        from loom.workshop.rag_manager import ChannelInfo, RAGManager
+        from heddle.workshop.rag_manager import ChannelInfo, RAGManager
 
         mgr = RAGManager()
         mgr._channels = [
@@ -81,7 +81,7 @@ class TestRAGManagerWithRegistry:
     """Test loading a channel registry YAML."""
 
     def test_load_nonexistent_registry(self):
-        from loom.workshop.rag_manager import RAGManager
+        from heddle.workshop.rag_manager import RAGManager
 
         mgr = RAGManager(channel_registry_path="/nonexistent/path.yaml")
         assert mgr.channel_count() == 0
@@ -89,7 +89,7 @@ class TestRAGManagerWithRegistry:
     def test_load_valid_registry(self, tmp_path):
         import yaml
 
-        from loom.workshop.rag_manager import RAGManager
+        from heddle.workshop.rag_manager import RAGManager
 
         registry = {
             "categories": [
@@ -123,7 +123,7 @@ class TestRAGWorkshopRoutes:
     def client(self):
         from fastapi.testclient import TestClient
 
-        from loom.workshop.app import create_app
+        from heddle.workshop.app import create_app
 
         app = create_app(configs_dir="configs/")
         return TestClient(app)

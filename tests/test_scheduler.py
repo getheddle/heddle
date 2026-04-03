@@ -5,7 +5,7 @@ validation (scheduler/config.py).
 Tests cover:
 - Config validation: required keys, mutual exclusivity, dispatch types
 - Schedule parsing: cron vs interval entries, goal/task config
-- Dispatch: goal → loom.goals.incoming, task → loom.tasks.incoming
+- Dispatch: goal → heddle.goals.incoming, task → heddle.tasks.incoming
 - Timer loop: interval firing, next_fire advancement, shutdown
 - Lifecycle: handle_message no-op, run/shutdown
 
@@ -21,15 +21,15 @@ import time
 import pytest
 import yaml
 
-from loom.bus.memory import InMemoryBus
-from loom.core.messages import (
+from heddle.bus.memory import InMemoryBus
+from heddle.core.messages import (
     ModelTier,
     OrchestratorGoal,
     TaskMessage,
     TaskPriority,
 )
-from loom.scheduler.config import validate_scheduler_config
-from loom.scheduler.scheduler import ScheduleEntry, SchedulerActor
+from heddle.scheduler.config import validate_scheduler_config
+from heddle.scheduler.scheduler import ScheduleEntry, SchedulerActor
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -290,7 +290,7 @@ class TestDispatch:
     @pytest.mark.asyncio
     async def test_dispatch_goal_publishes_to_goals_incoming(self, actor):
         await actor._bus.connect()
-        sub = await actor._bus.subscribe("loom.goals.incoming")
+        sub = await actor._bus.subscribe("heddle.goals.incoming")
 
         entry = ScheduleEntry(
             name="g1",
@@ -310,7 +310,7 @@ class TestDispatch:
     @pytest.mark.asyncio
     async def test_dispatch_goal_with_priority(self, actor):
         await actor._bus.connect()
-        sub = await actor._bus.subscribe("loom.goals.incoming")
+        sub = await actor._bus.subscribe("heddle.goals.incoming")
 
         entry = ScheduleEntry(
             name="g2",
@@ -328,7 +328,7 @@ class TestDispatch:
     @pytest.mark.asyncio
     async def test_dispatch_goal_generates_unique_ids(self, actor):
         await actor._bus.connect()
-        sub = await actor._bus.subscribe("loom.goals.incoming")
+        sub = await actor._bus.subscribe("heddle.goals.incoming")
 
         entry = ScheduleEntry(
             name="g3",
@@ -347,7 +347,7 @@ class TestDispatch:
     @pytest.mark.asyncio
     async def test_dispatch_task_publishes_to_tasks_incoming(self, actor):
         await actor._bus.connect()
-        sub = await actor._bus.subscribe("loom.tasks.incoming")
+        sub = await actor._bus.subscribe("heddle.tasks.incoming")
 
         entry = ScheduleEntry(
             name="t1",
@@ -371,7 +371,7 @@ class TestDispatch:
     @pytest.mark.asyncio
     async def test_dispatch_task_includes_schedule_metadata(self, actor):
         await actor._bus.connect()
-        sub = await actor._bus.subscribe("loom.tasks.incoming")
+        sub = await actor._bus.subscribe("heddle.tasks.incoming")
 
         entry = ScheduleEntry(
             name="meta_test",
@@ -388,7 +388,7 @@ class TestDispatch:
     @pytest.mark.asyncio
     async def test_dispatch_task_with_priority_and_tier(self, actor):
         await actor._bus.connect()
-        sub = await actor._bus.subscribe("loom.tasks.incoming")
+        sub = await actor._bus.subscribe("heddle.tasks.incoming")
 
         entry = ScheduleEntry(
             name="t2",
@@ -412,7 +412,7 @@ class TestDispatch:
     @pytest.mark.asyncio
     async def test_fire_schedule_routes_goal(self, actor):
         await actor._bus.connect()
-        sub = await actor._bus.subscribe("loom.goals.incoming")
+        sub = await actor._bus.subscribe("heddle.goals.incoming")
 
         entry = ScheduleEntry(
             name="route_goal",
@@ -429,7 +429,7 @@ class TestDispatch:
     @pytest.mark.asyncio
     async def test_fire_schedule_routes_task(self, actor):
         await actor._bus.connect()
-        sub = await actor._bus.subscribe("loom.tasks.incoming")
+        sub = await actor._bus.subscribe("heddle.tasks.incoming")
 
         entry = ScheduleEntry(
             name="route_task",
@@ -526,7 +526,7 @@ class TestTimerAndFireTimes:
         await bus.connect()
         actor = SchedulerActor("s5", config_file, bus=bus)
 
-        sub = await bus.subscribe("loom.tasks.incoming")
+        sub = await bus.subscribe("heddle.tasks.incoming")
 
         # Set next_fire to now (so it fires immediately)
         actor._schedules[0].next_fire = time.monotonic()
@@ -650,7 +650,7 @@ class TestLifecycle:
                 await actor._sub.unsubscribe()
 
         with _patch.object(actor, "_install_signal_handlers"):
-            task = asyncio.create_task(actor.run("loom.scheduler.test"))
+            task = asyncio.create_task(actor.run("heddle.scheduler.test"))
             stopper = asyncio.create_task(run_and_stop())
             await asyncio.wait_for(asyncio.gather(task, stopper), timeout=5.0)
 
@@ -689,7 +689,7 @@ class TestDispatchEdgeCases:
         await bus.connect()
         actor = SchedulerActor("s-empty-cfg", config_file, bus=bus)
 
-        sub = await bus.subscribe("loom.goals.incoming")
+        sub = await bus.subscribe("heddle.goals.incoming")
 
         entry = ScheduleEntry(
             name="empty",

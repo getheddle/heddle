@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from loom.workshop.pipeline_editor import PipelineEditor
+from heddle.workshop.pipeline_editor import PipelineEditor
 
 # ---------------------------------------------------------------------------
 # Helpers

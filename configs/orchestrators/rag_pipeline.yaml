@@ -5,25 +5,25 @@
 # Multi-channel Telegram stream analysis pipeline. Stages run in dependency
 # order with automatic parallel execution where possible (Strategy C).
 #
-# Component:  src/loom/orchestrator/pipeline.py (PipelineOrchestrator)
-# Loaded by:  loom.core.config.load_config()
-# Validated:  loom.core.contracts.py (I/O schema enforcement per stage)
+# Component:  src/heddle/orchestrator/pipeline.py (PipelineOrchestrator)
+# Loaded by:  heddle.core.config.load_config()
+# Validated:  heddle.core.contracts.py (I/O schema enforcement per stage)
 #
 # Run with:
-#   loom pipeline --config configs/orchestrators/rag_pipeline.yaml \
+#   heddle pipeline --config configs/orchestrators/rag_pipeline.yaml \
 #                 --nats-url nats://localhost:4222
 #
 # Submit a goal:
-#   loom submit "Analyze Telegram streams" \
+#   heddle submit "Analyze Telegram streams" \
 #       --context source_path="/data/result-1.json"
 #
-#   loom submit "Analyze Telegram streams" \
+#   heddle submit "Analyze Telegram streams" \
 #       --context source_paths='["/data/result-1.json","/data/result-2.json"]'
 #
 # NATS subjects:
-#   loom.goals.incoming                 — Pipeline subscribes here (queue groups)
-#   loom.tasks.{worker_type}.{tier}     — Stage tasks dispatched here
-#   loom.results.{goal_id}              — Stage results flow back here
+#   heddle.goals.incoming                 — Pipeline subscribes here (queue groups)
+#   heddle.tasks.{worker_type}.{tier}     — Stage tasks dispatched here
+#   heddle.results.{goal_id}              — Stage results flow back here
 #
 # Scaling:
 #   Run multiple pipeline instances — NATS queue groups distribute goals.

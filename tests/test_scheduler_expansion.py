@@ -7,8 +7,8 @@ from typing import Any
 import pytest
 import yaml
 
-from loom.bus.memory import InMemoryBus
-from loom.scheduler.scheduler import ScheduleEntry, SchedulerActor
+from heddle.bus.memory import InMemoryBus
+from heddle.scheduler.scheduler import ScheduleEntry, SchedulerActor
 
 
 def _make_scheduler_config(tmp_path=None):
@@ -112,7 +112,7 @@ class TestSchedulerExpansion:
         """expand_from dispatches one task per expansion result."""
         bus = InMemoryBus()
         await bus.connect()
-        sub = await bus.subscribe("loom.tasks.incoming")
+        sub = await bus.subscribe("heddle.tasks.incoming")
 
         config_path = _make_scheduler_config()
         actor = SchedulerActor(
@@ -154,7 +154,7 @@ class TestSchedulerExpansion:
         """expand_from dispatches one goal per expansion result."""
         bus = InMemoryBus()
         await bus.connect()
-        sub = await bus.subscribe("loom.goals.incoming")
+        sub = await bus.subscribe("heddle.goals.incoming")
 
         config_path = _make_scheduler_config()
         actor = SchedulerActor(
@@ -192,7 +192,7 @@ class TestSchedulerExpansion:
         """Empty expansion result dispatches nothing."""
         bus = InMemoryBus()
         await bus.connect()
-        sub = await bus.subscribe("loom.tasks.incoming")
+        sub = await bus.subscribe("heddle.tasks.incoming")
 
         config_path = _make_scheduler_config()
         actor = SchedulerActor(

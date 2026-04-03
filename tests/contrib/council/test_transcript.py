@@ -2,8 +2,8 @@
 
 import pytest
 
-from loom.contrib.council.schemas import AgentConfig, TranscriptEntry
-from loom.contrib.council.transcript import TranscriptStore
+from heddle.contrib.council.schemas import AgentConfig, TranscriptEntry
+from heddle.contrib.council.transcript import TranscriptStore
 
 
 def _entry(round_num, agent_name, content="test content", role=""):

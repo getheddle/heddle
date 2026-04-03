@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from loom.contrib.council.config import CouncilConfig
-from loom.contrib.council.runner import CouncilRunner
+from heddle.contrib.council.config import CouncilConfig
+from heddle.contrib.council.runner import CouncilRunner
 
 
 def _mock_backend(content="I think we should proceed.", model="mock-model"):

@@ -1,4 +1,4 @@
-"""Tests for loom.mcp.session_bridge — session management MCP tools."""
+"""Tests for heddle.mcp.session_bridge — session management MCP tools."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from loom.mcp.session_bridge import SessionBridge, SessionBridgeError
+from heddle.mcp.session_bridge import SessionBridge, SessionBridgeError
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ class TestSessionStart:
             patch.object(bridge, "_git") as mock_git,
             patch.object(bridge, "_check_nats", return_value=(True, "ok")),
             patch.object(bridge, "_check_ollama", return_value=(True, "ok")),
-            patch("loom.mcp.session_registry.register_session"),
+            patch("heddle.mcp.session_registry.register_session"),
         ):
             mock_git.return_value = MagicMock(returncode=0, stdout="abc1234\n", stderr="")
             result = await bridge.dispatch("start", {})
@@ -66,7 +66,7 @@ class TestSessionStart:
             patch.object(bridge, "_git") as mock_git,
             patch.object(bridge, "_check_nats", return_value=(True, "ok")),
             patch.object(bridge, "_check_ollama", return_value=(True, "ok")),
-            patch("loom.mcp.session_registry.register_session"),
+            patch("heddle.mcp.session_registry.register_session"),
         ):
             mock_git.return_value = MagicMock(returncode=0, stdout="abc1234\n", stderr="")
             result = await bridge.dispatch("start", {"session_id": "my-sess"})
@@ -111,9 +111,9 @@ class TestSessionEnd:
 
         with (
             patch.object(bridge, "_git", side_effect=mock_git_fn),
-            patch("loom.mcp.session_registry.unregister_session"),
+            patch("heddle.mcp.session_registry.unregister_session"),
             patch(
-                "loom.mcp.session_registry.get_active_sessions",
+                "heddle.mcp.session_registry.get_active_sessions",
                 return_value=[{"session_id": "s1"}],
             ),
         ):
@@ -125,7 +125,7 @@ class TestSessionEnd:
     @pytest.mark.asyncio
     async def test_end_no_active_sessions(self, bridge):
         with patch(
-            "loom.mcp.session_registry.get_active_sessions",
+            "heddle.mcp.session_registry.get_active_sessions",
             return_value=[],
         ):
             result = await bridge.dispatch("end", {})
@@ -140,7 +140,7 @@ class TestSessionStatus:
     async def test_status_returns_structure(self, bridge):
         with (
             patch(
-                "loom.mcp.session_registry.get_active_sessions",
+                "heddle.mcp.session_registry.get_active_sessions",
                 return_value=[{"session_id": "s1"}],
             ),
             patch.object(bridge, "_git") as mock_git,
@@ -225,7 +225,7 @@ class TestSessionDiscovery:
     """Tests for discover_session_tools."""
 
     def test_default_enables_all_five(self):
-        from loom.mcp.workshop_discovery import discover_session_tools
+        from heddle.mcp.workshop_discovery import discover_session_tools
 
         tools = discover_session_tools({})
         names = {t["name"] for t in tools}
@@ -238,24 +238,24 @@ class TestSessionDiscovery:
         }
 
     def test_selective_enable(self):
-        from loom.mcp.workshop_discovery import discover_session_tools
+        from heddle.mcp.workshop_discovery import discover_session_tools
 
         tools = discover_session_tools({"enable": ["start", "status"]})
         names = {t["name"] for t in tools}
         assert names == {"session.start", "session.status"}
 
-    def test_loom_metadata_present(self):
-        from loom.mcp.workshop_discovery import discover_session_tools
+    def test_heddle_metadata_present(self):
+        from heddle.mcp.workshop_discovery import discover_session_tools
 
         tools = discover_session_tools({"enable": ["start"]})
-        assert tools[0]["_loom"]["kind"] == "session"
-        assert tools[0]["_loom"]["action"] == "start"
+        assert tools[0]["_heddle"]["kind"] == "session"
+        assert tools[0]["_heddle"]["action"] == "start"
 
     def test_read_only_flags(self):
-        from loom.mcp.workshop_discovery import discover_session_tools
+        from heddle.mcp.workshop_discovery import discover_session_tools
 
         tools = discover_session_tools({})
         by_name = {t["name"]: t for t in tools}
-        assert by_name["session.status"]["_loom"].get("read_only") is True
-        assert by_name["session.sync_check"]["_loom"].get("read_only") is True
-        assert "read_only" not in by_name["session.start"]["_loom"]
+        assert by_name["session.status"]["_heddle"].get("read_only") is True
+        assert by_name["session.sync_check"]["_heddle"].get("read_only") is True
+        assert "read_only" not in by_name["session.start"]["_heddle"]

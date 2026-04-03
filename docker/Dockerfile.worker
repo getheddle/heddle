@@ -1,10 +1,10 @@
-# Dockerfile for Loom LLM/processor workers.
-# Build: docker build -f docker/Dockerfile.worker -t loom-worker .
+# Dockerfile for Heddle LLM/processor workers.
+# Build: docker build -f docker/Dockerfile.worker -t heddle-worker .
 # Run:   docker run -e WORKER_CONFIG=configs/workers/summarizer.yaml \
 #                   -e MODEL_TIER=local \
 #                   -e NATS_URL=nats://nats:4222 \
 #                   -e OLLAMA_URL=http://ollama:11434 \
-#                   loom-worker
+#                   heddle-worker
 #
 # For processor workers (e.g., DoclingBackend), the consumer package
 # must also be installed. See docman/Dockerfile for an example.

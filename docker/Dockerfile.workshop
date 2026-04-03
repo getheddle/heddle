@@ -10,12 +10,12 @@ COPY pyproject.toml .
 COPY src/ src/
 COPY configs/ configs/
 
-# Install loom with workshop extras
+# Install heddle with workshop extras
 RUN uv pip install --system ".[workshop]"
 
 # Create apps directory for deployed bundles
-RUN mkdir -p /root/.loom/apps
+RUN mkdir -p /root/.heddle/apps
 
 EXPOSE 8080
 
-CMD ["loom", "workshop", "--host", "0.0.0.0", "--port", "8080", "--configs-dir", "configs/"]
+CMD ["heddle", "workshop", "--host", "0.0.0.0", "--port", "8080", "--configs-dir", "configs/"]

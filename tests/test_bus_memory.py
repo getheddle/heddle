@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from loom.bus.base import MessageBus, Subscription
-from loom.bus.memory import InMemoryBus, InMemorySubscription
+from heddle.bus.base import MessageBus, Subscription
+from heddle.bus.memory import InMemoryBus, InMemorySubscription
 
 # ---------------------------------------------------------------------------
 # InMemorySubscription tests

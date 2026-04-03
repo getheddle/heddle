@@ -60,9 +60,9 @@ standalone development tool even when no infrastructure is running.
 │  │   eval_results    │ worker_metrics │  └──────────────┘  │
 │  └────────────────────────────────────┘                     │
 ├─────────────────────────────────────────────────────────────┤
-│               Loom Core (reused)          Optional          │
+│               Heddle Core (reused)          Optional          │
 │                                                             │
-│  LLMBackend (backends.py)        LoomServiceAdvertiser      │
+│  LLMBackend (backends.py)        HeddleServiceAdvertiser      │
 │  execute_with_tools()            (discovery/mdns.py)        │
 │  _extract_json()                                            │
 │  _load_tool_providers()          validate_input/output()    │
@@ -84,7 +84,7 @@ app.py
  ├── ConfigManager(configs_dir, db, extra) # filesystem + version tracking + app dirs
  ├── PipelineEditor                        # stateless, no constructor
  ├── RAGManager(store, registry)           # vector store + channel registry for RAG dashboard
- └── LoomServiceAdvertiser                 # optional mDNS (if zeroconf installed)
+ └── HeddleServiceAdvertiser                 # optional mDNS (if zeroconf installed)
 ```
 
 `create_app()` is the composition root. It creates all components, wires them
@@ -97,7 +97,7 @@ A FastAPI lifespan context manager starts/stops mDNS advertisement when the
 ## Source files
 
 ```text
-src/loom/workshop/
+src/heddle/workshop/
 ├── __init__.py           # Package docstring only
 ├── app.py                # FastAPI app factory (create_app), 34 route handlers, mDNS lifespan
 ├── app_manager.py        # AppManager — ZIP deploy, list, remove app bundles
@@ -284,7 +284,7 @@ via HTMX (`/workers/{name}/impact-panel`). A JSON API is also available at
 
 ### WorkshopDB (`db.py`)
 
-DuckDB-backed persistence. Default path: `~/.loom/workshop.duckdb`.
+DuckDB-backed persistence. Default path: `~/.heddle/workshop.duckdb`.
 Use `:memory:` for tests.
 
 **Tables:**
@@ -408,7 +408,7 @@ highlighting. The partial template is standalone (no `{% extends %}`).
 ## CLI entry point
 
 ```bash
-uv run loom workshop [OPTIONS]
+uv run heddle workshop [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -416,11 +416,11 @@ uv run loom workshop [OPTIONS]
 | `--port` | `8080` | HTTP server port |
 | `--host` | `127.0.0.1` | Bind address |
 | `--configs-dir` | `configs/` | Root directory for worker/pipeline YAML |
-| `--db-path` | `~/.loom/workshop.duckdb` | DuckDB database path |
+| `--db-path` | `~/.heddle/workshop.duckdb` | DuckDB database path |
 | `--nats-url` | None | NATS URL for live metrics (optional) |
-| `--apps-dir` | `~/.loom/apps` | Root directory for deployed app bundles |
+| `--apps-dir` | `~/.heddle/apps` | Root directory for deployed app bundles |
 | `--rag-db-path` | None | Vector store path for RAG dashboard (e.g. `/tmp/rag.duckdb`) |
-| `--rag-store-class` | None | Vector store class (e.g. `loom.contrib.lancedb.store.LanceDBVectorStore`) |
+| `--rag-store-class` | None | Vector store class (e.g. `heddle.contrib.lancedb.store.LanceDBVectorStore`) |
 | `--rag-channel-registry` | None | Path to channel registry YAML (e.g. `itp_telegram_channels.yaml`) |
 
 The CLI command creates the app via `create_app()` and runs it under Uvicorn.
@@ -492,16 +492,16 @@ avg_completion_tokens
 
 ### AppManager (`app_manager.py`)
 
-Manages deployed Loom app bundles (ZIP archives) in `~/.loom/apps/`.
+Manages deployed Heddle app bundles (ZIP archives) in `~/.heddle/apps/`.
 
 | Method | What it does |
 |--------|-------------|
 | `list_apps()` | Scan apps dir, load manifest from each subdirectory |
 | `get_app(name)` | Load a single app's `AppManifest` |
-| `get_app_configs_dir(name)` | Return `~/.loom/apps/{name}/configs/` path |
+| `get_app_configs_dir(name)` | Return `~/.heddle/apps/{name}/configs/` path |
 | `deploy_app(zip_path)` | Validate ZIP structure + manifest, extract to apps dir |
 | `remove_app(name)` | Delete app directory |
-| `notify_reload()` | Publish `{"action": "reload"}` to `loom.control.reload` |
+| `notify_reload()` | Publish `{"action": "reload"}` to `heddle.control.reload` |
 
 **ZIP deployment flow:**
 
@@ -509,7 +509,7 @@ Manages deployed Loom app bundles (ZIP archives) in `~/.loom/apps/`.
 2. Parse + validate manifest via `AppManifest` Pydantic model
 3. Security check: reject paths with `..` or absolute paths
 4. Verify all referenced config files exist in the ZIP
-5. Extract to `~/.loom/apps/{app_name}/`
+5. Extract to `~/.heddle/apps/{app_name}/`
 6. Warn about Python packages needing manual install
 7. Publish reload notification to NATS control channel
 
@@ -518,17 +518,17 @@ workers/pipelines appear alongside base configs in the Workers/Pipelines lists.
 
 ### mDNS Service Discovery
 
-When the optional `zeroconf` package is installed (`pip install loom-ai[mdns]`),
+When the optional `zeroconf` package is installed (`pip install heddle-ai[mdns]`),
 the Workshop automatically advertises itself on the local network via mDNS/Bonjour.
 
 The integration uses a FastAPI lifespan context manager:
 
-- **On startup:** Creates `LoomServiceAdvertiser`, registers Workshop HTTP service
+- **On startup:** Creates `HeddleServiceAdvertiser`, registers Workshop HTTP service
 - **On shutdown:** Unregisters all services, closes zeroconf
 
 If `zeroconf` is not installed, the Workshop logs a hint and continues normally.
 
-The standalone `loom mdns` CLI command can advertise Workshop, NATS, and MCP
+The standalone `heddle mdns` CLI command can advertise Workshop, NATS, and MCP
 services without running the Workshop itself.
 
 ### Unique constraints
@@ -539,9 +539,9 @@ services without running the Workshop itself.
 
 ---
 
-## Reused Loom internals
+## Reused Heddle internals
 
-The Workshop reuses core Loom functions rather than reimplementing them. This
+The Workshop reuses core Heddle functions rather than reimplementing them. This
 keeps the test bench semantically identical to production worker execution.
 
 | Function / Class | Source | Used by Workshop for |
@@ -607,7 +607,7 @@ keeps the test bench semantically identical to production worker execution.
 The `nats_url` parameter is plumbed through `create_app()` but not yet wired.
 Implementation plan:
 
-1. Create `MetricsCollector` class that subscribes to `loom.results.*`.
+1. Create `MetricsCollector` class that subscribes to `heddle.results.*`.
 2. On each result, compute window aggregates and call
    `WorkshopDB.save_worker_metric()`.
 3. Initialize in `create_app()` when `nats_url` is not None.
@@ -680,5 +680,5 @@ uv run pytest tests/ -v -m "not integration"
 
 ---
 
-*For general Loom architecture, see [Architecture](ARCHITECTURE.md).
+*For general Heddle architecture, see [Architecture](ARCHITECTURE.md).
 For building workers and pipelines, see [Building Workflows](building-workflows.md).*

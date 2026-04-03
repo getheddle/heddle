@@ -1,3 +1,3 @@
 # Scheduler
 
-::: loom.scheduler.scheduler
+::: heddle.scheduler.scheduler

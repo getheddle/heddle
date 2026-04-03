@@ -7,15 +7,15 @@
 # a generic extraction worker usable for any document schema.
 #
 # Component:  LLM worker (worker_kind: "llm", the default)
-# Source:     src/loom/worker/runner.py (LLMWorker)
-# Loaded by:  loom.core.config.load_config()
-# Validated:  loom.core.contracts.py (I/O schema enforcement)
+# Source:     src/heddle/worker/runner.py (LLMWorker)
+# Loaded by:  heddle.core.config.load_config()
+# Validated:  heddle.core.contracts.py (I/O schema enforcement)
 #
 # Run with:
-#   loom worker --config configs/workers/extractor.yaml --tier standard
-#   loom worker --config configs/workers/extractor.yaml --tier standard --nats-url nats://localhost:4222
+#   heddle worker --config configs/workers/extractor.yaml --tier standard
+#   heddle worker --config configs/workers/extractor.yaml --tier standard --nats-url nats://localhost:4222
 #
-# NATS subject:  loom.tasks.extractor.standard  (tier forced by router_rules.yaml)
+# NATS subject:  heddle.tasks.extractor.standard  (tier forced by router_rules.yaml)
 # Queue group:   Workers auto-join queue groups, so multiple replicas load-balance.
 #
 # Requires: ANTHROPIC_API_KEY environment variable (standard tier uses Claude Sonnet)

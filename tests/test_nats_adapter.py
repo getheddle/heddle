@@ -1,7 +1,7 @@
 """
 Test NATS adapter (unit tests, no infrastructure).
 
-Tests the NATSBus and NATSSubscription classes from loom.bus.nats_adapter.
+Tests the NATSBus and NATSSubscription classes from heddle.bus.nats_adapter.
 All NATS interactions are mocked — no running NATS server is needed.
 """
 
@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from loom.bus.nats_adapter import NATSBus, NATSSubscription
+from heddle.bus.nats_adapter import NATSBus, NATSSubscription
 
 # ---------------------------------------------------------------------------
 # NATSBus — connection lifecycle
@@ -24,7 +24,7 @@ async def test_connect_calls_nats_connect_with_defaults():
     mock_nc = AsyncMock()
 
     with patch(
-        "loom.bus.nats_adapter.nats.connect", new_callable=AsyncMock, return_value=mock_nc
+        "heddle.bus.nats_adapter.nats.connect", new_callable=AsyncMock, return_value=mock_nc
     ) as mock_connect:
         await bus.connect()
 
@@ -69,10 +69,10 @@ async def test_publish_serializes_dict_to_json_bytes():
     bus._nc = AsyncMock()
     data = {"task_id": "abc", "payload": 42}
 
-    await bus.publish("loom.tasks.incoming", data)
+    await bus.publish("heddle.tasks.incoming", data)
 
     expected_bytes = json.dumps(data).encode()
-    bus._nc.publish.assert_awaited_once_with("loom.tasks.incoming", expected_bytes)
+    bus._nc.publish.assert_awaited_once_with("heddle.tasks.incoming", expected_bytes)
 
 
 # ---------------------------------------------------------------------------
@@ -88,9 +88,9 @@ async def test_subscribe_without_queue_group():
     bus._nc = AsyncMock()
     bus._nc.subscribe = AsyncMock(return_value=mock_nats_sub)
 
-    sub = await bus.subscribe("loom.tasks.incoming")
+    sub = await bus.subscribe("heddle.tasks.incoming")
 
-    bus._nc.subscribe.assert_awaited_once_with("loom.tasks.incoming")
+    bus._nc.subscribe.assert_awaited_once_with("heddle.tasks.incoming")
     assert isinstance(sub, NATSSubscription)
 
 
@@ -102,10 +102,10 @@ async def test_subscribe_with_queue_group():
     bus._nc = AsyncMock()
     bus._nc.subscribe = AsyncMock(return_value=mock_nats_sub)
 
-    sub = await bus.subscribe("loom.tasks.summarizer.local", queue_group="workers-summarizer")
+    sub = await bus.subscribe("heddle.tasks.summarizer.local", queue_group="workers-summarizer")
 
     bus._nc.subscribe.assert_awaited_once_with(
-        "loom.tasks.summarizer.local",
+        "heddle.tasks.summarizer.local",
         queue="workers-summarizer",
     )
     assert isinstance(sub, NATSSubscription)
@@ -127,10 +127,10 @@ async def test_request_serializes_and_deserializes():
     mock_resp.data = json.dumps(response_data).encode()
     bus._nc.request = AsyncMock(return_value=mock_resp)
 
-    result = await bus.request("loom.health", {"check": True}, timeout=5.0)
+    result = await bus.request("heddle.health", {"check": True}, timeout=5.0)
 
     expected_bytes = json.dumps({"check": True}).encode()
-    bus._nc.request.assert_awaited_once_with("loom.health", expected_bytes, timeout=5.0)
+    bus._nc.request.assert_awaited_once_with("heddle.health", expected_bytes, timeout=5.0)
     assert result == response_data
 
 
@@ -194,7 +194,7 @@ async def test_subscription_skips_malformed_json():
     """Malformed JSON messages are skipped; next valid message is returned."""
     bad_msg = MagicMock()
     bad_msg.data = b"not valid json {{"
-    bad_msg.subject = "loom.tasks.incoming"
+    bad_msg.subject = "heddle.tasks.incoming"
 
     good_payload = {"task_id": "t2", "worker_type": "summarizer"}
     good_msg = MagicMock()
@@ -217,7 +217,7 @@ async def test_subscription_skips_unicode_decode_error():
     bad_msg = MagicMock()
     # Invalid UTF-8 bytes
     bad_msg.data = b"\x80\x81\x82"
-    bad_msg.subject = "loom.tasks.incoming"
+    bad_msg.subject = "heddle.tasks.incoming"
 
     good_payload = {"ok": True}
     good_msg = MagicMock()

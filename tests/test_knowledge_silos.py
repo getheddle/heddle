@@ -1,7 +1,7 @@
 """Tests for knowledge silo loading and write-back."""
 
-from loom.core.config import validate_worker_config
-from loom.worker.knowledge import (
+from heddle.core.config import validate_worker_config
+from heddle.worker.knowledge import (
     _format_few_shot,
     _is_ignored,
     _load_folder_contents,

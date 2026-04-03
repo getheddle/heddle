@@ -16,15 +16,15 @@ import json
 
 import pytest
 
-from loom.core.messages import ModelTier, TaskMessage, TaskPriority
-from loom.orchestrator.decomposer import (
+from heddle.core.messages import ModelTier, TaskMessage, TaskPriority
+from heddle.orchestrator.decomposer import (
     GoalDecomposer,
     WorkerDescriptor,
     _build_system_prompt,
     _build_user_message,
     _extract_json_array,
 )
-from loom.worker.backends import LLMBackend
+from heddle.worker.backends import LLMBackend
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from loom.workshop.db import WorkshopDB
+from heddle.workshop.db import WorkshopDB
 
 
 @pytest.fixture

@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from loom.bus.memory import InMemoryBus
-from loom.core.actor import BaseActor
+from heddle.bus.memory import InMemoryBus
+from heddle.core.actor import BaseActor
 
 # ---------------------------------------------------------------------------
 # Concrete test subclasses
@@ -61,9 +61,9 @@ async def test_constructor_with_explicit_bus():
 
 @pytest.mark.asyncio
 async def test_constructor_without_bus_sets_bus():
-    with patch("loom.core.actor.NATSBus", create=True) as _:
+    with patch("heddle.core.actor.NATSBus", create=True) as _:
         # The import happens lazily inside __init__; just verify _bus is set.
-        from loom.bus.nats_adapter import NATSBus  # noqa: F401
+        from heddle.bus.nats_adapter import NATSBus  # noqa: F401
 
         actor = EchoActor("test-2", nats_url="nats://localhost:4222")
         assert actor._bus is not None

@@ -9,7 +9,7 @@
 # Tier:       local (fast, suitable for most translation tasks)
 #
 # Run with:
-#   loom worker --config configs/workers/translator.yaml --tier local
+#   heddle worker --config configs/workers/translator.yaml --tier local
 # =============================================================================
 
 name: "translator"

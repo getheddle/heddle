@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
-from loom.core.messages import ModelTier, TaskMessage, TaskResult, TaskStatus
-from loom.worker.runner import LLMWorker
-from loom.worker.tools import SyncToolProvider
+from heddle.core.messages import ModelTier, TaskMessage, TaskResult, TaskStatus
+from heddle.worker.runner import LLMWorker
+from heddle.worker.tools import SyncToolProvider
 
 # ---------------------------------------------------------------------------
 # Mock backends with tool-use support

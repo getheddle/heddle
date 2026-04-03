@@ -1,6 +1,6 @@
 """Tests for ChatBridge base models and ABC."""
 
-from loom.contrib.chatbridge.base import ChatResponse, SessionInfo
+from heddle.contrib.chatbridge.base import ChatResponse, SessionInfo
 
 
 class TestChatResponse:

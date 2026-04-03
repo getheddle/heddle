@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from loom.workshop.config_manager import ConfigManager
-from loom.workshop.db import WorkshopDB
+from heddle.workshop.config_manager import ConfigManager
+from heddle.workshop.db import WorkshopDB
 
 # ---------------------------------------------------------------------------
 # Helpers

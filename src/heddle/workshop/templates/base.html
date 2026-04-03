@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>{% block title %}Heddle Workshop{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="/static/workshop.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script>
+    // Respect OS preference, allow manual override stored in localStorage
+    (function() {
+        var saved = localStorage.getItem('heddle-theme');
+        var theme = saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+    })();
+    function toggleTheme() {
+        var current = document.documentElement.getAttribute('data-theme');
+        var next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('heddle-theme', next);
+        var btn = document.getElementById('theme-toggle');
+        btn.setAttribute('aria-label', next === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+        btn.textContent = next === 'dark' ? '\u2600\uFE0F' : '\uD83C\uDF19';
+    }
+    </script>
+</head>
+<body>
+    <header class="workshop-header">
+        <nav class="container-fluid" aria-label="Main navigation">
+            <ul>
+                <li>
+                    <a href="/" class="brand" aria-label="Heddle Workshop home">
+                        <strong class="brand-text">Heddle Workshop</strong>
+                    </a>
+                </li>
+            </ul>
+            <ul class="nav-links" role="list">
+                <li><a href="/workers" {% if active_nav == 'workers' %}aria-current="page"{% endif %}>Workers</a></li>
+                <li><a href="/pipelines" {% if active_nav == 'pipelines' %}aria-current="page"{% endif %}>Pipelines</a></li>
+                <li><a href="/apps" {% if active_nav == 'apps' %}aria-current="page"{% endif %}>Apps</a></li>
+                <li><a href="/rag" {% if active_nav == 'rag' %}aria-current="page"{% endif %}>RAG</a></li>
+                <li><a href="/dead-letters" {% if active_nav == 'dead_letters' %}aria-current="page"{% endif %}>Dead Letters</a></li>
+                <li>
+                    <button id="theme-toggle"
+                            class="theme-toggle"
+                            onclick="toggleTheme()"
+                            type="button"
+                            aria-label="Switch to dark mode"
+                            title="Toggle dark/light mode">&#127769;</button>
+                </li>
+            </ul>
+        </nav>
+    </header>
+
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <main id="main-content" class="container" role="main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="container workshop-footer" role="contentinfo">
+        <small>Heddle Workshop v0.6.0</small>
+    </footer>
+
+    <script>
+    // Set initial icon based on resolved theme
+    (function() {
+        var theme = document.documentElement.getAttribute('data-theme');
+        var btn = document.getElementById('theme-toggle');
+        if (btn) {
+            btn.textContent = theme === 'dark' ? '\u2600\uFE0F' : '\uD83C\uDF19';
+            btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+        }
+    })();
+    </script>
+</body>
+</html>

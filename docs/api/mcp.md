@@ -1,33 +1,33 @@
 # MCP
 
-The MCP gateway uses [FastMCP 3.x](https://gofastmcp.com/) to expose LOOM
+The MCP gateway uses [FastMCP 3.x](https://gofastmcp.com/) to expose HEDDLE
 workers, pipelines, query backends, Workshop operations, and session
 management as MCP tools.
 
 ## Server
 
-::: loom.mcp.server
+::: heddle.mcp.server
 
 ## Bridge
 
-::: loom.mcp.bridge
+::: heddle.mcp.bridge
 
 ## Config
 
-::: loom.mcp.config
+::: heddle.mcp.config
 
 ## Discovery
 
-::: loom.mcp.discovery
+::: heddle.mcp.discovery
 
 ## Resources
 
-::: loom.mcp.resources
+::: heddle.mcp.resources
 
 ## Session Bridge
 
-::: loom.mcp.session_bridge
+::: heddle.mcp.session_bridge
 
 ## Session Registry
 
-::: loom.mcp.session_registry
+::: heddle.mcp.session_registry

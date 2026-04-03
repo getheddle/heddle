@@ -8,23 +8,23 @@
 # invoke and how to combine results. For deterministic sequential pipelines,
 # use PipelineOrchestrator with configs/orchestrators/rag_pipeline.yaml instead.
 #
-# Component:  src/loom/orchestrator/runner.py (OrchestratorActor)
-# Decomposer: src/loom/orchestrator/decomposer.py (GoalDecomposer)
-# Synthesizer: src/loom/orchestrator/synthesizer.py (ResultSynthesizer)
-# Checkpoint: src/loom/orchestrator/checkpoint.py (CheckpointManager)
-# Loaded by:  loom.core.config.load_config()
+# Component:  src/heddle/orchestrator/runner.py (OrchestratorActor)
+# Decomposer: src/heddle/orchestrator/decomposer.py (GoalDecomposer)
+# Synthesizer: src/heddle/orchestrator/synthesizer.py (ResultSynthesizer)
+# Checkpoint: src/heddle/orchestrator/checkpoint.py (CheckpointManager)
+# Loaded by:  heddle.core.config.load_config()
 #
 # Run with:
-#   loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
+#   heddle orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
 #
 # Submit goals:
-#   loom submit "Summarize and classify this document" --nats-url nats://localhost:4222
-#   loom submit "Extract invoice data and classify" --context text="..." --nats-url nats://localhost:4222
+#   heddle submit "Summarize and classify this document" --nats-url nats://localhost:4222
+#   heddle submit "Extract invoice data and classify" --context text="..." --nats-url nats://localhost:4222
 #
 # NATS subjects:
-#   loom.goals.incoming            — Orchestrator subscribes here (with queue groups)
-#   loom.tasks.incoming            — Dispatched subtasks go here (router picks up)
-#   loom.results.{goal_id}         — Worker results flow back here
+#   heddle.goals.incoming            — Orchestrator subscribes here (with queue groups)
+#   heddle.tasks.incoming            — Dispatched subtasks go here (router picks up)
+#   heddle.results.{goal_id}         — Worker results flow back here
 #
 # Scaling:
 #   Run multiple orchestrator instances — NATS queue groups auto-balance goals.
@@ -62,7 +62,7 @@ description: "General-purpose task orchestrator."
 # when it wants to dispatch a subtask. The orchestrator parses these blocks
 # and creates TaskMessage objects.
 system_prompt: |
-  You are a task orchestrator in the Loom framework.
+  You are a task orchestrator in the Heddle framework.
 
   YOUR ROLE:
   - Receive a high-level goal
@@ -91,7 +91,7 @@ system_prompt: |
 
 # checkpoint (dict, optional)
 # Self-summarization settings for long-running goals.
-# Source: src/loom/orchestrator/checkpoint.py (CheckpointManager)
+# Source: src/heddle/orchestrator/checkpoint.py (CheckpointManager)
 #
 # When the orchestrator's conversation context grows beyond token_threshold,
 # it triggers a checkpoint: the LLM summarizes the conversation so far into
@@ -101,7 +101,7 @@ system_prompt: |
 #
 # This prevents context window overflow during complex multi-step goals.
 # Checkpoints are stored via CheckpointStore (InMemoryCheckpointStore by default,
-# RedisCheckpointStore for production — see src/loom/contrib/redis/store.py; uses Valkey server).
+# RedisCheckpointStore for production — see src/heddle/contrib/redis/store.py; uses Valkey server).
 #
 # Per-goal isolation (Strategy B): each concurrent goal has its own
 # checkpoint_counter in its GoalState — checkpoints don't interfere.

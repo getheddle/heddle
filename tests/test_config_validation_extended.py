@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from loom.core.config import (
+from heddle.core.config import (
     VALID_MODEL_TIERS,
     ConfigValidationError,
     load_config,
@@ -495,7 +495,7 @@ class TestProcessingBackendValidation:
         cfg = {
             "name": "proc",
             "worker_kind": "processor",
-            "processing_backend": "loom.contrib.duckdb.query_backend.DuckDBQueryBackend",
+            "processing_backend": "heddle.contrib.duckdb.query_backend.DuckDBQueryBackend",
         }
         errors = validate_worker_config(cfg)
         assert errors == []

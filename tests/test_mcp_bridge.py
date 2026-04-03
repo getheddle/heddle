@@ -1,12 +1,12 @@
-"""Tests for loom.mcp.bridge — NATS call dispatch."""
+"""Tests for heddle.mcp.bridge — NATS call dispatch."""
 
 import asyncio
 
 import pytest
 
-from loom.bus.memory import InMemoryBus
-from loom.core.messages import TaskResult, TaskStatus
-from loom.mcp.bridge import BridgeError, BridgeTimeoutError, MCPBridge
+from heddle.bus.memory import InMemoryBus
+from heddle.core.messages import TaskResult, TaskStatus
+from heddle.mcp.bridge import BridgeError, BridgeTimeoutError, MCPBridge
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def _mock_worker_responder(bus, subject, status, output=None, error=None):
                 output=output,
                 error=error,
             )
-            await bus.publish(f"loom.results.{parent_id}", result.model_dump(mode="json"))
+            await bus.publish(f"heddle.results.{parent_id}", result.model_dump(mode="json"))
             await sub.unsubscribe()
             break
 
@@ -61,7 +61,7 @@ class TestCallWorker:
         """Worker responds with a successful TaskResult."""
         ready, worker_task = _mock_worker_responder(
             bus,
-            "loom.tasks.incoming",
+            "heddle.tasks.incoming",
             status=TaskStatus.COMPLETED,
             output={"summary": "Test result"},
         )
@@ -81,7 +81,7 @@ class TestCallWorker:
         """Worker responds with FAILED status → BridgeError."""
         ready, worker_task = _mock_worker_responder(
             bus,
-            "loom.tasks.incoming",
+            "heddle.tasks.incoming",
             status=TaskStatus.FAILED,
             error="Model unavailable",
         )
@@ -120,7 +120,7 @@ class TestCallQuery:
         ready = asyncio.Event()
 
         async def mock_worker():
-            sub = await bus.subscribe("loom.tasks.incoming")
+            sub = await bus.subscribe("heddle.tasks.incoming")
             ready.set()
             async for data in sub:
                 received.update(data)
@@ -132,7 +132,7 @@ class TestCallQuery:
                     status=TaskStatus.COMPLETED,
                     output={"results": []},
                 )
-                await bus.publish(f"loom.results.{parent_id}", result.model_dump(mode="json"))
+                await bus.publish(f"heddle.results.{parent_id}", result.model_dump(mode="json"))
                 await sub.unsubscribe()
                 break
 
@@ -164,7 +164,7 @@ class TestCallPipeline:
         ready = asyncio.Event()
 
         async def mock_pipeline():
-            sub = await bus.subscribe("loom.goals.incoming")
+            sub = await bus.subscribe("heddle.goals.incoming")
             ready.set()
             async for data in sub:
                 goal_id = data["goal_id"]
@@ -175,7 +175,7 @@ class TestCallPipeline:
                     status=TaskStatus.COMPLETED,
                     output={"text": "extracted"},
                 )
-                await bus.publish(f"loom.results.{goal_id}", stage_result.model_dump(mode="json"))
+                await bus.publish(f"heddle.results.{goal_id}", stage_result.model_dump(mode="json"))
 
                 await asyncio.sleep(0.01)
 
@@ -186,7 +186,7 @@ class TestCallPipeline:
                     status=TaskStatus.COMPLETED,
                     output={"final": "done"},
                 )
-                await bus.publish(f"loom.results.{goal_id}", final_result.model_dump(mode="json"))
+                await bus.publish(f"heddle.results.{goal_id}", final_result.model_dump(mode="json"))
                 await sub.unsubscribe()
                 break
 
@@ -207,7 +207,7 @@ class TestCallPipeline:
         ready = asyncio.Event()
 
         async def mock_pipeline():
-            sub = await bus.subscribe("loom.goals.incoming")
+            sub = await bus.subscribe("heddle.goals.incoming")
             ready.set()
             async for data in sub:
                 goal_id = data["goal_id"]
@@ -220,7 +220,7 @@ class TestCallPipeline:
                         output={"stage": i},
                     )
                     await bus.publish(
-                        f"loom.results.{goal_id}", stage_result.model_dump(mode="json")
+                        f"heddle.results.{goal_id}", stage_result.model_dump(mode="json")
                     )
                     await asyncio.sleep(0.01)
 
@@ -230,7 +230,7 @@ class TestCallPipeline:
                     status=TaskStatus.COMPLETED,
                     output={"final": True},
                 )
-                await bus.publish(f"loom.results.{goal_id}", final_result.model_dump(mode="json"))
+                await bus.publish(f"heddle.results.{goal_id}", final_result.model_dump(mode="json"))
                 await sub.unsubscribe()
                 break
 
@@ -257,7 +257,7 @@ class TestCallPipeline:
         ready = asyncio.Event()
 
         async def sink():
-            sub = await bus.subscribe("loom.goals.incoming")
+            sub = await bus.subscribe("heddle.goals.incoming")
             ready.set()
             async for data in sub:
                 pass  # Never responds.
@@ -289,13 +289,13 @@ class TestBridgeErrorHandling:
         ready = asyncio.Event()
 
         async def mock_worker():
-            sub = await bus.subscribe("loom.tasks.incoming")
+            sub = await bus.subscribe("heddle.tasks.incoming")
             ready.set()
             async for data in sub:
                 parent_id = data["parent_task_id"]
                 # Send malformed result — missing required 'status' and 'worker_type'.
                 await bus.publish(
-                    f"loom.results.{parent_id}",
+                    f"heddle.results.{parent_id}",
                     {"task_id": data["task_id"], "bad_field": "oops"},
                 )
                 await sub.unsubscribe()
@@ -319,13 +319,13 @@ class TestBridgeErrorHandling:
         ready = asyncio.Event()
 
         async def mock_pipeline():
-            sub = await bus.subscribe("loom.goals.incoming")
+            sub = await bus.subscribe("heddle.goals.incoming")
             ready.set()
             async for data in sub:
                 goal_id = data["goal_id"]
                 # Send malformed final result (task_id == goal_id but missing fields).
                 await bus.publish(
-                    f"loom.results.{goal_id}",
+                    f"heddle.results.{goal_id}",
                     {"task_id": goal_id, "not_a_valid_field": True},
                 )
                 await sub.unsubscribe()
@@ -347,7 +347,7 @@ class TestBridgeErrorHandling:
         ready = asyncio.Event()
 
         async def mock_pipeline():
-            sub = await bus.subscribe("loom.goals.incoming")
+            sub = await bus.subscribe("heddle.goals.incoming")
             ready.set()
             async for data in sub:
                 goal_id = data["goal_id"]
@@ -358,7 +358,7 @@ class TestBridgeErrorHandling:
                     status=TaskStatus.COMPLETED,
                     output={"text": "extracted"},
                 )
-                await bus.publish(f"loom.results.{goal_id}", stage_result.model_dump(mode="json"))
+                await bus.publish(f"heddle.results.{goal_id}", stage_result.model_dump(mode="json"))
                 await asyncio.sleep(0.01)
                 # Final result.
                 final_result = TaskResult(
@@ -367,7 +367,7 @@ class TestBridgeErrorHandling:
                     status=TaskStatus.COMPLETED,
                     output={"final": "done"},
                 )
-                await bus.publish(f"loom.results.{goal_id}", final_result.model_dump(mode="json"))
+                await bus.publish(f"heddle.results.{goal_id}", final_result.model_dump(mode="json"))
                 await sub.unsubscribe()
                 break
 

@@ -6,12 +6,12 @@
 # intervals and dispatches either OrchestratorGoal or TaskMessage objects
 # into the NATS message flow.
 #
-# Component:  src/loom/scheduler/scheduler.py (SchedulerActor)
-# Config:     src/loom/scheduler/config.py (validation)
-# Loaded by:  loom.core.config.load_config()
+# Component:  src/heddle/scheduler/scheduler.py (SchedulerActor)
+# Config:     src/heddle/scheduler/config.py (validation)
+# Loaded by:  heddle.core.config.load_config()
 #
 # Run with:
-#   loom scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
+#   heddle scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
 #
 # Prerequisites:
 #   - NATS running at the specified URL
@@ -19,9 +19,9 @@
 #   - For task dispatch: the target worker must be running
 #
 # NATS subjects:
-#   loom.goals.incoming           — Goals dispatched here (orchestrator picks up)
-#   loom.tasks.incoming           — Tasks dispatched here (router picks up)
-#   loom.scheduler.{name}         — Health-check subject for the scheduler
+#   heddle.goals.incoming           — Goals dispatched here (orchestrator picks up)
+#   heddle.tasks.incoming           — Tasks dispatched here (router picks up)
+#   heddle.scheduler.{name}         — Health-check subject for the scheduler
 #
 # Related configs:
 #   configs/orchestrators/default.yaml     — orchestrator that receives dispatched goals
@@ -32,7 +32,7 @@
 
 # name (str, required)
 # Identifier for this scheduler instance. Used in logging and the
-# health-check NATS subject (loom.scheduler.{name}).
+# health-check NATS subject (heddle.scheduler.{name}).
 name: "default_scheduler"
 
 # schedules (list, required)
@@ -42,7 +42,7 @@ name: "default_scheduler"
 # Each entry dispatches either a "goal" or a "task".
 schedules:
   # --- Example 1: Cron-based goal dispatch ---
-  # Dispatches an OrchestratorGoal to loom.goals.incoming.
+  # Dispatches an OrchestratorGoal to heddle.goals.incoming.
   # An orchestrator (or pipeline) must be running to process it.
   - name: "hourly_summarize"
 
@@ -66,10 +66,10 @@ schedules:
 
     # dispatch_type (str, required)
     # What kind of message to dispatch:
-    #   "goal" — Dispatches an OrchestratorGoal to loom.goals.incoming.
+    #   "goal" — Dispatches an OrchestratorGoal to heddle.goals.incoming.
     #            The orchestrator decomposes it and dispatches subtasks.
     #            Use for complex, multi-step workflows.
-    #   "task" — Dispatches a TaskMessage to loom.tasks.incoming.
+    #   "task" — Dispatches a TaskMessage to heddle.tasks.incoming.
     #            The router sends it directly to a worker.
     #            Use for simple, single-worker operations.
     dispatch_type: "goal"

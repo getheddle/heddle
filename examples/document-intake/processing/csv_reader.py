@@ -3,7 +3,7 @@ CSV Reader — Custom ProcessingBackend for the Document Intake example.
 
 Reads a CSV file and yields individual rows as structured records.
 This demonstrates how to write a custom non-LLM processing backend
-for Loom — any Python code that transforms data can be a backend.
+for Heddle — any Python code that transforms data can be a backend.
 
 The process_sync() method runs in a thread pool automatically (via
 SyncProcessingBackend), so it won't block the async event loop even
@@ -24,7 +24,7 @@ import io
 from pathlib import Path
 from typing import Any
 
-from loom.worker.processor import BackendError, SyncProcessingBackend
+from heddle.worker.processor import BackendError, SyncProcessingBackend
 
 
 class CsvReadError(BackendError):

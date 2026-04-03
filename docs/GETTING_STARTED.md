@@ -1,6 +1,6 @@
 # Getting Started
 
-New to Loom? Start with [Concepts](CONCEPTS.md) to understand the mental model.
+New to Heddle? Start with [Concepts](CONCEPTS.md) to understand the mental model.
 
 ![Developer Workflow](images/developer-workflow.svg)
 
@@ -8,17 +8,17 @@ New to Loom? Start with [Concepts](CONCEPTS.md) to understand the mental model.
 
 ## Quick Start — Try a Worker (No Data Files Needed)
 
-The fastest way to see Loom work. Paste any text and get structured output.
+The fastest way to see Heddle work. Paste any text and get structured output.
 
 ```bash
 # 1. Install
-pip install loom-ai[workshop]
+pip install heddle-ai[workshop]
 
 # 2. Configure (interactive wizard — detects Ollama, prompts for API keys)
-loom setup
+heddle setup
 
 # 3. Open the Workshop web UI
-loom workshop
+heddle workshop
 ```
 
 Open your browser at `http://localhost:8080`. You'll see a list of workers.
@@ -31,7 +31,7 @@ Try these first:
 - **extractor** — paste a contract or report, define fields to extract (names, dates, amounts)
 - **qa** — paste a passage and ask a question, get an answer with source citations
 
-All four work with Ollama (free, local). If you don't have Ollama, `loom setup`
+All four work with Ollama (free, local). If you don't have Ollama, `heddle setup`
 will prompt for an Anthropic API key instead.
 
 See [Workers Reference](workers-reference.md) for full I/O schemas and the
@@ -41,28 +41,28 @@ See [Workers Reference](workers-reference.md) for full I/O schemas and the
 
 ## RAG Quickstart
 
-If you have Telegram JSON exports, Loom can ingest, chunk, embed, and search
+If you have Telegram JSON exports, Heddle can ingest, chunk, embed, and search
 them:
 
 ```bash
 # 1. Install with RAG support
-pip install loom-ai[rag]
+pip install heddle-ai[rag]
 
 # 2. Configure
-loom setup
+heddle setup
 
 # 3. Ingest Telegram exports
-loom rag ingest /path/to/telegram/exports/*.json
+heddle rag ingest /path/to/telegram/exports/*.json
 
 # 4. Search
-loom rag search "earthquake damage reports"
+heddle rag search "earthquake damage reports"
 
 # 5. Open the dashboard
-loom rag serve
+heddle rag serve
 ```
 
-The `loom setup` wizard detects Ollama, prompts for API keys, and writes
-`~/.loom/config.yaml`. All settings can be overridden via environment
+The `heddle setup` wizard detects Ollama, prompts for API keys, and writes
+`~/.heddle/config.yaml`. All settings can be overridden via environment
 variables or CLI flags. See [Configuration](CONFIG.md) for details.
 
 ---
@@ -83,16 +83,16 @@ ones into a pipeline:
 
 ```bash
 # Create your own worker interactively (generates YAML for you)
-loom new worker
+heddle new worker
 
 # Chain workers into a pipeline
-loom new pipeline
+heddle new pipeline
 
 # Validate configs (no infrastructure needed)
-loom validate configs/workers/*.yaml
+heddle validate configs/workers/*.yaml
 
 # Test in the Workshop
-loom workshop
+heddle workshop
 ```
 
 No NATS or infrastructure needed. The Workshop calls LLM backends directly.
@@ -118,7 +118,7 @@ No NATS or infrastructure needed. The Workshop calls LLM backends directly.
 uv sync --all-extras
 ```
 
-Loom has optional extras for integrations:
+Heddle has optional extras for integrations:
 
 ```bash
 uv sync --extra rag           # RAG pipeline (DuckDB + Ollama embeddings)
@@ -144,10 +144,10 @@ uv sync --extra docs          # MkDocs-Material API documentation generation
 The easiest path — run the setup wizard:
 
 ```bash
-uv run loom setup
+uv run heddle setup
 ```
 
-This auto-detects Ollama, prompts for API keys, and writes `~/.loom/config.yaml`.
+This auto-detects Ollama, prompts for API keys, and writes `~/.heddle/config.yaml`.
 
 **Or configure manually** via environment variables:
 
@@ -162,10 +162,10 @@ export OLLAMA_URL=http://localhost:11434
 export ANTHROPIC_API_KEY=sk-ant-...
 
 # Option C: Any OpenAI-compatible API (vLLM, LiteLLM, llama.cpp server)
-# See OpenAICompatibleBackend in src/loom/worker/backends.py
+# See OpenAICompatibleBackend in src/heddle/worker/backends.py
 ```
 
-Settings resolution priority: CLI flags > environment variables > `~/.loom/config.yaml` > built-in defaults. See [Configuration](CONFIG.md) for the full reference.
+Settings resolution priority: CLI flags > environment variables > `~/.heddle/config.yaml` > built-in defaults. See [Configuration](CONFIG.md) for the full reference.
 
 ---
 
@@ -206,13 +206,13 @@ docker run -d --name valkey -p 6379:6379 valkey/valkey:8-alpine
 
 ```bash
 # Terminal 1: Start the router
-uv run loom router --nats-url nats://localhost:4222
+uv run heddle router --nats-url nats://localhost:4222
 
 # Terminal 2: Start the orchestrator
-uv run loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
+uv run heddle orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
 
 # Terminal 3: Start a summarizer worker
-uv run loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
+uv run heddle worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
 ```
 
 ---
@@ -221,7 +221,7 @@ uv run loom worker --config configs/workers/summarizer.yaml --tier local --nats-
 
 ```bash
 # Terminal 4: Send a task through the system
-uv run loom submit "Summarize the main points of the UN Charter preamble" --nats-url nats://localhost:4222
+uv run heddle submit "Summarize the main points of the UN Charter preamble" --nats-url nats://localhost:4222
 ```
 
 Monitor what's happening:
@@ -229,11 +229,11 @@ Monitor what's happening:
 ```bash
 # Option 1: TUI dashboard (recommended)
 uv sync --extra tui
-uv run loom ui --nats-url nats://localhost:4222
+uv run heddle ui --nats-url nats://localhost:4222
 
 # Option 2: NATS CLI (raw messages)
 brew tap nats-io/nats-tools && brew install nats-io/nats-tools/nats
-nats sub "loom.>" --server=nats://localhost:4222
+nats sub "heddle.>" --server=nats://localhost:4222
 ```
 
 ---
@@ -248,13 +248,13 @@ Edit the file — define a system prompt, input/output schemas, and default tier
 Then start it:
 
 ```bash
-uv run loom worker --config configs/workers/my_worker.yaml --tier local
+uv run heddle worker --config configs/workers/my_worker.yaml --tier local
 ```
 
 Or test it without NATS using the Workshop:
 
 ```bash
-uv run loom workshop --port 8080
+uv run heddle workshop --port 8080
 # Open http://localhost:8080 → Workers → my_worker → Test
 ```
 
@@ -265,7 +265,7 @@ uv run loom workshop --port 8080
 | Goal | Guide |
 |------|-------|
 | Understand the mental model | [Concepts](CONCEPTS.md) |
-| How Loom compares to other tools | [Why Loom?](WHY_LOOM.md) |
+| How Heddle compares to other tools | [Why Heddle?](WHY_HEDDLE.md) |
 | Tour the Workshop UI | [Workshop Tour](WORKSHOP_TOUR.md) |
 | Build workers, pipelines, tools | [Building Workflows](building-workflows.md) |
 | Set up RAG analysis pipeline | [RAG How-To](rag-howto.md) |

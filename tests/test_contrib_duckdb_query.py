@@ -3,7 +3,7 @@
 import duckdb
 import pytest
 
-from loom.contrib.duckdb import DuckDBQueryBackend, DuckDBQueryError
+from heddle.contrib.duckdb import DuckDBQueryBackend, DuckDBQueryError
 
 
 @pytest.fixture
@@ -101,7 +101,7 @@ class TestValidation:
     """Tests for error handling and dispatch."""
 
     def test_error_hierarchy(self):
-        from loom.worker.processor import BackendError
+        from heddle.worker.processor import BackendError
 
         assert issubclass(DuckDBQueryError, BackendError)
 
@@ -492,7 +492,7 @@ class TestVectorSearch:
                 raise RuntimeError("Ollama unreachable")
 
         monkeypatch.setattr(
-            "loom.worker.embeddings.OllamaEmbeddingProvider",
+            "heddle.worker.embeddings.OllamaEmbeddingProvider",
             FakeProvider,
         )
 
@@ -513,7 +513,7 @@ class TestVectorSearch:
                 return [0.8, 0.2, 0.0]
 
         monkeypatch.setattr(
-            "loom.worker.embeddings.OllamaEmbeddingProvider",
+            "heddle.worker.embeddings.OllamaEmbeddingProvider",
             FakeProvider,
         )
 

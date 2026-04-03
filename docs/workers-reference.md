@@ -1,6 +1,6 @@
 # Workers Reference
 
-Loom ships with six ready-made LLM workers and a document extraction module.
+Heddle ships with six ready-made LLM workers and a document extraction module.
 Use them directly, chain them into pipelines, or use them as templates for
 your own workers.
 
@@ -8,11 +8,11 @@ your own workers.
 
 ```bash
 # Use a shipped worker with the Workshop test bench
-uv run loom workshop --port 8080
+uv run heddle workshop --port 8080
 # Navigate to Workers → summarizer → Test
 
 # Or chain them into a pipeline interactively
-uv run loom new pipeline
+uv run heddle new pipeline
 ```
 
 ---
@@ -209,7 +209,7 @@ to `false` when context is insufficient. `source_quotes` are exact substrings.
 
 ```bash
 # 1. Search for relevant chunks
-results=$(loom rag search "earthquake damage" --limit 5)
+results=$(heddle rag search "earthquake damage" --limit 5)
 
 # 2. Pass results as context to QA worker (via Workshop test bench or pipeline)
 ```
@@ -282,7 +282,7 @@ dependency. Best for well-structured digital documents.
 
 ```yaml
 # Worker config
-processing_backend: "loom.contrib.docproc.markitdown_backend.MarkItDownBackend"
+processing_backend: "heddle.contrib.docproc.markitdown_backend.MarkItDownBackend"
 ```
 
 **Supports:** PDF, DOCX, PPTX, XLSX, HTML, plain text.
@@ -294,7 +294,7 @@ Deep extraction via IBM Docling with OCR, table structure recognition, and
 layout analysis. Requires torch.
 
 ```yaml
-processing_backend: "loom.contrib.docproc.docling_backend.DoclingBackend"
+processing_backend: "heddle.contrib.docproc.docling_backend.DoclingBackend"
 ```
 
 **Supports:** Scanned PDFs, complex layouts, multi-column documents.
@@ -307,7 +307,7 @@ Composite: tries MarkItDown first, falls back to Docling when needed.
 Optimizes for speed without sacrificing accuracy on difficult documents.
 
 ```yaml
-processing_backend: "loom.contrib.docproc.smart_extractor.SmartExtractorBackend"
+processing_backend: "heddle.contrib.docproc.smart_extractor.SmartExtractorBackend"
 ```
 
 **Fallback triggers:**
@@ -398,7 +398,7 @@ pipeline_stages:
 
 ## Creating Custom Workers
 
-Use `loom new worker` for interactive scaffolding, or write YAML manually.
+Use `heddle new worker` for interactive scaffolding, or write YAML manually.
 See [Building Workflows](building-workflows.md) for the full guide.
 
 The existing workers in `configs/workers/` serve as templates — copy one,

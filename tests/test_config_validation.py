@@ -1,11 +1,11 @@
-"""Tests for config loading and validation (src/loom/core/config.py)."""
+"""Tests for config loading and validation (src/heddle/core/config.py)."""
 
 from __future__ import annotations
 
 import pytest
 import yaml
 
-from loom.core.config import (
+from heddle.core.config import (
     _validate_knowledge_silos,
     load_config,
     validate_pipeline_config,

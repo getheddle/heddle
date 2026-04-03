@@ -1,18 +1,18 @@
-# CLAUDE.md — Loom project context
+# CLAUDE.md — Heddle project context
 
 ## What this project is
 
-Loom (Lightweight Orchestrated Operational Mesh) is an actor-based framework for orchestrating multiple LLM agents via NATS messaging. It was built to replace a monolithic AI conversation approach that breaks down as database volume and knowledge graph complexity grow.
+Heddle (Lightweight Orchestrated Operational Mesh) is an actor-based framework for orchestrating multiple LLM agents via NATS messaging. It was built to replace a monolithic AI conversation approach that breaks down as database volume and knowledge graph complexity grow.
 
 The core idea: instead of one big LLM context, split work across narrowly-scoped stateless workers coordinated by an orchestrator through a message bus.
 
 ## Project structure
 
 ```text
-src/loom/
+src/heddle/
   core/
     actor.py              # BaseActor — async actor with signal handling, configurable concurrency,
-                          #   control subscription (loom.control.reload), on_reload() hook,
+                          #   control subscription (heddle.control.reload), on_reload() hook,
                           #   OTel span per message (_process_one)
     config.py             # load_config(), ConfigValidationError, worker/pipeline/orchestrator/router validation
                           #   Input mapping path validation, processing_backend format validation,
@@ -49,7 +49,7 @@ src/loom/
                           #   Per-stage retry (max_retries, transient errors only)
                           #   Inter-stage contract validation (input_schema/output_schema on stages)
                           #   Execution timeline (_timeline in output: started_at, ended_at, wall_time_ms)
-                          #   LOOM_TRACE env var for full I/O debug logging
+                          #   HEDDLE_TRACE env var for full I/O debug logging
                           #   request_id propagation across goal→task→result chain
     checkpoint.py         # CheckpointManager — pluggable store, configurable TTL
     store.py              # CheckpointStore ABC + InMemoryCheckpointStore
@@ -86,7 +86,7 @@ src/loom/
                           #   ConfigManager, WorkerTestRunner, EvalRunner, DeadLetterConsumer
     session_bridge.py     # SessionBridge — session lifecycle dispatch (git ops, no NATS)
                           #   start, end, status, sync_check, sync actions
-    session_registry.py   # File-based session markers (~/.loom/sessions/), compatible with baft.sessions
+    session_registry.py   # File-based session markers (~/.heddle/sessions/), compatible with baft.sessions
 
   tracing/
     __init__.py           # Public API: get_tracer, init_tracing, inject/extract_trace_context
@@ -95,29 +95,29 @@ src/loom/
 
   tui/
     __init__.py           # Package init
-    app.py                # LoomDashboard — Textual TUI app, live NATS observer (loom.> wildcard)
+    app.py                # HeddleDashboard — Textual TUI app, live NATS observer (heddle.> wildcard)
                           #   Goals/Tasks/Pipeline/Events panels, StatusBar, keybindings (q/c/r)
                           #   DashboardState, TrackedGoal/Task/Stage domain models
 
   discovery/
-    mdns.py               # LoomServiceAdvertiser — mDNS/Bonjour LAN service advertisement
+    mdns.py               # HeddleServiceAdvertiser — mDNS/Bonjour LAN service advertisement
 
   cli/
     main.py               # Click CLI: setup, rag, worker, processor, pipeline, orchestrator,
                           #   scheduler, router, submit, mcp, workshop, ui, mdns, dead-letter
                           #   --skip-preflight flag on all actor commands
-    config.py             # User config (~/.loom/config.yaml) load/save/merge
-                          #   LoomConfig dataclass, resolve_config() priority chain,
+    config.py             # User config (~/.heddle/config.yaml) load/save/merge
+                          #   HeddleConfig dataclass, resolve_config() priority chain,
                           #   apply_config_to_env() for backwards compat with build_backends_from_env
-    setup.py              # Interactive setup wizard (loom setup)
+    setup.py              # Interactive setup wizard (heddle setup)
                           #   Ollama detection, API key validation, embedding model, data sources
-    rag.py                # Zero-config RAG CLI (loom rag ingest/search/stats/serve)
+    rag.py                # Zero-config RAG CLI (heddle rag ingest/search/stats/serve)
                           #   Direct pipeline execution without NATS/router/actors
-    council.py            # Council deliberation CLI (loom council run/validate)
+    council.py            # Council deliberation CLI (heddle council run/validate)
                           #   Direct backend execution without NATS (like rag.py)
-    new.py                # Interactive scaffolding (loom new worker / loom new pipeline)
+    new.py                # Interactive scaffolding (heddle new worker / heddle new pipeline)
                           #   Generates valid YAML from prompts, validates before writing
-    validate.py           # Config validation CLI (loom validate configs/*.yaml)
+    validate.py           # Config validation CLI (heddle validate configs/*.yaml)
                           #   Auto-detects worker/pipeline/orchestrator, colored output
     preflight.py          # Pre-flight checks: NATS connectivity, env vars, config readability
 
@@ -288,20 +288,20 @@ tests/                    # 82 test files, 1844 unit tests + 1 integration test 
 
 - **Workers are stateless.** They process one task and reset (via `reset()` hook). No state carries between tasks — this is enforced, not optional.
 - **All inter-actor communication uses typed Pydantic messages** (`TaskMessage`, `TaskResult`, `OrchestratorGoal`, `CheckpointState` in `core/messages.py`).
-- **The router is deterministic** — it does not use an LLM. It routes by `worker_type` and `model_tier` using rules in `configs/router_rules.yaml`. Unroutable tasks go to `loom.tasks.dead_letter`.
+- **The router is deterministic** — it does not use an LLM. It routes by `worker_type` and `model_tier` using rules in `configs/router_rules.yaml`. Unroutable tasks go to `heddle.tasks.dead_letter`.
 - **Workers have strict I/O contracts** validated by `core/contracts.py`. Input and output schemas are defined per-worker via inline JSON Schema in YAML or via `input_schema_ref`/`output_schema_ref` pointing to Pydantic models (resolved at load time by `config.resolve_schema_refs()`). Boolean values are correctly distinguished from integers.
 - **Three model tiers exist:** `local` (Ollama), `standard` (Claude Sonnet), `frontier` (Claude Opus). The router and task metadata decide which tier handles each task.
 - **Three LLM backends:** `AnthropicBackend` (Claude API, version 2024-10-22), `OllamaBackend` (local models), `OpenAICompatibleBackend` (vLLM, llama.cpp, LiteLLM, etc.). All support tool-use.
 - **Rate limiting:** Token-bucket rate limiter enforces per-tier dispatch throttling based on `rate_limits` in `router_rules.yaml`.
 - **NATS subject convention:**
-  - `loom.tasks.incoming` — Router picks up tasks here
-  - `loom.tasks.{worker_type}.{tier}` — Routed tasks land here; workers subscribe with queue groups
-  - `loom.tasks.dead_letter` — Unroutable/rate-limited tasks land here
-  - `loom.results.{goal_id}` — Results flow back to orchestrators
-  - `loom.results.default` — Results from standalone tasks (no parent goal)
-  - `loom.goals.incoming` — Top-level goals for orchestrators
-  - `loom.control.reload` — Config hot-reload signal (broadcast)
-  - `loom.scheduler.{name}` — Scheduler health-check subject
+  - `heddle.tasks.incoming` — Router picks up tasks here
+  - `heddle.tasks.{worker_type}.{tier}` — Routed tasks land here; workers subscribe with queue groups
+  - `heddle.tasks.dead_letter` — Unroutable/rate-limited tasks land here
+  - `heddle.results.{goal_id}` — Results flow back to orchestrators
+  - `heddle.results.default` — Results from standalone tasks (no parent goal)
+  - `heddle.goals.incoming` — Top-level goals for orchestrators
+  - `heddle.control.reload` — Config hot-reload signal (broadcast)
+  - `heddle.scheduler.{name}` — Scheduler health-check subject
 
 ## Build and test commands
 
@@ -334,59 +334,59 @@ uv run mkdocs build --strict
 uv run mkdocs serve
 # NOTE: GitHub Pages auto-deploys on push to main via .github/workflows/docs.yml
 
-# First-time setup wizard (interactive, writes ~/.loom/config.yaml)
-uv run loom setup
+# First-time setup wizard (interactive, writes ~/.heddle/config.yaml)
+uv run heddle setup
 
 # Scaffold new configs (interactive, generates YAML)
-uv run loom new worker                                     # scaffold a worker config
-uv run loom new pipeline                                   # scaffold a pipeline config
-uv run loom new worker --non-interactive --name my_worker  # non-interactive mode
+uv run heddle new worker                                     # scaffold a worker config
+uv run heddle new pipeline                                   # scaffold a pipeline config
+uv run heddle new worker --non-interactive --name my_worker  # non-interactive mode
 
 # Validate configs (no infrastructure needed)
-uv run loom validate configs/workers/summarizer.yaml       # single file
-uv run loom validate configs/workers/*.yaml                # multiple files
-uv run loom validate --all                                 # all configs in configs/
+uv run heddle validate configs/workers/summarizer.yaml       # single file
+uv run heddle validate configs/workers/*.yaml                # multiple files
+uv run heddle validate --all                                 # all configs in configs/
 
 # RAG pipeline — zero-config, no NATS needed
-uv run loom rag ingest /path/to/telegram/exports/*.json   # ingest Telegram data
-uv run loom rag search "earthquake damage reports"         # semantic search
-uv run loom rag stats                                      # store statistics
-uv run loom rag serve                                      # Workshop with RAG dashboard
+uv run heddle rag ingest /path/to/telegram/exports/*.json   # ingest Telegram data
+uv run heddle rag search "earthquake damage reports"         # semantic search
+uv run heddle rag stats                                      # store statistics
+uv run heddle rag serve                                      # Workshop with RAG dashboard
 
 # Council deliberation — no NATS needed
-uv run loom council run configs/councils/example.yaml --topic "Should we adopt microservices?"
-uv run loom council run configs/councils/example.yaml --topic topic.txt --output result.json
-uv run loom council validate configs/councils/example.yaml
+uv run heddle council run configs/councils/example.yaml --topic "Should we adopt microservices?"
+uv run heddle council run configs/councils/example.yaml --topic topic.txt --output result.json
+uv run heddle council validate configs/councils/example.yaml
 
 # Run a worker locally (needs NATS running)
-uv run loom worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
+uv run heddle worker --config configs/workers/summarizer.yaml --tier local --nats-url nats://localhost:4222
 
 # Run the router
-uv run loom router --nats-url nats://localhost:4222
+uv run heddle router --nats-url nats://localhost:4222
 
 # Run the orchestrator
-uv run loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
+uv run heddle orchestrator --config configs/orchestrators/default.yaml --nats-url nats://localhost:4222
 
 # Run a pipeline
-uv run loom pipeline --config configs/orchestrators/rag_pipeline.yaml --nats-url nats://localhost:4222
+uv run heddle pipeline --config configs/orchestrators/rag_pipeline.yaml --nats-url nats://localhost:4222
 
 # Run the scheduler (needs NATS running)
-uv run loom scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
+uv run heddle scheduler --config configs/schedulers/example.yaml --nats-url nats://localhost:4222
 
 # Submit a test goal
-uv run loom submit "some goal text" --nats-url nats://localhost:4222
+uv run heddle submit "some goal text" --nats-url nats://localhost:4222
 
 # Run an MCP server (needs NATS + workers running)
-uv run loom mcp --config configs/mcp/docman.yaml
-uv run loom mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
+uv run heddle mcp --config configs/mcp/docman.yaml
+uv run heddle mcp --config configs/mcp/docman.yaml --transport streamable-http --port 8000
 
 # Run the Workshop web UI (no NATS needed for testing/eval)
-uv run loom workshop --port 8080
-uv run loom workshop --port 8080 --nats-url nats://localhost:4222  # with live metrics
-uv run loom workshop --host 0.0.0.0 --port 8080  # LAN accessible
+uv run heddle workshop --port 8080
+uv run heddle workshop --port 8080 --nats-url nats://localhost:4222  # with live metrics
+uv run heddle workshop --host 0.0.0.0 --port 8080  # LAN accessible
 
-# Advertise services on LAN via mDNS/Bonjour (requires loom[mdns])
-uv run loom mdns --workshop-port 8080 --nats-port 4222
+# Advertise services on LAN via mDNS/Bonjour (requires heddle[mdns])
+uv run heddle mdns --workshop-port 8080 --nats-port 4222
 
 # Docker Compose local stack
 docker compose up -d                       # start NATS + Valkey + Workshop + Router
@@ -418,7 +418,7 @@ uv sync --all-extras          # All dependencies including dev/test
 
 ## MCP gateway
 
-Any LOOM system can become an MCP server with a single YAML config — zero MCP-specific code needed. The gateway uses **FastMCP 3.x** (`fastmcp>=3.1`) for the server layer — tools are registered dynamically as `FunctionTool` objects with JSON schemas from YAML config discovery. FastMCP handles both stdio and streamable-HTTP transports natively.
+Any HEDDLE system can become an MCP server with a single YAML config — zero MCP-specific code needed. The gateway uses **FastMCP 3.x** (`fastmcp>=3.1`) for the server layer — tools are registered dynamically as `FunctionTool` objects with JSON schemas from YAML config discovery. FastMCP handles both stdio and streamable-HTTP transports natively.
 
 **Config structure** (`configs/mcp/docman.yaml`):
 
@@ -435,7 +435,7 @@ tools:
     - config: "configs/orchestrators/rag_pipeline.yaml"
       name: "ingest_document"            # Required (pipeline has no natural tool name)
   queries:                    # Each backend action → one MCP tool
-    - backend: "loom.contrib.duckdb.query_backend.DuckDBQueryBackend"
+    - backend: "heddle.contrib.duckdb.query_backend.DuckDBQueryBackend"
       actions: ["search", "filter", "stats", "get"]
       name_prefix: "docs"               # → docs_search, docs_filter, etc.
       backend_config:
@@ -453,7 +453,7 @@ resources:
 tools:
   workshop:                       # Optional workshop tools section
     configs_dir: "configs/"       # Worker/pipeline config directory
-    apps_dir: "~/.loom/apps/"     # Deployed app bundles (optional)
+    apps_dir: "~/.heddle/apps/"     # Deployed app bundles (optional)
     enable:                       # Tool groups to enable (default: worker,test,eval,impact)
       - worker                    # workshop.worker.{list,get,update}
       - test                      # workshop.worker.test
@@ -477,12 +477,12 @@ tools:
     enable: [start, end, status, sync_check, sync]
 ```
 
-Session markers are stored in `~/.loom/sessions/` as JSON files (shared with `baft.sessions` module).
+Session markers are stored in `~/.heddle/sessions/` as JSON files (shared with `baft.sessions` module).
 
 **Public API:**
 
 ```python
-from loom.mcp import create_server, run_stdio, run_streamable_http, MCPGateway
+from heddle.mcp import create_server, run_stdio, run_streamable_http, MCPGateway
 
 # create_server returns (FastMCP, MCPGateway)
 mcp, gateway = create_server("configs/mcp/docman.yaml")
@@ -498,7 +498,7 @@ The Workshop is a web-based tool for the full worker lifecycle: Define → Test 
 
 ```bash
 uv sync --extra workshop
-OLLAMA_URL=http://localhost:11434 uv run loom workshop --port 8080
+OLLAMA_URL=http://localhost:11434 uv run heddle workshop --port 8080
 ```
 
 **Components:**
@@ -538,18 +538,18 @@ NATS queue groups provide horizontal scaling with zero code changes. Run multipl
 
 ```bash
 # Run 3 summarizer replicas — NATS distributes tasks across them
-loom worker --config configs/workers/summarizer.yaml --tier local &
-loom worker --config configs/workers/summarizer.yaml --tier local &
-loom worker --config configs/workers/summarizer.yaml --tier local &
+heddle worker --config configs/workers/summarizer.yaml --tier local &
+heddle worker --config configs/workers/summarizer.yaml --tier local &
+heddle worker --config configs/workers/summarizer.yaml --tier local &
 
 # Run 2 pipeline orchestrator replicas
-loom pipeline --config configs/orchestrators/my_pipeline.yaml &
-loom pipeline --config configs/orchestrators/my_pipeline.yaml &
+heddle pipeline --config configs/orchestrators/my_pipeline.yaml &
+heddle pipeline --config configs/orchestrators/my_pipeline.yaml &
 ```
 
-Workers subscribe with queue groups by default (`loom.tasks.{worker_type}.{tier}`). Pipeline orchestrators subscribe to `loom.goals.incoming` with queue groups. Each message is delivered to exactly one replica. This is the preferred scaling path — it preserves per-message isolation without shared state.
+Workers subscribe with queue groups by default (`heddle.tasks.{worker_type}.{tier}`). Pipeline orchestrators subscribe to `heddle.goals.incoming` with queue groups. Each message is delivered to exactly one replica. This is the preferred scaling path — it preserves per-message isolation without shared state.
 
-In Kubernetes, scale replicas via `kubectl scale deployment/loom-worker --replicas=N` or HPA auto-scaling.
+In Kubernetes, scale replicas via `kubectl scale deployment/heddle-worker --replicas=N` or HPA auto-scaling.
 
 **Not yet implemented (future work):**
 
@@ -559,7 +559,7 @@ In Kubernetes, scale replicas via `kubectl scale deployment/loom-worker --replic
 
 ### MCP gateway considerations
 
-The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mesh. Current state and needed improvements:
+The MCP gateway (`loom/mcp/`) bridges external MCP clients to the HEDDLE actor mesh. Current state and needed improvements:
 
 - **Pipeline parallelism (C) already benefits MCP.** The `MCPBridge.call_pipeline()` dispatches a goal and the pipeline runs stages concurrently. The bridge's `_collect_pipeline_results()` correctly filters intermediate stage results from the final result.
 - **Concurrent MCP calls are supported** — the bridge is fully async. Multiple MCP clients can call tools simultaneously. However, if all calls target the same single-instance orchestrator, they queue at the orchestrator's semaphore.
@@ -584,8 +584,8 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 **P2 — Observability:**
 
 - **request_id propagation** — `TaskMessage` and `OrchestratorGoal` carry `request_id` through goal→task→result chain; structured log bindings per goal
-- **I/O tracing** — `LOOM_TRACE=1` env var enables full input/output logging; `_summarize()` helper truncates by default
-- **Dead-letter consumer** — `DeadLetterConsumer` actor with bounded in-memory store (default 1000), list/count/clear/replay via CLI (`loom dead-letter monitor`) and Workshop UI (`/dead-letters`)
+- **I/O tracing** — `HEDDLE_TRACE=1` env var enables full input/output logging; `_summarize()` helper truncates by default
+- **Dead-letter consumer** — `DeadLetterConsumer` actor with bounded in-memory store (default 1000), list/count/clear/replay via CLI (`heddle dead-letter monitor`) and Workshop UI (`/dead-letters`)
 - **Pipeline execution timeline** — each pipeline output includes `_timeline` with per-stage `started_at`, `ended_at`, `wall_time_ms`
 
 **P3 — Developer experience:**
@@ -607,16 +607,16 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 
 **Distributed tracing:**
 
-- **OpenTelemetry integration** — optional `otel` extra (`uv sync --extra otel`); `loom.tracing` module with `get_tracer()`, `init_tracing()`, `inject_trace_context()`, `extract_trace_context()`; graceful no-op when OTel SDK not installed
+- **OpenTelemetry integration** — optional `otel` extra (`uv sync --extra otel`); `heddle.tracing` module with `get_tracer()`, `init_tracing()`, `inject_trace_context()`, `extract_trace_context()`; graceful no-op when OTel SDK not installed
 - **Span instrumentation** — spans on `BaseActor._process_one()`, `TaskRouter.route()`, `PipelineOrchestrator._execute_stage()`, `MCPBridge._dispatch_and_wait()`, `OrchestratorActor` phases (decompose/dispatch/collect/synthesize), `execute_with_tools()` LLM calls and tool continuations
-- **GenAI semantic conventions** — LLM call spans include `gen_ai.system`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.request.temperature`, `gen_ai.request.max_tokens` per the OTel GenAI semantic conventions. Legacy `llm.*` attributes preserved. Set `LOOM_TRACE_CONTENT=1` to record prompt/completion text as span events.
+- **GenAI semantic conventions** — LLM call spans include `gen_ai.system`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.request.temperature`, `gen_ai.request.max_tokens` per the OTel GenAI semantic conventions. Legacy `llm.*` attributes preserved. Set `HEDDLE_TRACE_CONTENT=1` to record prompt/completion text as span events.
 - **W3C traceparent propagation** — trace context propagated through NATS messages via `_trace_context` key; spans link across actor boundaries for end-to-end pipeline tracing
 
 **TUI dashboard:**
 
-- **Terminal dashboard** — `loom ui` command launches a Textual-based terminal UI for real-time NATS observation
-- **Four panels** — Goals (status, subtask count, elapsed), Tasks (worker type, tier, model, elapsed), Pipeline (stage execution with wall time), Events (scrolling log of all `loom.>` messages)
-- **Read-only observer** — subscribes to `loom.>` wildcard, never publishes; safe to run alongside production actors
+- **Terminal dashboard** — `heddle ui` command launches a Textual-based terminal UI for real-time NATS observation
+- **Four panels** — Goals (status, subtask count, elapsed), Tasks (worker type, tier, model, elapsed), Pipeline (stage execution with wall time), Events (scrolling log of all `heddle.>` messages)
+- **Read-only observer** — subscribes to `heddle.>` wildcard, never publishes; safe to run alongside production actors
 - **Keybindings** — `q` quit, `c` clear log, `r` refresh tables
 
 **Config tooling:**
@@ -627,7 +627,7 @@ The MCP gateway (`loom/mcp/`) bridges external MCP clients to the LOOM actor mes
 
 ## App deployment
 
-Loom apps (like baft, docman) can be deployed as ZIP bundles via the Workshop UI.
+Heddle apps (like baft, docman) can be deployed as ZIP bundles via the Workshop UI.
 Each bundle contains a `manifest.yaml`, configs, and optional scripts/Python packages.
 
 **Deploy flow:**
@@ -635,15 +635,15 @@ Each bundle contains a `manifest.yaml`, configs, and optional scripts/Python pac
 1. Build a ZIP: `bash scripts/build-app.sh` (in the app repo)
 2. Upload at Workshop `/apps` page
 3. App configs appear in Workers/Pipelines lists
-4. Running actors auto-reload via `loom.control.reload` NATS subject
+4. Running actors auto-reload via `heddle.control.reload` NATS subject
 
-**Manifest schema:** See `loom.core.manifest.AppManifest` or `docs/APP_DEPLOYMENT.md`.
+**Manifest schema:** See `heddle.core.manifest.AppManifest` or `docs/APP_DEPLOYMENT.md`.
 
-**Apps directory:** `~/.loom/apps/{app_name}/` (configurable via `--apps-dir`)
+**Apps directory:** `~/.heddle/apps/{app_name}/` (configurable via `--apps-dir`)
 
 ## Concurrent multi-user sessions
 
-Loom supports multiple users (e.g., two analysts on Claude Desktop) working simultaneously:
+Heddle supports multiple users (e.g., two analysts on Claude Desktop) working simultaneously:
 
 - **Pipeline orchestrators** set `max_concurrent_goals: N` in config to process N goals in parallel. Goals are isolated (per-goal context dict, no shared state).
 - **Workers** scale via NATS queue groups — run multiple replicas for load balancing.

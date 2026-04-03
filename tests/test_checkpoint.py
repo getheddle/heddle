@@ -1,7 +1,7 @@
 """
 Test checkpoint system (unit tests, no infrastructure).
 
-Tests the CheckpointManager class from loom.orchestrator.checkpoint, which
+Tests the CheckpointManager class from heddle.orchestrator.checkpoint, which
 handles orchestrator context compression via token-counted checkpointing
 with pluggable storage backends.
 
@@ -11,9 +11,9 @@ tiktoken is used directly (it's a pure-Python encoder, no external service).
 
 import pytest
 
-from loom.core.messages import CheckpointState
-from loom.orchestrator.checkpoint import CheckpointManager
-from loom.orchestrator.store import InMemoryCheckpointStore
+from heddle.core.messages import CheckpointState
+from heddle.orchestrator.checkpoint import CheckpointManager
+from heddle.orchestrator.store import InMemoryCheckpointStore
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -190,8 +190,8 @@ class TestSaveAndLoad:
     @pytest.mark.asyncio
     async def test_store_keys_follow_naming_convention(self):
         """Verify that store keys follow the documented pattern:
-        loom:checkpoint:{goal_id}:{checkpoint_number} and
-        loom:checkpoint:{goal_id}:latest."""
+        heddle:checkpoint:{goal_id}:{checkpoint_number} and
+        heddle:checkpoint:{goal_id}:latest."""
         store = InMemoryCheckpointStore()
         mgr = CheckpointManager(store=store)
 
@@ -206,8 +206,8 @@ class TestSaveAndLoad:
         )
 
         keys_written = list(store._data.keys())
-        assert "loom:checkpoint:goal-99:5" in keys_written
-        assert "loom:checkpoint:goal-99:latest" in keys_written
+        assert "heddle:checkpoint:goal-99:5" in keys_written
+        assert "heddle:checkpoint:goal-99:latest" in keys_written
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +282,7 @@ class TestMissingCheckpoint:
         mgr = CheckpointManager(store=store)
 
         # Manually insert a "latest" pointer that references a missing data key.
-        await store.set("loom:checkpoint:goal-x:latest", "loom:checkpoint:goal-x:1")
+        await store.set("heddle:checkpoint:goal-x:latest", "heddle:checkpoint:goal-x:1")
 
         result = await mgr.load_latest("goal-x")
         assert result is None

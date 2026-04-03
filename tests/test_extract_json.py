@@ -2,7 +2,7 @@
 
 import pytest
 
-from loom.worker.runner import _extract_json
+from heddle.worker.runner import _extract_json
 
 # --- JSON (existing behavior, regression check) ---
 

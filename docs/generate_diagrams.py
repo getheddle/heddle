@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate architecture and workflow SVG diagrams for Loom documentation.
+"""Generate architecture and workflow SVG diagrams for Heddle documentation.
 
 Run:  python docs/generate_diagrams.py
 Output: docs/images/*.svg
@@ -119,7 +119,7 @@ def architecture_overview():
     s = SVG(1440, 1000)
 
     # Title
-    s.text(40, 38, "Loom — Architecture Overview", size=26, weight=700, fill="#1e1e26", anchor="start")
+    s.text(40, 38, "Heddle — Architecture Overview", size=26, weight=700, fill="#1e1e26", anchor="start")
     s.text(40, 62, "Actor-based LLM orchestration framework  ·  NATS messaging  ·  Typed contracts", size=12, weight=400, fill="#888", anchor="start")
 
     # --- INTERFACES ---
@@ -154,7 +154,7 @@ def architecture_overview():
     # --- NATS BUS ---
     s.rect(30, 390, 1380, 52, fill="#f5c72e", rx=8)
     s.text(55, 408, "NATS Message Bus", size=15, weight=700, fill="#4a3800", anchor="start")
-    s.text(55, 428, "loom.goals.*    loom.tasks.*    loom.results.*    loom.control.*    loom.deadletter.*", size=10, weight=500, fill="#7a6510", anchor="start")
+    s.text(55, 428, "heddle.goals.*    heddle.tasks.*    heddle.results.*    heddle.control.*    heddle.deadletter.*", size=10, weight=500, fill="#7a6510", anchor="start")
 
     # --- WORKERS ---
     s.layer_bg(30, 472, 1380, 120, "#ddf4de", "WORKERS  —  Stateless · Typed I/O · JSON Schema validation · Per-stage retry")
@@ -212,7 +212,7 @@ def architecture_overview():
 def data_flow():
     s = SVG(1100, 1150)
 
-    s.text(40, 38, "Loom — Data Flow", size=26, weight=700, fill="#1e1e26", anchor="start")
+    s.text(40, 38, "Heddle — Data Flow", size=26, weight=700, fill="#1e1e26", anchor="start")
     s.text(40, 62, "Goal lifecycle:  submit  >  decompose  >  route  >  process  >  collect  >  return", size=12, weight=400, fill="#888", anchor="start")
 
     steps = [
@@ -243,7 +243,7 @@ def data_flow():
         "context: dict   request_id: str",
     ])
     s.text(660, 162, "Published to:", size=10, weight=500, fill="#999", anchor="start")
-    s.text(660, 180, "loom.goals.{goal_id}", size=11, weight=600, fill="#d4a820", anchor="start")
+    s.text(660, 180, "heddle.goals.{goal_id}", size=11, weight=600, fill="#d4a820", anchor="start")
 
     # --- Step 2: Decompose ---
     s.box_label(80, 325, 200, 50, "GoalDecomposer", fill="#cc7333")
@@ -258,7 +258,7 @@ def data_flow():
     # --- Step 3: Route ---
     s.box_label(80, 505, 200, 50, "Router", fill="#7d52c2")
     s.text(310, 518, "NATS subject:", size=10, weight=500, fill="#999", anchor="start")
-    s.text(310, 536, "loom.tasks.{worker_type}.{tier}", size=11, weight=600, fill="#d4a820", anchor="start")
+    s.text(310, 536, "heddle.tasks.{worker_type}.{tier}", size=11, weight=600, fill="#d4a820", anchor="start")
     s.note_box(620, 510, 340, 30, "Dispatch-side rate limiting (semaphore per worker type)")
 
     # --- Step 4: Process ---
@@ -282,8 +282,8 @@ def data_flow():
         "latency_ms  tokens",
     ])
     s.text(660, 870, "Published to:", size=10, weight=500, fill="#999", anchor="start")
-    s.text(660, 888, "loom.results.{goal_id}", size=11, weight=600, fill="#d4a820", anchor="start")
-    s.note_box(660, 900, 350, 24, "Failures -> loom.deadletter.* -> Dead Letter Store (bounded FIFO)", bg="#fff0f0", border="#ecc", text_color="#c55")
+    s.text(660, 888, "heddle.results.{goal_id}", size=11, weight=600, fill="#d4a820", anchor="start")
+    s.note_box(660, 900, 350, 24, "Failures -> heddle.deadletter.* -> Dead Letter Store (bounded FIFO)", bg="#fff0f0", border="#ecc", text_color="#c55")
 
     # --- Step 6: Return ---
     for j, label in enumerate(["MCP Response", "CLI Output", "Async Iterator"]):
@@ -302,7 +302,7 @@ def data_flow():
 def developer_workflow():
     s = SVG(1200, 700)
 
-    s.text(40, 38, "Loom — Developer Workflow", size=26, weight=700, fill="#1e1e26", anchor="start")
+    s.text(40, 38, "Heddle — Developer Workflow", size=26, weight=700, fill="#1e1e26", anchor="start")
     s.text(40, 62, "Define workers, build pipelines, test, evaluate, and deploy", size=12, weight=400, fill="#888", anchor="start")
 
     # Swimlane headers
@@ -367,13 +367,13 @@ def developer_workflow():
 def workshop_mockup():
     s = SVG(1200, 2400)
 
-    s.text(40, 38, "Loom Workshop — UI Overview", size=26, weight=700, fill="#1e1e26", anchor="start")
+    s.text(40, 38, "Heddle Workshop — UI Overview", size=26, weight=700, fill="#1e1e26", anchor="start")
     s.text(40, 62, "Web-based worker lifecycle management  ·  FastAPI + HTMX + Pico CSS", size=12, weight=400, fill="#888", anchor="start")
 
     # --- HEADER MOCKUP ---
     y = 100
     s.rect(30, y, 1140, 50, fill="#1a1a2e", rx=8)
-    s.text(55, y + 25, "LOOM WORKSHOP", size=14, weight=700, fill="#f5c72e")
+    s.text(55, y + 25, "HEDDLE WORKSHOP", size=14, weight=700, fill="#f5c72e")
     nav_items = ["Workers", "Pipelines", "Apps", "RAG", "Dead Letters"]
     for i, item in enumerate(nav_items):
         s.text(250 + i * 120, y + 25, item, size=12, weight=500, fill="#ccc")
@@ -661,7 +661,7 @@ def workshop_mockup():
 def nats_topology():
     s = SVG(1100, 600)
 
-    s.text(40, 38, "Loom — NATS Subject Topology", size=26, weight=700, fill="#1e1e26", anchor="start")
+    s.text(40, 38, "Heddle — NATS Subject Topology", size=26, weight=700, fill="#1e1e26", anchor="start")
     s.text(40, 62, "Message routing conventions and subject hierarchy", size=12, weight=400, fill="#888", anchor="start")
 
     # Central NATS bus
@@ -671,15 +671,15 @@ def nats_topology():
     # Subject groups — arranged around the bus
     subjects = [
         # (x, y, subject, direction, description, color, publishers, subscribers)
-        (40, 100, "loom.goals.*", "#e85c5c",
+        (40, 100, "heddle.goals.*", "#e85c5c",
          ["MCP Gateway", "CLI", "API"], ["OrchestratorActor"]),
-        (40, 380, "loom.tasks.{type}.{tier}", "#cc7333",
+        (40, 380, "heddle.tasks.{type}.{tier}", "#cc7333",
          ["Router"], ["WorkerActors (queue group)"]),
-        (780, 100, "loom.results.{goal_id}", "#4278d9",
+        (780, 100, "heddle.results.{goal_id}", "#4278d9",
          ["WorkerActors"], ["ResultStream"]),
-        (780, 380, "loom.control.*", "#7d52c2",
+        (780, 380, "heddle.control.*", "#7d52c2",
          ["Workshop", "CLI"], ["All Actors"]),
-        (350, 430, "loom.deadletter.*", "#999",
+        (350, 430, "heddle.deadletter.*", "#999",
          ["Router", "Workers"], ["DeadLetterConsumer"]),
     ]
 
@@ -710,7 +710,7 @@ def nats_topology():
     s.note_box(40, 490, 400, 26, "Workers use NATS queue groups for load balancing across instances", bg="#fff8f0", border="#f0dfc0", text_color="#cc7333")
 
     # Control subjects detail
-    s.note_box(780, 490, 280, 40, "loom.control.reload — hot-reload configs\nloom.control.shutdown — graceful stop", bg="#f4f0ff", border="#d4c8ee", text_color="#7d52c2")
+    s.note_box(780, 490, 280, 40, "heddle.control.reload — hot-reload configs\nheddle.control.shutdown — graceful stop", bg="#f4f0ff", border="#d4c8ee", text_color="#7d52c2")
 
     s.save(OUT / "nats-topology.svg")
 
@@ -720,7 +720,7 @@ def nats_topology():
 # ===========================================================================
 
 if __name__ == "__main__":
-    print("Generating Loom documentation diagrams...")
+    print("Generating Heddle documentation diagrams...")
     architecture_overview()
     data_flow()
     developer_workflow()

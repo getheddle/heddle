@@ -2,28 +2,28 @@
 
 ## Runner
 
-::: loom.orchestrator.runner
+::: heddle.orchestrator.runner
 
 ## Pipeline
 
-::: loom.orchestrator.pipeline
+::: heddle.orchestrator.pipeline
 
 ## Decomposer
 
-::: loom.orchestrator.decomposer
+::: heddle.orchestrator.decomposer
 
 ## Synthesizer
 
-::: loom.orchestrator.synthesizer
+::: heddle.orchestrator.synthesizer
 
 ## Checkpoint
 
-::: loom.orchestrator.checkpoint
+::: heddle.orchestrator.checkpoint
 
 ## Store
 
-::: loom.orchestrator.store
+::: heddle.orchestrator.store
 
 ## Result Stream
 
-::: loom.orchestrator.stream
+::: heddle.orchestrator.stream

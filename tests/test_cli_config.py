@@ -1,5 +1,5 @@
 """
-Tests for loom.cli.config — config file load/save/merge.
+Tests for heddle.cli.config — config file load/save/merge.
 
 All tests use tmp_path for isolation. No external services needed.
 """
@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import os
 
-from loom.cli.config import (
-    LoomConfig,
+from heddle.cli.config import (
+    HeddleConfig,
     apply_config_to_env,
     load_config,
     resolve_config,
@@ -22,14 +22,14 @@ from loom.cli.config import (
 
 
 def test_load_config_missing_file_returns_defaults(tmp_path):
-    """A non-existent file returns all-default LoomConfig."""
+    """A non-existent file returns all-default HeddleConfig."""
     config = load_config(str(tmp_path / "nonexistent.yaml"))
     assert config.ollama_url is None
     assert config.ollama_model == "llama3.2:3b"
     assert config.anthropic_api_key is None
     assert config.embedding_model == "nomic-embed-text"
     assert config.rag_vector_store == "duckdb"
-    assert config.rag_db_path == "~/.loom/rag.duckdb"
+    assert config.rag_db_path == "~/.heddle/rag.duckdb"
     assert config.workshop_port == 8080
 
 
@@ -92,7 +92,7 @@ def test_load_config_empty_yaml(tmp_path):
 def test_save_config_creates_parent_dirs(tmp_path):
     """save_config creates intermediate directories."""
     cfg_path = tmp_path / "deep" / "nested" / "config.yaml"
-    config = LoomConfig(ollama_url="http://localhost:11434")
+    config = HeddleConfig(ollama_url="http://localhost:11434")
     save_config(config, str(cfg_path))
     assert cfg_path.exists()
     # Check file permissions (owner read/write only)
@@ -103,7 +103,7 @@ def test_save_config_creates_parent_dirs(tmp_path):
 def test_save_config_roundtrip(tmp_path):
     """Values survive a save → load roundtrip."""
     cfg_path = str(tmp_path / "config.yaml")
-    original = LoomConfig(
+    original = HeddleConfig(
         ollama_url="http://localhost:11434",
         anthropic_api_key="sk-ant-test",
         rag_vector_store="lancedb",
@@ -122,7 +122,7 @@ def test_save_config_roundtrip(tmp_path):
 def test_save_config_defaults_produce_minimal_file(tmp_path):
     """A default config produces a mostly-empty file."""
     cfg_path = tmp_path / "config.yaml"
-    save_config(LoomConfig(), str(cfg_path))
+    save_config(HeddleConfig(), str(cfg_path))
     content = cfg_path.read_text()
     assert "No non-default values" in content
 
@@ -187,7 +187,7 @@ def test_apply_config_to_env_sets_missing_vars(monkeypatch):
     monkeypatch.delenv("OLLAMA_URL", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-    config = LoomConfig(
+    config = HeddleConfig(
         ollama_url="http://config:11434",
         anthropic_api_key="sk-from-config",
     )
@@ -201,7 +201,7 @@ def test_apply_config_to_env_does_not_overwrite_existing(monkeypatch):
     """Explicit env vars are preserved — config values don't overwrite."""
     monkeypatch.setenv("OLLAMA_URL", "http://existing:11434")
 
-    config = LoomConfig(ollama_url="http://config:11434")
+    config = HeddleConfig(ollama_url="http://config:11434")
     apply_config_to_env(config)
 
     assert os.environ["OLLAMA_URL"] == "http://existing:11434"
@@ -210,6 +210,6 @@ def test_apply_config_to_env_does_not_overwrite_existing(monkeypatch):
 def test_apply_config_to_env_skips_none_values(monkeypatch):
     """None values in config don't set env vars."""
     monkeypatch.delenv("OLLAMA_URL", raising=False)
-    config = LoomConfig()  # ollama_url is None
+    config = HeddleConfig()  # ollama_url is None
     apply_config_to_env(config)
     assert "OLLAMA_URL" not in os.environ

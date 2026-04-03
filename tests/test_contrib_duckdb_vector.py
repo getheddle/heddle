@@ -5,7 +5,7 @@ import json
 import duckdb
 import pytest
 
-from loom.contrib.duckdb import DuckDBVectorTool
+from heddle.contrib.duckdb import DuckDBVectorTool
 
 
 @pytest.fixture

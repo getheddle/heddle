@@ -2,8 +2,8 @@
 
 ## Task Router
 
-::: loom.router.router
+::: heddle.router.router
 
 ## Dead Letter
 
-::: loom.router.dead_letter
+::: heddle.router.dead_letter

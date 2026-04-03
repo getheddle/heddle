@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from loom.contrib.council.schemas import (
+from heddle.contrib.council.schemas import (
     AgentConfig,
     AgentTurn,
     ConvergenceConfig,
@@ -13,7 +13,7 @@ from loom.contrib.council.schemas import (
     RoundEntry,
     TranscriptEntry,
 )
-from loom.core.messages import ModelTier
+from heddle.core.messages import ModelTier
 
 
 class TestAgentConfig:
@@ -25,7 +25,7 @@ class TestAgentConfig:
     def test_valid_bridge(self):
         a = AgentConfig(
             name="gpt",
-            bridge="loom.contrib.chatbridge.openai.OpenAIChatBridge",
+            bridge="heddle.contrib.chatbridge.openai.OpenAIChatBridge",
             bridge_config={"model": "gpt-4o"},
         )
         assert a.bridge is not None

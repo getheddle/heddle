@@ -70,9 +70,9 @@ facilitator:
 ### 2. Run without infrastructure (CouncilRunner)
 
 ```python
-from loom.worker.backends import build_backends_from_env
-from loom.contrib.council.config import load_council_config
-from loom.contrib.council.runner import CouncilRunner
+from heddle.worker.backends import build_backends_from_env
+from heddle.contrib.council.config import load_council_config
+from heddle.contrib.council.runner import CouncilRunner
 
 config = load_council_config("configs/councils/architecture_review.yaml")
 runner = CouncilRunner(build_backends_from_env())
@@ -111,7 +111,7 @@ Then from Claude Desktop or any MCP client:
 Each agent has:
 
 - **name** — unique identifier within the council
-- **worker_type** — which Loom worker config to use (or `bridge` for external LLMs)
+- **worker_type** — which Heddle worker config to use (or `bridge` for external LLMs)
 - **tier** — which model to use (`local`, `standard`, `frontier`)
 - **role** — system-prompt-level instructions defining the agent's perspective
 - **sees_transcript_from** — visibility filter (which other agents' contributions this agent can see)
@@ -151,7 +151,7 @@ The `TranscriptStore` maintains the full discussion history with:
 
 ## ChatBridge — external LLM adapters
 
-Not every council participant needs to be a standard Loom worker.
+Not every council participant needs to be a standard Heddle worker.
 ChatBridge adapters let you bring in external LLM providers or human
 participants as full council members.
 
@@ -169,7 +169,7 @@ participants as full council members.
 ```yaml
 agents:
   - name: "gpt_perspective"
-    bridge: "loom.contrib.chatbridge.openai.OpenAIChatBridge"
+    bridge: "heddle.contrib.chatbridge.openai.OpenAIChatBridge"
     bridge_config:
       model: "gpt-4o"
       api_key_env: "OPENAI_API_KEY"
@@ -180,7 +180,7 @@ agents:
 ### Human-in-the-loop
 
 ```python
-from loom.contrib.chatbridge.manual import ManualChatBridge
+from heddle.contrib.chatbridge.manual import ManualChatBridge
 
 async def ask_human(message, context, session_id):
     print(f"\n--- Council asks you ({session_id}) ---")
@@ -190,16 +190,16 @@ async def ask_human(message, context, session_id):
 bridge = ManualChatBridge(on_prompt=ask_human, timeout_seconds=300)
 ```
 
-### ChatBridge as a standard Loom worker
+### ChatBridge as a standard Heddle worker
 
 Any ChatBridge can be wrapped as a `ProcessingBackend` for use in
 regular pipelines (not just councils):
 
 ```yaml
 name: "gpt4_processor"
-processing_backend: "loom.contrib.chatbridge.worker.ChatBridgeBackend"
+processing_backend: "heddle.contrib.chatbridge.worker.ChatBridgeBackend"
 processing_config:
-  bridge_class: "loom.contrib.chatbridge.openai.OpenAIChatBridge"
+  bridge_class: "heddle.contrib.chatbridge.openai.OpenAIChatBridge"
   model: "gpt-4o"
   api_key_env: "OPENAI_API_KEY"
 ```
@@ -267,13 +267,13 @@ agents:
     tier: "standard"
     role: "Analytical perspective (Claude)"
   - name: "gpt_analyst"
-    bridge: "loom.contrib.chatbridge.openai.OpenAIChatBridge"
+    bridge: "heddle.contrib.chatbridge.openai.OpenAIChatBridge"
     bridge_config:
       model: "gpt-4o"
       api_key_env: "OPENAI_API_KEY"
     role: "Alternative perspective (GPT-4)"
   - name: "local_analyst"
-    bridge: "loom.contrib.chatbridge.ollama.OllamaChatBridge"
+    bridge: "heddle.contrib.chatbridge.ollama.OllamaChatBridge"
     bridge_config:
       model: "llama3.2:3b"
     role: "Efficiency-focused perspective (local model)"
@@ -284,9 +284,9 @@ agents:
 ## Installation
 
 ```bash
-pip install loom-ai[council]              # Council framework (no new deps)
-pip install loom-ai[chatbridge]           # ChatBridge adapters (adds openai)
-pip install loom-ai[council,chatbridge]   # Both
+pip install heddle-ai[council]              # Council framework (no new deps)
+pip install heddle-ai[chatbridge]           # ChatBridge adapters (adds openai)
+pip install heddle-ai[council,chatbridge]   # Both
 ```
 
 Or from source:

@@ -1,4 +1,4 @@
-"""Tests for loom.mcp.server — MCP server assembly and tool dispatch."""
+"""Tests for heddle.mcp.server — MCP server assembly and tool dispatch."""
 
 import asyncio
 import json
@@ -8,10 +8,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import yaml
 
-from loom.bus.memory import InMemoryBus
-from loom.core.messages import TaskResult, TaskStatus
-from loom.mcp.bridge import BridgeError, BridgeTimeoutError, MCPBridge
-from loom.mcp.server import (
+from heddle.bus.memory import InMemoryBus
+from heddle.core.messages import TaskResult, TaskStatus
+from heddle.mcp.bridge import BridgeError, BridgeTimeoutError, MCPBridge
+from heddle.mcp.server import (
     MCPGateway,
     ToolEntry,
     _build_annotations,
@@ -20,7 +20,7 @@ from loom.mcp.server import (
     _safe_dispatch,
     create_server,
 )
-from loom.mcp.workshop_bridge import WorkshopBridge, WorkshopBridgeError
+from heddle.mcp.workshop_bridge import WorkshopBridge, WorkshopBridgeError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -191,7 +191,7 @@ class TestToolEntry:
                 "description": "desc",
                 "inputSchema": {},
             },
-            loom_meta={"kind": "worker", "worker_type": "my_worker"},
+            heddle_meta={"kind": "worker", "worker_type": "my_worker"},
         )
         assert entry.name == "my_tool"
         assert entry.kind == "worker"
@@ -224,7 +224,7 @@ class TestDispatchTool:
             name="summarizer",
             kind="worker",
             tool_def={},
-            loom_meta={
+            heddle_meta={
                 "kind": "worker",
                 "worker_type": "summarizer",
                 "tier": "local",
@@ -235,7 +235,7 @@ class TestDispatchTool:
         ready = asyncio.Event()
 
         async def mock_worker():
-            sub = await bus.subscribe("loom.tasks.incoming")
+            sub = await bus.subscribe("heddle.tasks.incoming")
             ready.set()
             async for data in sub:
                 result = TaskResult(
@@ -245,7 +245,7 @@ class TestDispatchTool:
                     output={"summary": "done"},
                 )
                 await bus.publish(
-                    f"loom.results.{data['parent_task_id']}",
+                    f"heddle.results.{data['parent_task_id']}",
                     result.model_dump(mode="json"),
                 )
                 await sub.unsubscribe()
@@ -271,7 +271,7 @@ class TestDispatchTool:
             name="docs_search",
             kind="query",
             tool_def={},
-            loom_meta={
+            heddle_meta={
                 "kind": "query",
                 "worker_type": "docs_query",
                 "action": "search",
@@ -282,7 +282,7 @@ class TestDispatchTool:
         ready = asyncio.Event()
 
         async def mock_worker():
-            sub = await bus.subscribe("loom.tasks.incoming")
+            sub = await bus.subscribe("heddle.tasks.incoming")
             ready.set()
             async for data in sub:
                 assert data["payload"]["action"] == "search"
@@ -293,7 +293,7 @@ class TestDispatchTool:
                     output={"results": [{"id": "1"}]},
                 )
                 await bus.publish(
-                    f"loom.results.{data['parent_task_id']}",
+                    f"heddle.results.{data['parent_task_id']}",
                     result.model_dump(mode="json"),
                 )
                 await sub.unsubscribe()
@@ -319,7 +319,7 @@ class TestDispatchTool:
             name="bad",
             kind="unknown",
             tool_def={},
-            loom_meta={"kind": "unknown"},
+            heddle_meta={"kind": "unknown"},
         )
 
         with pytest.raises(BridgeError, match="Unknown tool kind"):
@@ -339,7 +339,7 @@ class TestDispatchTool:
             name="ingest_doc",
             kind="pipeline",
             tool_def={},
-            loom_meta={
+            heddle_meta={
                 "kind": "pipeline",
                 "timeout": 5,
             },
@@ -348,7 +348,7 @@ class TestDispatchTool:
         ready = asyncio.Event()
 
         async def mock_pipeline():
-            sub = await bus.subscribe("loom.goals.incoming")
+            sub = await bus.subscribe("heddle.goals.incoming")
             ready.set()
             async for data in sub:
                 goal_id = data.get("goal_id")
@@ -360,7 +360,7 @@ class TestDispatchTool:
                     output={"processed": True},
                 )
                 await bus.publish(
-                    f"loom.results.{goal_id}",
+                    f"heddle.results.{goal_id}",
                     result.model_dump(mode="json"),
                 )
                 await sub.unsubscribe()
@@ -404,7 +404,7 @@ class TestProgressCallback:
             name="ingest_doc",
             kind="pipeline",
             tool_def={},
-            loom_meta={"kind": "pipeline", "timeout": 5},
+            heddle_meta={"kind": "pipeline", "timeout": 5},
         )
 
         progress_calls = []
@@ -415,7 +415,7 @@ class TestProgressCallback:
         ready = asyncio.Event()
 
         async def mock_pipeline():
-            sub = await bus.subscribe("loom.goals.incoming")
+            sub = await bus.subscribe("heddle.goals.incoming")
             ready.set()
             async for data in sub:
                 goal_id = data.get("goal_id")
@@ -429,7 +429,7 @@ class TestProgressCallback:
                     processing_time_ms=10,
                 )
                 await bus.publish(
-                    f"loom.results.{goal_id}",
+                    f"heddle.results.{goal_id}",
                     stage_result.model_dump(mode="json"),
                 )
                 # Small delay to let consumer process.
@@ -443,7 +443,7 @@ class TestProgressCallback:
                     output={"processed": True},
                 )
                 await bus.publish(
-                    f"loom.results.{goal_id}",
+                    f"heddle.results.{goal_id}",
                     final.model_dump(mode="json"),
                 )
                 await sub.unsubscribe()
@@ -477,7 +477,7 @@ class TestProgressCallback:
             name="summarizer",
             kind="worker",
             tool_def={},
-            loom_meta={
+            heddle_meta={
                 "kind": "worker",
                 "worker_type": "summarizer",
                 "tier": "local",
@@ -488,7 +488,7 @@ class TestProgressCallback:
         ready = asyncio.Event()
 
         async def mock_worker():
-            sub = await bus.subscribe("loom.tasks.incoming")
+            sub = await bus.subscribe("heddle.tasks.incoming")
             ready.set()
             async for data in sub:
                 result = TaskResult(
@@ -498,7 +498,7 @@ class TestProgressCallback:
                     output={"summary": "done"},
                 )
                 await bus.publish(
-                    f"loom.results.{data['parent_task_id']}",
+                    f"heddle.results.{data['parent_task_id']}",
                     result.model_dump(mode="json"),
                 )
                 await sub.unsubscribe()
@@ -533,13 +533,13 @@ class TestProgressCallback:
             name="ingest_doc",
             kind="pipeline",
             tool_def={},
-            loom_meta={"kind": "pipeline", "timeout": 5},
+            heddle_meta={"kind": "pipeline", "timeout": 5},
         )
 
         ready = asyncio.Event()
 
         async def mock_pipeline():
-            sub = await bus.subscribe("loom.goals.incoming")
+            sub = await bus.subscribe("heddle.goals.incoming")
             ready.set()
             async for data in sub:
                 goal_id = data.get("goal_id")
@@ -550,7 +550,7 @@ class TestProgressCallback:
                     output={"ok": True},
                 )
                 await bus.publish(
-                    f"loom.results.{goal_id}",
+                    f"heddle.results.{goal_id}",
                     final.model_dump(mode="json"),
                 )
                 await sub.unsubscribe()
@@ -587,7 +587,7 @@ class TestMCPGateway:
             name="tool1",
             kind="worker",
             tool_def={"name": "tool1", "inputSchema": {}},
-            loom_meta={"kind": "worker"},
+            heddle_meta={"kind": "worker"},
         )
         gw = MCPGateway(
             config={"name": "test"},
@@ -672,7 +672,7 @@ class TestHandleCallTool:
         server, _gw = create_server(config_path)
 
         with patch(
-            "loom.mcp.server._dispatch_tool",
+            "heddle.mcp.server._dispatch_tool",
             new_callable=AsyncMock,
         ) as m:
             m.side_effect = BridgeTimeoutError("Timed out after 5s")
@@ -687,7 +687,7 @@ class TestHandleCallTool:
         server, _gw = create_server(config_path)
 
         with patch(
-            "loom.mcp.server._dispatch_tool",
+            "heddle.mcp.server._dispatch_tool",
             new_callable=AsyncMock,
         ) as m:
             m.side_effect = BridgeError("Connection lost")
@@ -702,7 +702,7 @@ class TestHandleCallTool:
         server, _gw = create_server(config_path)
 
         with patch(
-            "loom.mcp.server._dispatch_tool",
+            "heddle.mcp.server._dispatch_tool",
             new_callable=AsyncMock,
         ) as m:
             m.side_effect = RuntimeError("kaboom")
@@ -718,7 +718,7 @@ class TestHandleCallTool:
         server, _gw = create_server(config_path)
 
         with patch(
-            "loom.mcp.server._dispatch_tool",
+            "heddle.mcp.server._dispatch_tool",
             new_callable=AsyncMock,
         ) as m:
             m.return_value = {"summary": "test", "score": 0.9}
@@ -743,11 +743,11 @@ class TestSafeDispatch:
             name="ws_tool",
             kind="workshop",
             tool_def={},
-            loom_meta={"kind": "workshop", "action": "worker.list"},
+            heddle_meta={"kind": "workshop", "action": "worker.list"},
         )
 
         with patch(
-            "loom.mcp.server._dispatch_tool",
+            "heddle.mcp.server._dispatch_tool",
             new_callable=AsyncMock,
         ) as m:
             m.side_effect = WorkshopBridgeError("ConfigManager not configured")
@@ -762,11 +762,11 @@ class TestSafeDispatch:
             name="slow",
             kind="worker",
             tool_def={},
-            loom_meta={"kind": "worker"},
+            heddle_meta={"kind": "worker"},
         )
 
         with patch(
-            "loom.mcp.server._dispatch_tool",
+            "heddle.mcp.server._dispatch_tool",
             new_callable=AsyncMock,
         ) as m:
             m.side_effect = BridgeTimeoutError("5s")
@@ -781,11 +781,11 @@ class TestSafeDispatch:
             name="bad",
             kind="worker",
             tool_def={},
-            loom_meta={"kind": "worker"},
+            heddle_meta={"kind": "worker"},
         )
 
         with patch(
-            "loom.mcp.server._dispatch_tool",
+            "heddle.mcp.server._dispatch_tool",
             new_callable=AsyncMock,
         ) as m:
             m.side_effect = BridgeError("Connection lost")
@@ -800,11 +800,11 @@ class TestSafeDispatch:
             name="crash",
             kind="worker",
             tool_def={},
-            loom_meta={"kind": "worker"},
+            heddle_meta={"kind": "worker"},
         )
 
         with patch(
-            "loom.mcp.server._dispatch_tool",
+            "heddle.mcp.server._dispatch_tool",
             new_callable=AsyncMock,
         ) as m:
             m.side_effect = RuntimeError("kaboom")
@@ -887,7 +887,7 @@ class TestRunStdio:
         gateway.bridge.close = AsyncMock()
 
         with patch.object(server, "run_async", new_callable=AsyncMock) as mock_run:
-            from loom.mcp.server import run_stdio
+            from heddle.mcp.server import run_stdio
 
             run_stdio(server, gateway)
 
@@ -911,7 +911,7 @@ class TestRunStdio:
         gateway.resources = mock_resources
 
         with patch.object(server, "run_async", new_callable=AsyncMock):
-            from loom.mcp.server import run_stdio
+            from heddle.mcp.server import run_stdio
 
             run_stdio(server, gateway)
 
@@ -929,7 +929,7 @@ class TestRunStdio:
         gateway.bridge.connect = AsyncMock()
         gateway.bridge.close = AsyncMock()
 
-        from loom.mcp.server import run_stdio
+        from heddle.mcp.server import run_stdio
 
         server.run_async = AsyncMock(side_effect=RuntimeError("server crash"))
         with pytest.raises(RuntimeError, match="server crash"):
@@ -947,7 +947,7 @@ class TestRunStdio:
         gateway.bridge.close = AsyncMock()
 
         with patch.object(server, "run_async", new_callable=AsyncMock) as mock_run:
-            from loom.mcp.server import run_stdio
+            from heddle.mcp.server import run_stdio
 
             run_stdio(server, gateway)
 
@@ -977,7 +977,7 @@ class TestRunStreamableHTTP:
         gateway.bridge.close = AsyncMock()
 
         with patch.object(server, "run_async", new_callable=AsyncMock) as mock_run:
-            from loom.mcp.server import run_streamable_http
+            from heddle.mcp.server import run_streamable_http
 
             run_streamable_http(server, gateway, host="127.0.0.1", port=9999)
 
@@ -1001,7 +1001,7 @@ class TestRunStreamableHTTP:
         gateway.resources = mock_resources
 
         with patch.object(server, "run_async", new_callable=AsyncMock):
-            from loom.mcp.server import run_streamable_http
+            from heddle.mcp.server import run_streamable_http
 
             run_streamable_http(server, gateway)
 
@@ -1019,7 +1019,7 @@ class TestRunStreamableHTTP:
         gateway.bridge.connect = AsyncMock()
         gateway.bridge.close = AsyncMock()
 
-        from loom.mcp.server import run_streamable_http
+        from heddle.mcp.server import run_streamable_http
 
         server.run_async = AsyncMock(side_effect=RuntimeError("port in use"))
         with pytest.raises(RuntimeError, match="port in use"):
@@ -1037,7 +1037,7 @@ class TestRunStreamableHTTP:
         gateway.bridge.close = AsyncMock()
 
         with patch.object(server, "run_async", new_callable=AsyncMock) as mock_run:
-            from loom.mcp.server import run_streamable_http
+            from heddle.mcp.server import run_streamable_http
 
             run_streamable_http(server, gateway)
 
@@ -1118,7 +1118,7 @@ class TestDispatchToolWorkshop:
             name="workshop.worker.list",
             kind="workshop",
             tool_def={},
-            loom_meta={
+            heddle_meta={
                 "kind": "workshop",
                 "action": "worker.list",
             },
@@ -1146,7 +1146,7 @@ class TestDispatchToolWorkshop:
             name="workshop.worker.list",
             kind="workshop",
             tool_def={},
-            loom_meta={
+            heddle_meta={
                 "kind": "workshop",
                 "action": "worker.list",
             },
@@ -1237,7 +1237,7 @@ class TestExecuteQueryDirect:
             name="docs_filter",
             kind="query",
             tool_def={},
-            loom_meta={
+            heddle_meta={
                 "kind": "query",
                 "worker_type": "docs_query",
                 "action": "filter",
@@ -1276,7 +1276,7 @@ class TestHandleCallToolWorkshopError:
         server, gateway = create_server(config_path)
 
         with patch(
-            "loom.mcp.server._dispatch_tool",
+            "heddle.mcp.server._dispatch_tool",
             new_callable=AsyncMock,
         ) as m:
             m.side_effect = WorkshopBridgeError("ConfigManager not configured")
@@ -1304,10 +1304,10 @@ class TestHandleListToolsAnnotations:
 
         # Inject read_only flag into the registry entry.
         entry = gateway.tool_registry["annotated"]
-        entry.loom_meta["read_only"] = True
+        entry.heddle_meta["read_only"] = True
 
         # Re-register the tool with updated annotations.
-        from loom.mcp.server import _register_tool
+        from heddle.mcp.server import _register_tool
 
         # Remove old tool registration and re-register.
         if hasattr(server, "_tool_manager"):
@@ -1345,7 +1345,7 @@ class TestBuildWorkshopBridgeAppsDir:
 
     def test_apps_dir_nonexistent_is_skipped(self, tmp_path):
         """Non-existent apps_dir produces empty extra_config_dirs."""
-        from loom.mcp.server import _build_workshop_bridge
+        from heddle.mcp.server import _build_workshop_bridge
 
         workshop_config = {
             "configs_dir": str(tmp_path),
@@ -1357,7 +1357,7 @@ class TestBuildWorkshopBridgeAppsDir:
 
     def test_apps_dir_with_app_configs_subdir(self, tmp_path):
         """App subdirs with configs/ are added to extra_config_dirs."""
-        from loom.mcp.server import _build_workshop_bridge
+        from heddle.mcp.server import _build_workshop_bridge
 
         # Set up a fake apps directory with one deployed app.
         apps_dir = tmp_path / "apps"
@@ -1379,7 +1379,7 @@ class TestBuildWorkshopBridgeAppsDir:
 
     def test_apps_dir_app_without_configs_subdir_skipped(self, tmp_path):
         """App subdirs without configs/ are not added."""
-        from loom.mcp.server import _build_workshop_bridge
+        from heddle.mcp.server import _build_workshop_bridge
 
         apps_dir = tmp_path / "apps"
         apps_dir.mkdir()

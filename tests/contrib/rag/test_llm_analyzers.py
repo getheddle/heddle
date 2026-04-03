@@ -10,7 +10,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
-from loom.contrib.rag.analysis.llm_analyzers import (
+from heddle.contrib.rag.analysis.llm_analyzers import (
     AnomalyDetector,
     BaseAnalysisActor,
     CorroborationFinder,
@@ -18,13 +18,13 @@ from loom.contrib.rag.analysis.llm_analyzers import (
     LLMBackend,
     TrendAnalyzer,
 )
-from loom.contrib.rag.schemas.analysis import (
+from heddle.contrib.rag.schemas.analysis import (
     AnalysisType,
     AnomalyType,
     Severity,
 )
-from loom.contrib.rag.schemas.mux import MuxEntry
-from loom.contrib.rag.schemas.post import NormalizedPost
+from heddle.contrib.rag.schemas.mux import MuxEntry
+from heddle.contrib.rag.schemas.post import NormalizedPost
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from loom.worker.tools import (
+from heddle.worker.tools import (
     MAX_TOOL_ROUNDS,
     SyncToolProvider,
     ToolProvider,

@@ -7,7 +7,7 @@ nested objects, and error cases.
 
 import pytest
 
-from loom.worker.runner import _extract_json
+from heddle.worker.runner import _extract_json
 
 # --- Step 1: Direct valid JSON (no fences, no extras) ---
 

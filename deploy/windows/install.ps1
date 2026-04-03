@@ -1,7 +1,7 @@
-# Install Loom as Windows background services using NSSM.
+# Install Heddle as Windows background services using NSSM.
 #
 # Prerequisites:
-#   - Python 3.11+ with loom installed (pip install loom[workshop])
+#   - Python 3.11+ with heddle installed (pip install heddle-ai[workshop])
 #   - NSSM (Non-Sucking Service Manager): choco install nssm
 #   - NATS server running (choco install nats-server, or Docker)
 #
@@ -10,8 +10,8 @@
 #   .\deploy\windows\install.ps1 -Host "0.0.0.0"  # LAN access
 #
 # Services:
-#   - LoomWorkshop: Web UI on port 8080
-#   - LoomRouter: Deterministic task router
+#   - HeddleWorkshop: Web UI on port 8080
+#   - HeddleRouter: Deterministic task router
 #
 # Uninstall: .\deploy\windows\uninstall.ps1
 
@@ -24,7 +24,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "=== Loom Service Installer (Windows) ===" -ForegroundColor Cyan
+Write-Host "=== Heddle Service Installer (Windows) ===" -ForegroundColor Cyan
 Write-Host ""
 
 # ---------------------------------------------------------------------------
@@ -42,9 +42,9 @@ if (-not $SkipChecks) {
     }
 
     # Check for existing services
-    $existingWorkshop = Get-Service -Name "LoomWorkshop" -ErrorAction SilentlyContinue
+    $existingWorkshop = Get-Service -Name "HeddleWorkshop" -ErrorAction SilentlyContinue
     if ($existingWorkshop) {
-        Write-Host "Warning: LoomWorkshop service already exists (status: $($existingWorkshop.Status))." -ForegroundColor Yellow
+        Write-Host "Warning: HeddleWorkshop service already exists (status: $($existingWorkshop.Status))." -ForegroundColor Yellow
         Write-Host "  Run '.\deploy\windows\uninstall.ps1' first to remove the old installation."
         Write-Host ""
     }
@@ -61,26 +61,26 @@ if (-not (Get-Command nssm -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-# Find loom binary
-$LoomBin = (Get-Command loom -ErrorAction SilentlyContinue).Source
-if (-not $LoomBin) {
+# Find heddle binary
+$HeddleBin = (Get-Command heddle -ErrorAction SilentlyContinue).Source
+if (-not $HeddleBin) {
     # Try common Python script locations
     $candidates = @(
-        (Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\Scripts\loom.exe"),
-        (Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\Scripts\loom.exe"),
-        (Join-Path $env:USERPROFILE ".local\bin\loom.exe")
+        (Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\Scripts\heddle.exe"),
+        (Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\Scripts\heddle.exe"),
+        (Join-Path $env:USERPROFILE ".local\bin\heddle.exe")
     )
     foreach ($candidate in $candidates) {
         if (Test-Path $candidate) {
-            $LoomBin = $candidate
+            $HeddleBin = $candidate
             break
         }
     }
-    if (-not $LoomBin) {
-        Write-Host "Error: 'loom' not found in PATH." -ForegroundColor Red
+    if (-not $HeddleBin) {
+        Write-Host "Error: 'heddle' not found in PATH." -ForegroundColor Red
         Write-Host ""
         Write-Host "  Install with:"
-        Write-Host "    pip install loom[workshop]"
+        Write-Host "    pip install heddle-ai[workshop]"
         Write-Host ""
         Write-Host "  Searched paths:"
         foreach ($c in $candidates) {
@@ -90,16 +90,16 @@ if (-not $LoomBin) {
     }
 }
 
-# Verify loom binary works
+# Verify heddle binary works
 try {
-    & $LoomBin --help | Out-Null
+    & $HeddleBin --help | Out-Null
 } catch {
-    Write-Host "Error: '$LoomBin' exists but is not executable." -ForegroundColor Red
-    Write-Host "  Try running: & '$LoomBin' --help"
+    Write-Host "Error: '$HeddleBin' exists but is not executable." -ForegroundColor Red
+    Write-Host "  Try running: & '$HeddleBin' --help"
     exit 1
 }
 
-Write-Host "Binary: $LoomBin"
+Write-Host "Binary: $HeddleBin"
 Write-Host "NATS:   $NatsUrl"
 Write-Host "Workshop: ${Host}:${WorkshopPort}"
 Write-Host ""
@@ -128,11 +128,11 @@ if (-not $SkipChecks) {
 # ---------------------------------------------------------------------------
 
 # Create log directory
-$LogDir = Join-Path $env:LOCALAPPDATA "loom\logs"
+$LogDir = Join-Path $env:LOCALAPPDATA "heddle\logs"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 # Remove existing services if present (clean reinstall)
-foreach ($svc in @("LoomWorkshop", "LoomRouter")) {
+foreach ($svc in @("HeddleWorkshop", "HeddleRouter")) {
     if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
         nssm stop $svc 2>$null
         nssm remove $svc confirm 2>$null
@@ -141,29 +141,29 @@ foreach ($svc in @("LoomWorkshop", "LoomRouter")) {
 }
 
 # --- Workshop service ---
-nssm install LoomWorkshop "$LoomBin" "workshop --host $Host --port $WorkshopPort"
-nssm set LoomWorkshop AppStdout (Join-Path $LogDir "workshop.log")
-nssm set LoomWorkshop AppStderr (Join-Path $LogDir "workshop.err")
-nssm set LoomWorkshop Start SERVICE_AUTO_START
-nssm set LoomWorkshop AppRestartDelay 10000
+nssm install HeddleWorkshop "$HeddleBin" "workshop --host $Host --port $WorkshopPort"
+nssm set HeddleWorkshop AppStdout (Join-Path $LogDir "workshop.log")
+nssm set HeddleWorkshop AppStderr (Join-Path $LogDir "workshop.err")
+nssm set HeddleWorkshop Start SERVICE_AUTO_START
+nssm set HeddleWorkshop AppRestartDelay 10000
 
 # --- Router service ---
-nssm install LoomRouter "$LoomBin" "router --nats-url $NatsUrl"
-nssm set LoomRouter AppStdout (Join-Path $LogDir "router.log")
-nssm set LoomRouter AppStderr (Join-Path $LogDir "router.err")
-nssm set LoomRouter Start SERVICE_AUTO_START
-nssm set LoomRouter AppRestartDelay 10000
+nssm install HeddleRouter "$HeddleBin" "router --nats-url $NatsUrl"
+nssm set HeddleRouter AppStdout (Join-Path $LogDir "router.log")
+nssm set HeddleRouter AppStderr (Join-Path $LogDir "router.err")
+nssm set HeddleRouter Start SERVICE_AUTO_START
+nssm set HeddleRouter AppRestartDelay 10000
 
 # Start services
-nssm start LoomWorkshop
-nssm start LoomRouter
+nssm start HeddleWorkshop
+nssm start HeddleRouter
 
 # ---------------------------------------------------------------------------
 # Post-install health check
 # ---------------------------------------------------------------------------
 
 Write-Host ""
-Write-Host "Loom services installed and started." -ForegroundColor Green
+Write-Host "Heddle services installed and started." -ForegroundColor Green
 
 Start-Sleep -Seconds 2
 try {

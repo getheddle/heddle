@@ -1,6 +1,6 @@
 """Test message schema validation and serialization."""
 
-from loom.core.messages import ModelTier, OrchestratorGoal, TaskMessage, TaskResult, TaskStatus
+from heddle.core.messages import ModelTier, OrchestratorGoal, TaskMessage, TaskResult, TaskStatus
 
 
 def test_task_message_defaults():

@@ -1,5 +1,5 @@
 """
-Tests for loom rag command group — ingest, search, stats, serve.
+Tests for heddle rag command group — ingest, search, stats, serve.
 
 All tests use Click's CliRunner with mocked RAG classes.
 No external services needed.
@@ -13,7 +13,7 @@ import structlog
 from click.testing import CliRunner
 
 _saved_structlog_config = structlog.get_config()
-from loom.cli.rag import rag  # noqa: E402
+from heddle.cli.rag import rag  # noqa: E402
 
 structlog.configure(**_saved_structlog_config)
 
@@ -121,18 +121,18 @@ def _mock_ingest_patches(mock_store, mock_ingestor_factory=None, num_chunks=1):
 
     return [
         patch(
-            "loom.contrib.rag.ingestion.telegram_ingestor.TelegramIngestor",
+            "heddle.contrib.rag.ingestion.telegram_ingestor.TelegramIngestor",
             side_effect=mock_ingestor_factory,
         ),
         patch(
-            "loom.contrib.rag.mux.stream_mux.merge_from_ingestors",
+            "heddle.contrib.rag.mux.stream_mux.merge_from_ingestors",
             return_value=_make_mock_stream(),
         ),
         patch(
-            "loom.contrib.rag.chunker.sentence_chunker.chunk_mux_entry",
+            "heddle.contrib.rag.chunker.sentence_chunker.chunk_mux_entry",
             return_value=_make_mock_chunks(num_chunks),
         ),
-        patch("loom.cli.rag._open_store", return_value=mock_store),
+        patch("heddle.cli.rag._open_store", return_value=mock_store),
     ]
 
 
@@ -214,7 +214,7 @@ def test_rag_ingest_multiple_files(tmp_path):
     patches = _mock_ingest_patches(mock_store, mock_ingestor_factory=make_ingestor)
     # Replace the stream mock to reflect 3 channels
     patches[1] = patch(
-        "loom.contrib.rag.mux.stream_mux.merge_from_ingestors",
+        "heddle.contrib.rag.mux.stream_mux.merge_from_ingestors",
         return_value=_make_mock_stream(num_entries=15, num_channels=3),
     )
     with patches[0], patches[1], patches[2], patches[3]:
@@ -258,7 +258,7 @@ def test_rag_search_prints_results(tmp_path):
     mock_store.search.return_value = [mock_result]
     mock_store.initialize.return_value = mock_store
 
-    with patch("loom.cli.rag._open_store", return_value=mock_store):
+    with patch("heddle.cli.rag._open_store", return_value=mock_store):
         result = CliRunner().invoke(
             rag,
             [
@@ -282,7 +282,7 @@ def test_rag_search_empty_results(tmp_path):
     mock_store.search.return_value = []
     mock_store.initialize.return_value = mock_store
 
-    with patch("loom.cli.rag._open_store", return_value=mock_store):
+    with patch("heddle.cli.rag._open_store", return_value=mock_store):
         result = CliRunner().invoke(
             rag,
             [
@@ -313,7 +313,7 @@ def test_rag_stats_output(tmp_path):
     }
     mock_store.initialize.return_value = mock_store
 
-    with patch("loom.cli.rag._open_store", return_value=mock_store):
+    with patch("heddle.cli.rag._open_store", return_value=mock_store):
         result = CliRunner().invoke(
             rag,
             [
@@ -339,7 +339,7 @@ def test_rag_serve_starts_uvicorn(tmp_path):
 
     mock_app = MagicMock()
     with (
-        patch("loom.workshop.app.create_app", return_value=mock_app),
+        patch("heddle.workshop.app.create_app", return_value=mock_app),
         patch("uvicorn.run") as mock_uvicorn_run,
     ):
         result = CliRunner().invoke(
@@ -365,7 +365,7 @@ def test_rag_serve_passes_rag_params(tmp_path):
     cfg_path.write_text("rag:\n  rag_db_path: /tmp/custom.duckdb\n")
 
     with (
-        patch("loom.workshop.app.create_app", return_value=MagicMock()) as mock_create,
+        patch("heddle.workshop.app.create_app", return_value=MagicMock()) as mock_create,
         patch("uvicorn.run"),
     ):
         result = CliRunner().invoke(

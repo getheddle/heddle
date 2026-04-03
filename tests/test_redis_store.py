@@ -1,7 +1,7 @@
 """
 Test Redis checkpoint store (unit tests, no infrastructure).
 
-Tests the RedisCheckpointStore from loom.contrib.redis.store.
+Tests the RedisCheckpointStore from heddle.contrib.redis.store.
 All Redis interactions are mocked — no running Redis server is needed.
 """
 
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from loom.contrib.redis.store import RedisCheckpointStore
+from heddle.contrib.redis.store import RedisCheckpointStore
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -28,7 +28,7 @@ def mock_redis():
 @pytest.fixture
 def store(mock_redis):
     """Create a RedisCheckpointStore with a mocked redis client."""
-    with patch("loom.contrib.redis.store.redis.from_url", return_value=mock_redis):
+    with patch("heddle.contrib.redis.store.redis.from_url", return_value=mock_redis):
         s = RedisCheckpointStore("redis://localhost:6379")
     return s
 

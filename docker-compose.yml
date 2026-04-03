@@ -1,4 +1,4 @@
-# Loom local development stack
+# Heddle local development stack
 #
 # Start:   docker compose up
 # Stop:    docker compose down
@@ -39,7 +39,7 @@ services:
     environment:
       - NATS_URL=nats://nats:4222
     volumes:
-      - loom-apps:/root/.loom/apps
+      - heddle-apps:/root/.heddle/apps
       - ./configs:/app/configs:ro
     depends_on:
       - nats
@@ -71,4 +71,4 @@ services:
 
 volumes:
   valkey-data:
-  loom-apps:
+  heddle-apps:

@@ -7,27 +7,27 @@ class TestTelegramLiveIngestorConfig:
     """Test configuration and validation (no Telethon needed)."""
 
     def test_extends_ingestor(self):
-        from loom.contrib.rag.ingestion.base import Ingestor
-        from loom.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
+        from heddle.contrib.rag.ingestion.base import Ingestor
+        from heddle.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
 
         assert issubclass(TelegramLiveIngestor, Ingestor)
 
     def test_load_requires_credentials(self):
-        from loom.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
+        from heddle.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
 
         ingestor = TelegramLiveIngestor(channels=["@test"])
         with pytest.raises(ValueError, match="credentials"):
             ingestor.load()
 
     def test_load_requires_channels(self):
-        from loom.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
+        from heddle.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
 
         ingestor = TelegramLiveIngestor(api_id=12345, api_hash="abc123", channels=[])
         with pytest.raises(ValueError, match="channel"):
             ingestor.load()
 
     def test_load_success(self):
-        from loom.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
+        from heddle.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
 
         ingestor = TelegramLiveIngestor(
             channels=["@test"],
@@ -38,7 +38,7 @@ class TestTelegramLiveIngestorConfig:
         assert result is ingestor
 
     def test_status_before_start(self):
-        from loom.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
+        from heddle.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
 
         ingestor = TelegramLiveIngestor(
             channels=["@a", "@b"],
@@ -52,7 +52,7 @@ class TestTelegramLiveIngestorConfig:
         assert status["buffer_size"] == 0
 
     def test_ingest_empty_buffer(self):
-        from loom.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
+        from heddle.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
 
         ingestor = TelegramLiveIngestor(
             channels=["@test"],
@@ -65,8 +65,8 @@ class TestTelegramLiveIngestorConfig:
     def test_ingest_drains_buffer(self):
         from datetime import UTC, datetime
 
-        from loom.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
-        from loom.contrib.rag.schemas.post import NormalizedPost
+        from heddle.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
+        from heddle.contrib.rag.schemas.post import NormalizedPost
 
         ingestor = TelegramLiveIngestor(
             channels=["@test"],
@@ -94,8 +94,8 @@ class TestTelegramLiveIngestorConfig:
     def test_fetch_recent(self):
         from datetime import UTC, datetime
 
-        from loom.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
-        from loom.contrib.rag.schemas.post import NormalizedPost
+        from heddle.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
+        from heddle.contrib.rag.schemas.post import NormalizedPost
 
         ingestor = TelegramLiveIngestor(
             channels=["@test"],
@@ -124,7 +124,7 @@ class TestTelegramLiveIngestorConfig:
         monkeypatch.setenv("TELEGRAM_API_HASH", "env_hash")
         monkeypatch.setenv("TELEGRAM_SESSION", "/tmp/test.session")
 
-        from loom.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
+        from heddle.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
 
         ingestor = TelegramLiveIngestor(channels=["@test"])
         assert ingestor._api_id == 99999
@@ -136,8 +136,8 @@ class TestNormalize:
     """Test shared normalization utilities."""
 
     def test_resolve_editor_profile_override(self):
-        from loom.contrib.rag.ingestion.normalize import resolve_editor_profile
-        from loom.contrib.rag.schemas.post import ChannelBias, ChannelEditorProfile
+        from heddle.contrib.rag.ingestion.normalize import resolve_editor_profile
+        from heddle.contrib.rag.schemas.post import ChannelBias, ChannelEditorProfile
 
         override = ChannelEditorProfile(
             channel_id=1, channel_name="override", bias=ChannelBias.INDEPENDENT, trust_weight=0.9
@@ -146,8 +146,8 @@ class TestNormalize:
         assert result.channel_name == "override"
 
     def test_resolve_editor_profile_from_dict(self):
-        from loom.contrib.rag.ingestion.normalize import resolve_editor_profile
-        from loom.contrib.rag.schemas.post import ChannelBias, ChannelEditorProfile
+        from heddle.contrib.rag.ingestion.normalize import resolve_editor_profile
+        from heddle.contrib.rag.schemas.post import ChannelBias, ChannelEditorProfile
 
         profiles = {
             42: ChannelEditorProfile(
@@ -158,7 +158,7 @@ class TestNormalize:
         assert result.channel_name == "dict"
 
     def test_resolve_editor_profile_default(self):
-        from loom.contrib.rag.ingestion.normalize import resolve_editor_profile
+        from heddle.contrib.rag.ingestion.normalize import resolve_editor_profile
 
         result = resolve_editor_profile(999, "fallback")
         assert result.channel_name == "fallback"

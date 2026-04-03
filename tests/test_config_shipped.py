@@ -15,13 +15,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from loom.core.config import (
+from heddle.core.config import (
     validate_orchestrator_config,
     validate_pipeline_config,
     validate_router_rules,
     validate_worker_config,
 )
-from loom.scheduler.config import validate_scheduler_config
+from heddle.scheduler.config import validate_scheduler_config
 
 # Root of the configs directory (relative to repo root).
 CONFIGS_DIR = Path(__file__).parent.parent / "configs"
@@ -166,7 +166,7 @@ _MCP_CONFIGS = sorted(CONFIGS_DIR.glob("mcp/*.yaml"))
 )
 def test_mcp_config_valid(config_path: Path):
     """Every shipped MCP config must pass validation."""
-    from loom.mcp.config import validate_mcp_config
+    from heddle.mcp.config import validate_mcp_config
 
     cfg = _load_yaml(config_path)
     errors = validate_mcp_config(cfg, config_path)

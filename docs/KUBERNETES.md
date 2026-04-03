@@ -1,14 +1,14 @@
 # Kubernetes Deployment
 
-**Loom — Lightweight Orchestrated Operational Mesh**
+**Heddle — Lightweight Orchestrated Operational Mesh**
 
 ---
 
 ## Overview
 
-Loom ships with Kubernetes manifests in `k8s/` that are ready for Minikube.
+Heddle ships with Kubernetes manifests in `k8s/` that are ready for Minikube.
 The manifests deploy NATS, Valkey, the router, an orchestrator, and worker
-pods into a dedicated `loom` namespace.
+pods into a dedicated `heddle` namespace.
 
 ---
 
@@ -27,18 +27,18 @@ Build images inside Minikube's Docker daemon so they're available to pods
 without a registry:
 
 ```bash
-docker build -f docker/Dockerfile.worker -t loom-worker:latest .
-docker build -f docker/Dockerfile.router -t loom-router:latest .
-docker build -f docker/Dockerfile.orchestrator -t loom-orchestrator:latest .
-docker build -f docker/Dockerfile.workshop -t loom-workshop:latest .
+docker build -f docker/Dockerfile.worker -t heddle-worker:latest .
+docker build -f docker/Dockerfile.router -t heddle-router:latest .
+docker build -f docker/Dockerfile.orchestrator -t heddle-orchestrator:latest .
+docker build -f docker/Dockerfile.workshop -t heddle-workshop:latest .
 ```
 
 ### Create Namespace and Secrets
 
 ```bash
-kubectl create namespace loom
-kubectl create secret generic loom-secrets \
-  --namespace loom \
+kubectl create namespace heddle
+kubectl create secret generic heddle-secrets \
+  --namespace heddle \
   --from-literal=anthropic-api-key="$ANTHROPIC_API_KEY"
 ```
 
@@ -46,7 +46,7 @@ kubectl create secret generic loom-secrets \
 
 ```bash
 kubectl apply -k k8s/
-kubectl get pods -n loom -w
+kubectl get pods -n heddle -w
 ```
 
 ### Access Workshop
@@ -55,7 +55,7 @@ The Workshop is exposed via NodePort on port 30080:
 
 ```bash
 # Minikube
-minikube service loom-workshop -n loom
+minikube service heddle-workshop -n heddle
 
 # Or access directly
 open http://$(minikube ip):30080
@@ -67,13 +67,13 @@ open http://$(minikube ip):30080
 
 ```text
 k8s/
-├── namespace.yaml              # loom namespace
+├── namespace.yaml              # heddle namespace
 ├── nats-deployment.yaml        # NATS server
 ├── redis-deployment.yaml       # Valkey server
-├── router-deployment.yaml      # Loom router
-├── orchestrator-deployment.yaml # Loom orchestrator
-├── worker-deployment.yaml      # Loom worker(s)
-├── workshop-deployment.yaml    # Loom Workshop web UI (NodePort 30080)
+├── router-deployment.yaml      # Heddle router
+├── orchestrator-deployment.yaml # Heddle orchestrator
+├── worker-deployment.yaml      # Heddle worker(s)
+├── workshop-deployment.yaml    # Heddle Workshop web UI (NodePort 30080)
 └── kustomization.yaml          # Kustomize overlay
 ```
 
@@ -141,7 +141,7 @@ resources:
 
 ## Health Checks
 
-Loom actors are long-running async processes. Use liveness and readiness
+Heddle actors are long-running async processes. Use liveness and readiness
 probes to detect stuck or unresponsive actors:
 
 ```yaml
@@ -165,12 +165,12 @@ as part of the liveness probe.
 
 ## Horizontal Scaling
 
-Loom actors scale horizontally via NATS queue groups with zero code changes.
+Heddle actors scale horizontally via NATS queue groups with zero code changes.
 Multiple replicas of the same actor type automatically load-balance.
 
 ```bash
 # Scale workers manually
-kubectl scale deployment/loom-worker --replicas=5 -n loom
+kubectl scale deployment/heddle-worker --replicas=5 -n heddle
 ```
 
 ### HPA Auto-Scaling
@@ -181,13 +181,13 @@ Use Horizontal Pod Autoscaler for CPU-based scaling:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: loom-worker-hpa
-  namespace: loom
+  name: heddle-worker-hpa
+  namespace: heddle
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: loom-worker
+    name: heddle-worker
   minReplicas: 1
   maxReplicas: 10
   metrics:
@@ -213,7 +213,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: redis-data
-  namespace: loom
+  namespace: heddle
 spec:
   accessModes: [ReadWriteOnce]
   resources:

@@ -6,15 +6,15 @@ import json
 
 import pytest
 
-from loom.worker.backends import LLMBackend
-from loom.workshop.db import WorkshopDB
-from loom.workshop.eval_runner import (
+from heddle.worker.backends import LLMBackend
+from heddle.workshop.db import WorkshopDB
+from heddle.workshop.eval_runner import (
     EvalRunner,
     _score_exact_match,
     _score_field_match,
     _score_llm_judge,
 )
-from loom.workshop.test_runner import WorkerTestRunner
+from heddle.workshop.test_runner import WorkerTestRunner
 
 # ---------------------------------------------------------------------------
 # Mock backend

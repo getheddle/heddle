@@ -1,5 +1,5 @@
 """
-Tests for loom.contrib.docproc — document extraction backends.
+Tests for heddle.contrib.docproc — document extraction backends.
 
 Tests the MarkItDown and SmartExtractor backends with mocked dependencies.
 Docling tests are skipped if torch is not installed (CI-friendly).
@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from loom.contrib.docproc.contracts import ExtractorInput, ExtractorOutput
+from heddle.contrib.docproc.contracts import ExtractorInput, ExtractorOutput
 
 # ---------------------------------------------------------------------------
 # Pydantic contracts
@@ -60,7 +60,7 @@ class TestMarkItDownBackend:
 
     def test_extraction_success(self, tmp_path):
         """Successful extraction produces expected output structure."""
-        from loom.contrib.docproc.markitdown_backend import MarkItDownBackend
+        from heddle.contrib.docproc.markitdown_backend import MarkItDownBackend
 
         # Create a source file
         source = tmp_path / "test.pdf"
@@ -104,7 +104,7 @@ class TestMarkItDownBackend:
 
     def test_missing_file_raises(self, tmp_path):
         """Missing source file raises FileNotFoundError."""
-        from loom.contrib.docproc.markitdown_backend import MarkItDownBackend
+        from heddle.contrib.docproc.markitdown_backend import MarkItDownBackend
 
         backend = MarkItDownBackend(workspace_dir=str(tmp_path))
         with pytest.raises(FileNotFoundError):
@@ -115,7 +115,7 @@ class TestMarkItDownBackend:
 
     def test_path_traversal_raises(self, tmp_path):
         """Path traversal in file_ref is rejected."""
-        from loom.contrib.docproc.markitdown_backend import MarkItDownBackend
+        from heddle.contrib.docproc.markitdown_backend import MarkItDownBackend
 
         backend = MarkItDownBackend(workspace_dir=str(tmp_path))
         with pytest.raises(ValueError, match="traversal"):
@@ -126,7 +126,7 @@ class TestMarkItDownBackend:
 
     def test_conversion_error_wrapped(self, tmp_path):
         """MarkItDown errors are wrapped in MarkItDownConversionError."""
-        from loom.contrib.docproc.markitdown_backend import (
+        from heddle.contrib.docproc.markitdown_backend import (
             MarkItDownBackend,
             MarkItDownConversionError,
         )
@@ -160,8 +160,8 @@ class TestSmartExtractorBackend:
     """Test SmartExtractorBackend with mocked inner backends."""
 
     def _make_backend(self, tmp_path):
-        from loom.contrib.docproc.markitdown_backend import MarkItDownBackend
-        from loom.contrib.docproc.smart_extractor import SmartExtractorBackend
+        from heddle.contrib.docproc.markitdown_backend import MarkItDownBackend
+        from heddle.contrib.docproc.smart_extractor import SmartExtractorBackend
 
         backend = SmartExtractorBackend(workspace_dir=str(tmp_path))
         mock_mit = MagicMock(spec=MarkItDownBackend)
@@ -237,7 +237,7 @@ class TestSmartExtractorBackend:
 
     def test_lazy_init(self):
         """Inner backends are not created until first use."""
-        from loom.contrib.docproc.smart_extractor import SmartExtractorBackend
+        from heddle.contrib.docproc.smart_extractor import SmartExtractorBackend
 
         backend = SmartExtractorBackend()
         assert backend._markitdown is None
@@ -259,7 +259,7 @@ class TestShippedWorkerConfigs:
     def _validate_config(self, path: Path) -> list[str]:
         import yaml
 
-        from loom.core.config import validate_worker_config
+        from heddle.core.config import validate_worker_config
 
         with path.open() as f:
             config = yaml.safe_load(f)

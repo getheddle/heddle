@@ -6,13 +6,13 @@ building on the last.
 
 **What you'll learn:**
 
-| Phase | What you build | Loom concepts |
+| Phase | What you build | Heddle concepts |
 |-------|---------------|---------------|
 | 1 | A claim extractor you can test immediately | Worker configs, Workshop test bench, eval suites |
 | 2 | A three-stage review pipeline | Pipeline configs, stage dependencies, input mappings |
 | 3 | Blind adversarial review with parallel branches | Knowledge silos, blind workers, parallel stages, synthesis |
 
-**Prerequisites:** Loom installed and configured (`loom setup` completed).
+**Prerequisites:** Heddle installed and configured (`heddle setup` completed).
 If you haven't done this yet, see the [Getting Started](../GETTING_STARTED.md) guide.
 
 ---
@@ -31,16 +31,16 @@ extracted the claims will rubber-stamp them when asked to review.
 This tutorial builds a pipeline that solves each problem in a separate,
 testable step.
 
-## How It Maps to Loom
+## How It Maps to Heddle
 
-| What you want | Loom concept | Why |
+| What you want | Heddle concept | Why |
 |---------------|-------------|-----|
 | "Extract the claims from this paper" | **Worker** with an extraction prompt | One worker = one job. Focused prompts produce better output than general-purpose ones. |
 | "Check whether the methodology supports the claims" | **Second worker**, different prompt | A separate worker can apply different criteria without the extraction context contaminating its judgment. |
 | "Summarize the review" | **Third worker** in a pipeline | The summarizer sees structured output from prior stages, not raw text. |
 | "Get a genuinely independent opinion" | **Blind worker** (empty knowledge silo) | A worker with no access to domain knowledge can't pattern-match against the analytical frame. It evaluates from first principles. |
 | "Did my prompt change make things better?" | **Workshop eval suite** | Run the same test cases before and after. Compare scores. No guessing. |
-| "Run extraction → review → summary automatically" | **Pipeline config** | Define the stages in YAML. Loom handles the data flow and parallelism. |
+| "Run extraction → review → summary automatically" | **Pipeline config** | Define the stages in YAML. Heddle handles the data flow and parallelism. |
 
 ---
 
@@ -65,10 +65,10 @@ abstract — it flags gaps.
 
 ### Step 1: Set up the example
 
-Copy the example configs into your Loom project:
+Copy the example configs into your Heddle project:
 
 ```bash
-# From your loom directory
+# From your heddle directory
 cp -r examples/research-review/phase-1/workers/claim_extractor.yaml \
       configs/workers/claim_extractor.yaml
 ```
@@ -170,7 +170,7 @@ Take a moment to read the config. Notice:
 - **`system_prompt`** is the only instructions the LLM sees. It defines
   INPUT FORMAT, OUTPUT FORMAT, and RULES — three sections that keep the
   worker focused.
-- **`input_schema`** and **`output_schema`** are JSON Schema. Loom
+- **`input_schema`** and **`output_schema`** are JSON Schema. Heddle
   validates input *before* calling the LLM and output *after*. If either
   fails, you get a clear error — not garbage output.
 - **`default_model_tier: "standard"`** means this worker uses Claude
@@ -182,7 +182,7 @@ Take a moment to read the config. Notice:
 Before testing, check that the config is well-formed:
 
 ```bash
-loom validate configs/workers/claim_extractor.yaml
+heddle validate configs/workers/claim_extractor.yaml
 ```
 
 You should see:
@@ -199,7 +199,7 @@ is mixing tabs and spaces.
 Start Workshop:
 
 ```bash
-loom workshop
+heddle workshop
 ```
 
 Open `http://localhost:8080` in your browser. You'll see `claim_extractor`
@@ -232,7 +232,7 @@ You'll see structured JSON output with:
 
 **Try different tiers.** Switch to `local` and run the same abstract. Then
 `frontier`. Compare: Does the local model miss claims? Does the frontier
-model catch more unstated concerns? This comparison is a core Loom
+model catch more unstated concerns? This comparison is a core Heddle
 workflow — the tier system exists to make it trivial.
 
 ### Step 4: Run the eval suite
@@ -310,13 +310,13 @@ automatically from one stage to the next.
   (extract claims)    (check the evidence)      (write the report)
 ```
 
-### Loom concepts introduced
+### Heddle concepts introduced
 
 - **Pipeline config** — a YAML file defining stages, their order, and
   how data flows between them
 - **Input mappings** — how one stage's output becomes the next stage's
   input (dot-notation paths like `extract.output.claims`)
-- **Stage dependencies** — Loom infers the execution order from the
+- **Stage dependencies** — Heddle infers the execution order from the
   input mappings. If stage B reads from stage A's output, A runs first.
   Stages that don't depend on each other run in parallel automatically.
 - **Pipeline editor** — Workshop's visual graph of stage dependencies
@@ -389,7 +389,7 @@ pipeline_stages:
 
 Read the `input_mapping` entries. `claims: "extract.output.claims"` means
 "take the `claims` field from the `extract` stage's output and pass it
-as the `claims` input to this stage." Loom sees that `review` references
+as the `claims` input to this stage." Heddle sees that `review` references
 `extract.output.*` and infers the dependency: `extract` must finish
 before `review` starts.
 
@@ -400,7 +400,7 @@ chain is strictly sequential: extract → review → summarize.
 Validate the pipeline:
 
 ```bash
-loom validate configs/orchestrators/research_review.yaml
+heddle validate configs/orchestrators/research_review.yaml
 ```
 
 ### Step 4: Test the pipeline in Workshop
@@ -412,7 +412,7 @@ dependency graph — three stages in a straight line.
 To test, you can submit a goal through the pipeline editor or via CLI:
 
 ```bash
-loom submit "Review this paper" \
+heddle submit "Review this paper" \
     --context text="<paste abstract here>" \
     --context domain="public health"
 ```
@@ -443,7 +443,7 @@ structural problem: the methodology reviewer reads the same claims that
 the extractor produced. If the extractor framed a weak claim favorably,
 the reviewer is primed to accept that framing.
 
-Phase 3 fixes this with Loom's blind audit pattern — the same approach
+Phase 3 fixes this with Heddle's blind audit pattern — the same approach
 used in the [Adversarial Review](../BLIND_AUDIT.md) guide, applied to
 research review.
 
@@ -468,7 +468,7 @@ the sighted and blind reviewers disagree. Those disagreements are the
 most valuable output — they're where the original framing may have hidden
 a weakness.
 
-### Loom concepts introduced
+### Heddle concepts introduced
 
 - **Knowledge silos** — the blind reviewer has an empty `knowledge_silos`
   list. It cannot access domain-specific reference material.
@@ -561,14 +561,14 @@ now has five stages with parallel branches:
     neutralized_claims: "neutralize.output.neutralized_claims"
 ```
 
-Loom sees that `sighted_review` and `neutralize` both depend only on
+Heddle sees that `sighted_review` and `neutralize` both depend only on
 `extract` — not on each other. They run concurrently. `blind_review`
 waits for `neutralize`. `synthesize` waits for everything.
 
 Validate:
 
 ```bash
-loom validate configs/orchestrators/research_review_blind.yaml
+heddle validate configs/orchestrators/research_review_blind.yaml
 ```
 
 ### Step 5: Compare sighted vs. blind results
@@ -609,12 +609,12 @@ three independent reviews to merge. Where all three agree on a problem,
 you have high confidence. Where they disagree, you have something
 worth investigating.
 
-This is a natural use of Loom's tier system — the infrastructure for
+This is a natural use of Heddle's tier system — the infrastructure for
 running the same prompt against different models already exists.
 
 ### Idea 2: Batch Processing with RAG
 
-Ingest a collection of papers into Loom's vector store, then run the
+Ingest a collection of papers into Heddle's vector store, then run the
 review pipeline on each one. After individual reviews are complete,
 use a goal-decomposition orchestrator to synthesize cross-paper findings:
 "What methodological patterns appear across these 20 papers? Where do

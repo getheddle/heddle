@@ -6,13 +6,13 @@ three phases, each building on the last.
 
 **What you'll learn:**
 
-| Phase | What you build | Loom concepts |
+| Phase | What you build | Heddle concepts |
 |-------|---------------|---------------|
 | 1 | A comment classifier you can test immediately | Worker configs, Workshop test bench, eval suites |
 | 2 | A four-stage intake pipeline with a custom CSV reader | ProcessingBackend, processor workers, pipelines with mixed worker types |
 | 3 | Bias detection with blind and sighted audit paths | Blind workers, parallel pipeline branches, sighted vs. blind analysis |
 
-**Prerequisites:** Loom installed and configured (`loom setup` completed).
+**Prerequisites:** Heddle installed and configured (`heddle setup` completed).
 If you haven't done this yet, see the [Getting Started](../GETTING_STARTED.md) guide.
 
 ---
@@ -36,9 +36,9 @@ topics. You can't check unless you explicitly audit the results.
 This tutorial builds a pipeline that solves each problem in a separate,
 testable, auditable step.
 
-## How It Maps to Loom
+## How It Maps to Heddle
 
-| What you want | Loom concept | Why |
+| What you want | Heddle concept | Why |
 |---------------|-------------|-----|
 | "Sort these comments into categories" | **Worker** with a classification prompt | One worker = one job. The classifier doesn't try to extract or summarize. |
 | "Read my CSV file" | **Processor worker** with a custom backend | Non-LLM work (reading files) gets its own worker type. Same I/O contracts. |
@@ -47,7 +47,7 @@ testable, auditable step.
 | "Is the classifier biased?" | **Blind worker** (sees classifications but not text) | It can spot statistical patterns without being influenced by the content. |
 | "Are similar comments treated consistently?" | **Sighted reviewer** (sees both text and classifications) | It can catch content-level inconsistencies the blind worker can't. |
 | "Did my prompt change make things better?" | **Workshop eval suite** | Run test cases before and after. Compare scores. |
-| "Run the whole thing automatically" | **Pipeline config** | Define stages in YAML. Loom handles the data flow. |
+| "Run the whole thing automatically" | **Pipeline config** | Define stages in YAML. Heddle handles the data flow. |
 
 ---
 
@@ -70,7 +70,7 @@ returns:
 
 ### Step 1: Set up the example
 
-Copy the example config into your Loom project:
+Copy the example config into your Heddle project:
 
 ```bash
 cp examples/document-intake/phase-1/workers/comment_classifier.yaml \
@@ -84,7 +84,7 @@ Open the config and read through it. A few things to notice:
 categories built in. This is a design choice — a built-in taxonomy works
 better when the categories are stable and domain-specific.
 
-**`stance` uses an enum in the output schema.** Loom will reject any
+**`stance` uses an enum in the output schema.** Heddle will reject any
 output where `stance` isn't one of the five valid values. This catches
 cases where the LLM invents a stance like "mostly supportive."
 
@@ -95,8 +95,8 @@ the classification stage.
 ### Step 2: Validate and test
 
 ```bash
-loom validate configs/workers/comment_classifier.yaml
-loom workshop
+heddle validate configs/workers/comment_classifier.yaml
+heddle workshop
 ```
 
 Open `http://localhost:8080`, find `comment_classifier`, click **Test**.
@@ -166,10 +166,10 @@ four workers into a pipeline that processes a CSV of comments end-to-end.
 
 The first stage is a **processor worker** — it runs Python code, not an
 LLM. The CSV reader is a custom `ProcessingBackend` that you write (~40
-lines of Python). This demonstrates that Loom pipelines can mix LLM and
+lines of Python). This demonstrates that Heddle pipelines can mix LLM and
 non-LLM work.
 
-### Loom concepts introduced
+### Heddle concepts introduced
 
 **Processor workers** run a Python class instead of calling an LLM. The
 worker config says `worker_kind: "processor"` and points to a class that
@@ -183,7 +183,7 @@ same `output_schema`.
 and returns all rows as structured records. The key insight: backends
 inherit from `SyncProcessingBackend`, which automatically offloads the
 synchronous `process_sync` call to a thread pool. Write blocking code;
-Loom handles the async.
+Heddle handles the async.
 
 **Batch-aware workers** — the Phase 2 classifier and extractor take
 arrays of records instead of single items. In Phase 1 you tested
@@ -193,7 +193,7 @@ at once, so downstream workers handle the full batch.
 **Input mappings** — the pipeline config specifies how data flows between
 stages using dot-notation paths. `records: "read_csv.output.records"`
 means "take the `records` field from the `read_csv` stage's output."
-Loom infers dependencies from these paths — if stage B reads from stage
+Heddle infers dependencies from these paths — if stage B reads from stage
 A's output, A must complete first.
 
 ### Step 1: Understand the CSV reader
@@ -224,14 +224,14 @@ required. The contract validation works exactly the same way.
 ```bash
 cp examples/document-intake/phase-2/workers/*.yaml configs/workers/
 cp examples/document-intake/phase-2/orchestrators/*.yaml configs/orchestrators/
-loom validate configs/workers/csv_reader.yaml
-loom validate configs/workers/entity_extractor.yaml
-loom validate configs/workers/batch_summarizer.yaml
-loom validate configs/orchestrators/document_intake.yaml
+heddle validate configs/workers/csv_reader.yaml
+heddle validate configs/workers/entity_extractor.yaml
+heddle validate configs/workers/batch_summarizer.yaml
+heddle validate configs/orchestrators/document_intake.yaml
 ```
 
 For the `CsvReaderBackend` to be importable, ensure the `processing/`
-directory is on your Python path. If running from the loom project root:
+directory is on your Python path. If running from the heddle project root:
 
 ```bash
 export PYTHONPATH="${PYTHONPATH}:examples/document-intake"
@@ -246,7 +246,7 @@ Open `configs/orchestrators/document_intake.yaml`. Four stages:
    context (values you provide when submitting the pipeline).
 
 2. **`classify`** — LLM worker. `records: "read_csv.output.records"`
-   creates a dependency on `read_csv`. Loom waits for `read_csv` to
+   creates a dependency on `read_csv`. Heddle waits for `read_csv` to
    finish before starting `classify`.
 
 3. **`extract`** — LLM worker. Reads from both `read_csv.output.records`
@@ -272,7 +272,7 @@ by pasting a few records as JSON arrays.
 With NATS running and workers deployed:
 
 ```bash
-loom submit "Process comments" \
+heddle submit "Process comments" \
     --context source_path="examples/document-intake/sample-data/public_comments.csv" \
     --context text_column="text" \
     --context description="Mixed-use development proposal at former Millbrook factory site"
@@ -323,7 +323,7 @@ Three paths run in parallel after classification:
 - The **fairness review** checks consistency with full context — it
   catches content-level misclassifications
 
-### Loom concepts introduced
+### Heddle concepts introduced
 
 **Blind workers** — the `blind_bias_auditor` has `knowledge_silos: []`
 and its input mapping gives it only the classification results, never
@@ -341,7 +341,7 @@ reviewers catch different kinds of problems.
 **Parallel pipeline branches** — after `classify` completes, three stages
 run concurrently: `extract`, `bias_audit`, and `fairness_review`. None of
 them depend on each other — they all depend only on `classify` (and
-`read_csv`). Loom infers this parallelism automatically from the
+`read_csv`). Heddle infers this parallelism automatically from the
 `input_mapping` paths.
 
 ### Step 1: Create the blind bias auditor
@@ -401,7 +401,7 @@ concurrently:
     classifications: "classify.output.classifications"
 ```
 
-Loom sees that `extract`, `bias_audit`, and `fairness_review` all
+Heddle sees that `extract`, `bias_audit`, and `fairness_review` all
 reference `classify.output.*` but none reference each other. It runs
 them in parallel automatically.
 
@@ -441,25 +441,25 @@ assurance. Here are two directions to push it further:
 
 ### Idea 1: Custom Ingestor for RAG
 
-Write a simple `Ingestor` subclass that feeds the CSV data into Loom's
+Write a simple `Ingestor` subclass that feeds the CSV data into Heddle's
 RAG pipeline vector store. This enables semantic search across all
 processed comments: "Find all comments that mention traffic concerns
 near the proposed site" — returning results ranked by relevance, not
 just keyword matching.
 
 This requires implementing the `Ingestor` ABC from
-`loom.contrib.rag.ingestion` and registering it as a new ingestor type.
+`heddle.contrib.rag.ingestion` and registering it as a new ingestor type.
 The CSV reader backend you already built handles the file parsing — the
 ingestor wraps it with normalization and chunking for vector storage.
 
 ### Idea 2: Scheduled Monitoring
 
-Set up Loom's scheduler to watch a folder for new CSV drops and
+Set up Heddle's scheduler to watch a folder for new CSV drops and
 automatically run the intake pipeline. Each morning, planning staff
 would find a fresh summary report covering any new comments received
 overnight.
 
-This uses Loom's scheduler component with a cron-style trigger and
+This uses Heddle's scheduler component with a cron-style trigger and
 file-watching logic in a custom backend. The pipeline itself doesn't
 change — scheduling is infrastructure, not workflow.
 

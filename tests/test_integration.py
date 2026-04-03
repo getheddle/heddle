@@ -1,7 +1,7 @@
 """
 Integration test: submit a task via NATS -> worker processes it -> result arrives.
 
-This test validates the full message round-trip through the Loom actor mesh:
+This test validates the full message round-trip through the Heddle actor mesh:
   1. Connect to NATS and subscribe to the results subject.
   2. Publish a TaskMessage directly to a worker's subject (bypassing the
      router for test isolation).
@@ -17,9 +17,9 @@ Skip during default runs:
 
 Prerequisites:
     - NATS running on localhost:4222
-    - A summarizer worker subscribed to ``loom.tasks.summarizer.local``::
+    - A summarizer worker subscribed to ``heddle.tasks.summarizer.local``::
 
-        loom worker --config configs/workers/summarizer.yaml \\
+        heddle worker --config configs/workers/summarizer.yaml \\
                     --tier local --nats-url nats://localhost:4222
 
 NOTE: Without infrastructure the test will fail — this is expected.
@@ -35,7 +35,7 @@ import time
 import nats as nats_lib
 import pytest
 
-from loom.core.messages import ModelTier, TaskMessage, TaskResult
+from heddle.core.messages import ModelTier, TaskMessage, TaskResult
 
 # ---------------------------------------------------------------------------
 # Configuration constants
@@ -44,7 +44,7 @@ from loom.core.messages import ModelTier, TaskMessage, TaskResult
 NATS_URL = "nats://localhost:4222"
 
 # Maximum number of seconds to wait for the worker to return a result.
-# Override via the LOOM_INTEGRATION_TIMEOUT env-var if needed (see fixture).
+# Override via the HEDDLE_INTEGRATION_TIMEOUT env-var if needed (see fixture).
 DEFAULT_TIMEOUT_SECONDS: float = 15.0
 
 # How often (in seconds) we check whether a result has arrived.
@@ -62,7 +62,7 @@ async def test_roundtrip():
     """Full NATS round-trip: publish a task and poll until the result arrives.
 
     The test publishes a ``TaskMessage`` for the *summarizer* worker on the
-    ``local`` tier and then polls the ``loom.results.*`` wildcard subscription
+    ``local`` tier and then polls the ``heddle.results.*`` wildcard subscription
     until either:
 
     * A result message is received (success path), or
@@ -79,12 +79,12 @@ async def test_roundtrip():
     results: list[dict] = []
 
     async def _on_result(msg) -> None:
-        """Callback invoked by NATS when a message arrives on loom.results.*."""
+        """Callback invoked by NATS when a message arrives on heddle.results.*."""
         results.append(json.loads(msg.data.decode()))
 
     # Subscribe to the wildcard results subject so we capture any result
     # regardless of goal_id.
-    await nc.subscribe("loom.results.*", cb=_on_result)
+    await nc.subscribe("heddle.results.*", cb=_on_result)
 
     # -- 2. Build and publish the task --------------------------------------
     task = TaskMessage(
@@ -98,7 +98,7 @@ async def test_roundtrip():
     # Publish directly to the worker subject, bypassing the router.
     # This keeps the test focused on the worker round-trip.
     await nc.publish(
-        "loom.tasks.summarizer.local",
+        "heddle.tasks.summarizer.local",
         json.dumps(task.model_dump(mode="json")).encode(),
     )
 

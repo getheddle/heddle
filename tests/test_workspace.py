@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from loom.core.workspace import WorkspaceManager
+from heddle.core.workspace import WorkspaceManager
 
 
 @pytest.fixture

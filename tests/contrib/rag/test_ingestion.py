@@ -1,4 +1,4 @@
-"""Unit tests for loom.contrib.rag.ingestion.telegram_ingestor."""
+"""Unit tests for heddle.contrib.rag.ingestion.telegram_ingestor."""
 
 import json
 import tempfile
@@ -23,7 +23,7 @@ def _make_export(messages: list[dict], channel_name: str = "test", channel_id: i
 
 class TestTelegramIngestor:
     def test_basic_ingestion(self):
-        from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+        from heddle.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
 
         path = _make_export(
             [
@@ -50,7 +50,7 @@ class TestTelegramIngestor:
         assert posts[0].global_id == "99:1"
 
     def test_skip_service_messages(self):
-        from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+        from heddle.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
 
         path = _make_export(
             [
@@ -75,7 +75,7 @@ class TestTelegramIngestor:
         assert len(posts) == 1
 
     def test_skip_short_messages(self):
-        from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+        from heddle.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
 
         path = _make_export(
             [
@@ -93,7 +93,7 @@ class TestTelegramIngestor:
         assert len(posts) == 0
 
     def test_polymorphic_text(self):
-        from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+        from heddle.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
 
         path = _make_export(
             [
@@ -112,13 +112,13 @@ class TestTelegramIngestor:
         assert "bold" in posts[0].text_raw
 
     def test_file_not_found(self):
-        from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+        from heddle.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
 
         with pytest.raises(FileNotFoundError):
             TelegramIngestor("/nonexistent/path.json").load()
 
     def test_reactions_extracted(self):
-        from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+        from heddle.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
 
         path = _make_export(
             [
@@ -141,7 +141,7 @@ class TestTelegramIngestor:
         assert posts[0].reaction_breakdown["\U0001f44d"] == 10
 
     def test_forwarded_detection(self):
-        from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+        from heddle.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
 
         path = _make_export(
             [
@@ -161,8 +161,8 @@ class TestTelegramIngestor:
         assert posts[0].forwarded_from == "other_channel"
 
     def test_default_profiles(self):
-        from loom.contrib.rag.ingestion.telegram_ingestor import DEFAULT_PROFILES
-        from loom.contrib.rag.schemas.post import ChannelBias
+        from heddle.contrib.rag.ingestion.telegram_ingestor import DEFAULT_PROFILES
+        from heddle.contrib.rag.schemas.post import ChannelBias
 
         # FarsNews
         assert 1006939659 in DEFAULT_PROFILES
@@ -176,7 +176,7 @@ class TestTelegramIngestor:
 
 class TestIngestorProperties:
     def test_channel_properties(self):
-        from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+        from heddle.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
 
         path = _make_export(
             [

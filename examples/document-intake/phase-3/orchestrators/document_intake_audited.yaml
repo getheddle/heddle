@@ -15,7 +15,7 @@
 #   2. blind_bias_auditor (sees only classifications, not text)
 #   3. fairness_reviewer (sees both text and classifications)
 #
-# Loom infers the parallelism automatically:
+# Heddle infers the parallelism automatically:
 #   - extract depends on read_csv + classify
 #   - blind_bias_auditor depends on classify
 #   - fairness_reviewer depends on read_csv + classify

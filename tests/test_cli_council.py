@@ -1,5 +1,5 @@
 """
-Tests for loom council command group — run, validate.
+Tests for heddle council command group — run, validate.
 
 All tests use Click's CliRunner with mocked backends and runner.
 No external services needed.
@@ -13,7 +13,7 @@ import structlog
 from click.testing import CliRunner
 
 _saved_structlog_config = structlog.get_config()
-from loom.cli.council import council  # noqa: E402
+from heddle.cli.council import council  # noqa: E402
 
 structlog.configure(**_saved_structlog_config)
 
@@ -47,7 +47,7 @@ def _make_council_config_yaml() -> str:
 
 def _make_mock_result(**overrides):
     """Create a mock CouncilResult."""
-    from loom.contrib.council.schemas import CouncilResult
+    from heddle.contrib.council.schemas import CouncilResult
 
     defaults = {
         "topic": "Test topic",
@@ -106,10 +106,10 @@ def test_run_with_topic_string(tmp_path):
 
     with (
         patch(
-            "loom.worker.backends.build_backends_from_env",
+            "heddle.worker.backends.build_backends_from_env",
             return_value={"standard": MagicMock()},
         ),
-        patch("loom.contrib.council.runner.CouncilRunner", return_value=mock_runner),
+        patch("heddle.contrib.council.runner.CouncilRunner", return_value=mock_runner),
     ):
         result = CliRunner().invoke(
             council,
@@ -137,10 +137,10 @@ def test_run_with_topic_file(tmp_path):
 
     with (
         patch(
-            "loom.worker.backends.build_backends_from_env",
+            "heddle.worker.backends.build_backends_from_env",
             return_value={"standard": MagicMock()},
         ),
-        patch("loom.contrib.council.runner.CouncilRunner", return_value=mock_runner),
+        patch("heddle.contrib.council.runner.CouncilRunner", return_value=mock_runner),
     ):
         result = CliRunner().invoke(
             council,
@@ -166,10 +166,10 @@ def test_run_with_output(tmp_path):
 
     with (
         patch(
-            "loom.worker.backends.build_backends_from_env",
+            "heddle.worker.backends.build_backends_from_env",
             return_value={"standard": MagicMock()},
         ),
-        patch("loom.contrib.council.runner.CouncilRunner", return_value=mock_runner),
+        patch("heddle.contrib.council.runner.CouncilRunner", return_value=mock_runner),
     ):
         result = CliRunner().invoke(
             council,
@@ -197,11 +197,11 @@ def test_run_with_rounds_override(tmp_path):
 
     with (
         patch(
-            "loom.worker.backends.build_backends_from_env",
+            "heddle.worker.backends.build_backends_from_env",
             return_value={"standard": MagicMock()},
         ),
-        patch("loom.contrib.council.config.load_council_config") as mock_load,
-        patch("loom.contrib.council.runner.CouncilRunner", return_value=mock_runner),
+        patch("heddle.contrib.council.config.load_council_config") as mock_load,
+        patch("heddle.contrib.council.runner.CouncilRunner", return_value=mock_runner),
     ):
         agent_a, agent_b = MagicMock(), MagicMock()
         agent_a.name = "agent_a"
@@ -234,11 +234,11 @@ def test_run_with_no_convergence(tmp_path):
 
     with (
         patch(
-            "loom.worker.backends.build_backends_from_env",
+            "heddle.worker.backends.build_backends_from_env",
             return_value={"standard": MagicMock()},
         ),
-        patch("loom.contrib.council.config.load_council_config") as mock_load,
-        patch("loom.contrib.council.runner.CouncilRunner", return_value=mock_runner),
+        patch("heddle.contrib.council.config.load_council_config") as mock_load,
+        patch("heddle.contrib.council.runner.CouncilRunner", return_value=mock_runner),
     ):
         agent_a, agent_b = MagicMock(), MagicMock()
         agent_a.name = "agent_a"
@@ -265,7 +265,7 @@ def test_run_no_backends(tmp_path):
     cfg = tmp_path / "council.yaml"
     cfg.write_text(_make_council_config_yaml())
 
-    with patch("loom.worker.backends.build_backends_from_env", return_value={}):
+    with patch("heddle.worker.backends.build_backends_from_env", return_value={}):
         result = CliRunner().invoke(
             council,
             ["run", str(cfg), "--topic", "Test"],

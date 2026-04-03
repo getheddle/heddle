@@ -24,16 +24,16 @@ from typing import Any
 import pytest
 import yaml
 
-from loom.bus.memory import InMemoryBus
-from loom.core.messages import (
+from heddle.bus.memory import InMemoryBus
+from heddle.core.messages import (
     OrchestratorGoal,
     TaskMessage,
     TaskResult,
     TaskStatus,
 )
-from loom.orchestrator.runner import GoalState, OrchestratorActor
-from loom.orchestrator.store import InMemoryCheckpointStore
-from loom.worker.backends import LLMBackend
+from heddle.orchestrator.runner import GoalState, OrchestratorActor
+from heddle.orchestrator.store import InMemoryCheckpointStore
+from heddle.worker.backends import LLMBackend
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -219,7 +219,7 @@ class TestHandleMessage:
 
             goal_data = _make_goal_data()
             goal_id = goal_data["goal_id"]
-            sub = await bus.subscribe(f"loom.results.{goal_id}")
+            sub = await bus.subscribe(f"heddle.results.{goal_id}")
 
             await actor.handle_message(goal_data)
 
@@ -538,11 +538,11 @@ class TestFullLifecycle:
             goal_id = goal_data["goal_id"]
 
             # Subscribe for the final result
-            result_sub = await bus.subscribe(f"loom.results.{goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal_id}")
 
             # Pre-subscribe the worker BEFORE handle_message starts.
             # This mirrors real deployments where workers are already running.
-            worker_sub = await bus.subscribe("loom.tasks.incoming")
+            worker_sub = await bus.subscribe("heddle.tasks.incoming")
             ready = asyncio.Event()
 
             async def worker_simulator():
@@ -562,7 +562,7 @@ class TestFullLifecycle:
                         token_usage={"prompt_tokens": 10, "completion_tokens": 5},
                     )
                     await bus.publish(
-                        f"loom.results.{task.parent_task_id}",
+                        f"heddle.results.{task.parent_task_id}",
                         result.model_dump(mode="json"),
                     )
                     await worker_sub.unsubscribe()
@@ -611,7 +611,7 @@ class TestFullLifecycle:
             # max_concurrent_tasks defaults to 5 from _write_config
 
             # Subscribe to tasks to count how many were dispatched
-            task_sub = await bus.subscribe("loom.tasks.incoming")
+            task_sub = await bus.subscribe("heddle.tasks.incoming")
 
             goal_data = _make_goal_data("Process many chunks")
             await actor.handle_message(goal_data)
@@ -652,7 +652,7 @@ class TestFullLifecycle:
 
             goal_data = _make_goal_data("This will fail")
             goal_id = goal_data["goal_id"]
-            result_sub = await bus.subscribe(f"loom.results.{goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal_id}")
 
             await actor.handle_message(goal_data)
 
@@ -687,10 +687,10 @@ class TestFullLifecycle:
 
             goal_data = _make_goal_data("Partial timeout test")
             goal_id = goal_data["goal_id"]
-            result_sub = await bus.subscribe(f"loom.results.{goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal_id}")
 
             # Pre-subscribe the worker before handle_message
-            worker_sub = await bus.subscribe("loom.tasks.incoming")
+            worker_sub = await bus.subscribe("heddle.tasks.incoming")
 
             # Worker only responds to first task
             async def partial_worker():
@@ -707,7 +707,7 @@ class TestFullLifecycle:
                     processing_time_ms=10,
                 )
                 await bus.publish(
-                    f"loom.results.{task.parent_task_id}",
+                    f"heddle.results.{task.parent_task_id}",
                     result.model_dump(mode="json"),
                 )
                 # Don't respond to remaining tasks — let timeout fire
@@ -935,7 +935,7 @@ class TestHandleMessageExceptionPath:
 
             goal_data = _make_goal_data("Exception test")
             goal_id = goal_data["goal_id"]
-            result_sub = await bus.subscribe(f"loom.results.{goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal_id}")
 
             # Patch _dispatch_subtasks to raise an unexpected exception.
             async def _boom(*args, **kwargs):
@@ -1000,7 +1000,7 @@ class TestCollectResultsEarlyExit:
                     output={"summary": "done"},
                 )
                 await bus.publish(
-                    f"loom.results.{goal.goal_id}",
+                    f"heddle.results.{goal.goal_id}",
                     result.model_dump(mode="json"),
                 )
 

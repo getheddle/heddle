@@ -9,23 +9,23 @@
 #   worker_kind: "llm"       — Calls an LLM backend to process tasks (default)
 #   worker_kind: "processor"  — Runs a Python processing backend (no LLM)
 #
-# Component:  src/loom/worker/runner.py (LLMWorker) or
-#             src/loom/worker/processor.py (ProcessorWorker)
-# Loaded by:  loom.core.config.load_config()
-# Validated:  loom.core.contracts.py (I/O schema enforcement)
+# Component:  src/heddle/worker/runner.py (LLMWorker) or
+#             src/heddle/worker/processor.py (ProcessorWorker)
+# Loaded by:  heddle.core.config.load_config()
+# Validated:  heddle.core.contracts.py (I/O schema enforcement)
 #
 # Run LLM workers with:
-#   loom worker --config configs/workers/my_worker.yaml --tier local
-#   loom worker --config configs/workers/my_worker.yaml --tier standard --nats-url nats://localhost:4222
+#   heddle worker --config configs/workers/my_worker.yaml --tier local
+#   heddle worker --config configs/workers/my_worker.yaml --tier standard --nats-url nats://localhost:4222
 #
 # Run processor workers with:
-#   loom processor --config configs/workers/my_processor.yaml
-#   loom processor --config configs/workers/my_processor.yaml --nats-url nats://localhost:4222
+#   heddle processor --config configs/workers/my_processor.yaml
+#   heddle processor --config configs/workers/my_processor.yaml --nats-url nats://localhost:4222
 #
 # NATS subject convention:
-#   loom.tasks.{name}.{tier}    — Workers subscribe here (with queue groups)
-#   loom.results.{goal_id}      — Results flow back to orchestrators
-#   loom.tasks.dead_letter      — Unroutable/rate-limited tasks
+#   heddle.tasks.{name}.{tier}    — Workers subscribe here (with queue groups)
+#   heddle.results.{goal_id}      — Results flow back to orchestrators
+#   heddle.tasks.dead_letter      — Unroutable/rate-limited tasks
 #
 # Related configs:
 #   configs/router_rules.yaml              — tier overrides & rate limits
@@ -107,17 +107,17 @@ system_prompt: |
 
 # processing_backend (str, required for processor workers)
 # Fully qualified Python class path. The class must extend
-# loom.worker.processor.SyncProcessingBackend and implement:
+# heddle.worker.processor.SyncProcessingBackend and implement:
 #   process(payload: dict) -> dict
 #
 # The process() method receives the validated input payload and must return
 # a dict matching output_schema.
 #
 # Built-in backends:
-#   loom.contrib.rag.backends.IngestorBackend    — Telegram JSON parsing
-#   loom.contrib.rag.backends.MuxBackend         — Stream multiplexing
-#   loom.contrib.rag.backends.ChunkerBackend     — Sentence chunking
-#   loom.contrib.rag.backends.VectorStoreBackend — DuckDB vector storage
+#   heddle.contrib.rag.backends.IngestorBackend    — Telegram JSON parsing
+#   heddle.contrib.rag.backends.MuxBackend         — Stream multiplexing
+#   heddle.contrib.rag.backends.ChunkerBackend     — Sentence chunking
+#   heddle.contrib.rag.backends.VectorStoreBackend — DuckDB vector storage
 #
 # (Only used when worker_kind: "processor". Omit for LLM workers.)
 # processing_backend: "mypackage.backends.MyBackend"
@@ -126,7 +126,7 @@ system_prompt: |
 # Keyword arguments passed to the backend constructor as **kwargs.
 # Example for a workspace-aware backend:
 # backend_config:
-#   workspace_dir: "/tmp/loom-workspace"
+#   workspace_dir: "/tmp/heddle-workspace"
 #   max_retries: 3
 
 
@@ -192,7 +192,7 @@ output_schema:
 # at dispatch time, regardless of what the TaskMessage or this default says.
 #
 # For processor workers, the tier is still used for NATS subject routing
-# (loom.tasks.{name}.{tier}) even though no LLM is called.
+# (heddle.tasks.{name}.{tier}) even though no LLM is called.
 default_model_tier: "standard"
 
 # max_input_tokens (int, optional)
@@ -254,10 +254,10 @@ knowledge_sources: []
 #     path: "configs/knowledge/domain_terms/"
 #     description: "Domain terminology and abbreviations"
 #   - type: "folder_readwrite"
-#     path: "/tmp/loom-workspace/accumulated/"
+#     path: "/tmp/heddle-workspace/accumulated/"
 #     description: "Accumulated analysis results"
 #   - type: "tool"
-#     tool_provider: "loom.contrib.duckdb.vector_tool.DuckDBVectorTool"
+#     tool_provider: "heddle.contrib.duckdb.vector_tool.DuckDBVectorTool"
 #     tool_config:
 #       db_path: "/tmp/rag-vectors.duckdb"
 #       embedding_model: "nomic-embed-text"
@@ -274,8 +274,8 @@ knowledge_sources: []
 # into the payload before building the LLM prompt.
 #
 # Security: path traversal protection is enforced by WorkspaceManager
-# (src/loom/core/workspace.py). Paths like "../../../etc/passwd" are rejected.
-# workspace_dir: "/tmp/loom-workspace"
+# (src/heddle/core/workspace.py). Paths like "../../../etc/passwd" are rejected.
+# workspace_dir: "/tmp/heddle-workspace"
 
 # resolve_file_refs (list[str], optional)
 # List of payload field names that contain file references (filenames).
@@ -283,7 +283,7 @@ knowledge_sources: []
 #   1. Reads workspace_dir/{field_value} as JSON
 #   2. Adds "{field}_content" key to the payload with the parsed data
 # Example: resolve_file_refs: ["file_ref"] with payload {"file_ref": "data.json"}
-#   → reads /tmp/loom-workspace/data.json → adds "file_ref_content" to payload.
+#   → reads /tmp/heddle-workspace/data.json → adds "file_ref_content" to payload.
 # resolve_file_refs: ["file_ref"]
 
 

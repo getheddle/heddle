@@ -1,5 +1,5 @@
 # Worker deployments — one per worker_type.
-# Each subscribes to loom.tasks.{worker_type}.{tier} with a queue group,
+# Each subscribes to heddle.tasks.{worker_type}.{tier} with a queue group,
 # enabling horizontal scaling via NATS competing consumers.
 #
 # To add a new worker type:
@@ -16,22 +16,22 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: worker-summarizer
-  namespace: loom
+  namespace: heddle
 spec:
   replicas: 2        # Scale horizontally — competing consumers via NATS queue group
   selector:
     matchLabels:
-      app: loom-worker
+      app: heddle-worker
       worker-type: summarizer
   template:
     metadata:
       labels:
-        app: loom-worker
+        app: heddle-worker
         worker-type: summarizer
     spec:
       containers:
         - name: worker
-          image: loom-worker:latest
+          image: heddle-worker:latest
           imagePullPolicy: Never
           env:
             - name: WORKER_CONFIG
@@ -45,7 +45,7 @@ spec:
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: loom-secrets
+                  name: heddle-secrets
                   key: anthropic-api-key
                   optional: true
           resources:
@@ -61,22 +61,22 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: worker-classifier
-  namespace: loom
+  namespace: heddle
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: loom-worker
+      app: heddle-worker
       worker-type: classifier
   template:
     metadata:
       labels:
-        app: loom-worker
+        app: heddle-worker
         worker-type: classifier
     spec:
       containers:
         - name: worker
-          image: loom-worker:latest
+          image: heddle-worker:latest
           imagePullPolicy: Never
           env:
             - name: WORKER_CONFIG
@@ -90,7 +90,7 @@ spec:
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: loom-secrets
+                  name: heddle-secrets
                   key: anthropic-api-key
                   optional: true
           resources:
@@ -106,22 +106,22 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: worker-extractor
-  namespace: loom
+  namespace: heddle
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: loom-worker
+      app: heddle-worker
       worker-type: extractor
   template:
     metadata:
       labels:
-        app: loom-worker
+        app: heddle-worker
         worker-type: extractor
     spec:
       containers:
         - name: worker
-          image: loom-worker:latest
+          image: heddle-worker:latest
           imagePullPolicy: Never
           env:
             - name: WORKER_CONFIG
@@ -133,7 +133,7 @@ spec:
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: loom-secrets
+                  name: heddle-secrets
                   key: anthropic-api-key
           resources:
             requests:

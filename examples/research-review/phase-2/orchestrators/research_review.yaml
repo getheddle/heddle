@@ -5,7 +5,7 @@
 # Three-stage pipeline: extract claims → review methodology → summarize.
 # Data flows automatically between stages via input_mapping paths.
 #
-# Loom infers the execution order from the mappings:
+# Heddle infers the execution order from the mappings:
 #   - "review" reads from "extract.output.*" → extract runs first
 #   - "summarize" reads from both "extract.output.*" and "review.output.*"
 #     → summarize runs after both extract and review
@@ -14,14 +14,14 @@
 # this pipeline is strictly sequential. Phase 3 adds parallel branches.
 #
 # Run in Workshop (no NATS needed):
-#   loom workshop → Pipeline List → research_review → test
+#   heddle workshop → Pipeline List → research_review → test
 #
 # Run with NATS:
-#   loom pipeline --config configs/orchestrators/research_review.yaml \
+#   heddle pipeline --config configs/orchestrators/research_review.yaml \
 #                 --nats-url nats://localhost:4222
 #
 # Submit a goal:
-#   loom submit "Review this paper" --context text="<paper text here>"
+#   heddle submit "Review this paper" --context text="<paper text here>"
 #
 # Part of: examples/research-review/
 # Tutorial: docs/tutorials/research-review.md

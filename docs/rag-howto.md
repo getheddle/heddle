@@ -2,7 +2,7 @@
 
 ## Overview
 
-`loom.contrib.rag` is a contrib module for processing social media streams (currently Telegram channels) through a multi-stage pipeline: ingest, normalize, multiplex, chunk, embed, and analyze.
+`heddle.contrib.rag` is a contrib module for processing social media streams (currently Telegram channels) through a multi-stage pipeline: ingest, normalize, multiplex, chunk, embed, and analyze.
 
 It is designed for Persian/RTL text but works with any language.
 
@@ -13,29 +13,29 @@ The fastest way to use the RAG pipeline — no Python code needed:
 ```bash
 # 1. Install and configure
 uv sync --extra rag
-uv run loom setup                    # interactive wizard
+uv run heddle setup                    # interactive wizard
 
 # 2. Ingest Telegram exports
-uv run loom rag ingest /path/to/exports/result*.json
+uv run heddle rag ingest /path/to/exports/result*.json
 
 # 3. Search
-uv run loom rag search "earthquake damage reports" --limit 10
+uv run heddle rag search "earthquake damage reports" --limit 10
 
 # 4. Check statistics
-uv run loom rag stats
+uv run heddle rag stats
 
 # 5. Open the web dashboard
-uv run loom rag serve --port 8080
+uv run heddle rag serve --port 8080
 ```
 
 Use `--store lancedb` for ANN search on larger datasets:
 
 ```bash
 uv sync --extra lancedb
-uv run loom rag --store lancedb ingest /path/to/exports/*.json
+uv run heddle rag --store lancedb ingest /path/to/exports/*.json
 ```
 
-See the [CLI Reference](CLI_REFERENCE.md#loom-rag-group) for all options.
+See the [CLI Reference](CLI_REFERENCE.md#heddle-rag-group) for all options.
 
 ## Installation
 
@@ -88,11 +88,11 @@ For programmatic access — use the RAG classes directly without CLI or infrastr
 
 ```python
 from datetime import timedelta
-from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
-from loom.contrib.rag.mux.stream_mux import merge_from_ingestors
-from loom.contrib.rag.schemas.mux import MuxWindowConfig
-from loom.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_mux_entry
-from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+from heddle.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+from heddle.contrib.rag.mux.stream_mux import merge_from_ingestors
+from heddle.contrib.rag.schemas.mux import MuxWindowConfig
+from heddle.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_mux_entry
+from heddle.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
 
 # 1. Ingest
 ingestors = [
@@ -130,7 +130,7 @@ store.close()
 
 ## Module Reference
 
-### Schemas (`loom.contrib.rag.schemas`)
+### Schemas (`heddle.contrib.rag.schemas`)
 
 All data models are Pydantic v2 BaseModels.
 
@@ -154,12 +154,12 @@ All data models are Pydantic v2 BaseModels.
 | `AnomalyFlag` | `schemas.analysis` | Statistical or semantic anomaly |
 | `ExtractedData` | `schemas.analysis` | Structured data extraction results |
 
-### Ingestion (`loom.contrib.rag.ingestion`)
+### Ingestion (`heddle.contrib.rag.ingestion`)
 
 **Ingestor ABC** — All ingestors extend `Ingestor` from `ingestion/base.py`:
 
 ```python
-from loom.contrib.rag.ingestion.base import Ingestor
+from heddle.contrib.rag.ingestion.base import Ingestor
 
 class MyIngestor(Ingestor):
     def load(self) -> "MyIngestor": ...
@@ -170,7 +170,7 @@ class MyIngestor(Ingestor):
 **TelegramIngestor** — Parses Telegram Desktop JSON exports.
 
 ```python
-from loom.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+from heddle.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
 
 ingestor = TelegramIngestor(
     source_path="result.json",
@@ -196,7 +196,7 @@ Handles:
 **DEFAULT_PROFILES** — Pre-configured channel bias profiles:
 
 ```python
-from loom.contrib.rag.ingestion.telegram_ingestor import DEFAULT_PROFILES
+from heddle.contrib.rag.ingestion.telegram_ingestor import DEFAULT_PROFILES
 
 # FarsNews: state_media, trust_weight=0.3
 # Iranwire: independent, trust_weight=0.8
@@ -204,12 +204,12 @@ from loom.contrib.rag.ingestion.telegram_ingestor import DEFAULT_PROFILES
 # Factnameh: fact_check, trust_weight=0.9
 ```
 
-### Text Normalization (`loom.contrib.rag.tools`)
+### Text Normalization (`heddle.contrib.rag.tools`)
 
 **RTL Normalizer** — Persian/Arabic text normalization:
 
 ```python
-from loom.contrib.rag.tools.rtl_normalizer import normalize
+from heddle.contrib.rag.tools.rtl_normalizer import normalize
 
 result = normalize(text)
 result.text          # normalized text
@@ -224,7 +224,7 @@ Features: ZWNJ preservation, Arabic-to-Persian character substitution (ي→ی, 
 **Temporal Batcher** — Time-window utilities:
 
 ```python
-from loom.contrib.rag.tools.temporal_batcher import (
+from heddle.contrib.rag.tools.temporal_batcher import (
     tumbling_windows, sliding_windows, daily_windows, describe_windows,
 )
 
@@ -234,12 +234,12 @@ windows = sliding_windows(items, duration=timedelta(hours=6), step=timedelta(hou
 windows = daily_windows(items, tz_offset_hours=3.5)  # Iran Standard Time
 ```
 
-### Stream Multiplexer (`loom.contrib.rag.mux`)
+### Stream Multiplexer (`heddle.contrib.rag.mux`)
 
 **StreamMux** — Merges multiple channel streams into chronological order with window assignment:
 
 ```python
-from loom.contrib.rag.mux.stream_mux import StreamMux, merge_from_ingestors
+from heddle.contrib.rag.mux.stream_mux import StreamMux, merge_from_ingestors
 
 # Manual usage
 mux = StreamMux()
@@ -260,12 +260,12 @@ stream.windows()        # dict[str, list[MuxEntry]]
 stream.window("w1")     # list[MuxEntry] for specific window
 ```
 
-### Chunker (`loom.contrib.rag.chunker`)
+### Chunker (`heddle.contrib.rag.chunker`)
 
 **SentenceChunker** — Persian-aware text chunking:
 
 ```python
-from loom.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post, chunk_mux_entry
+from heddle.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_post, chunk_mux_entry
 
 cfg = ChunkConfig(
     target_chars=400,     # soft target
@@ -283,12 +283,12 @@ chunks = chunk_mux_entry(entry, config=cfg)
 
 Splitting strategy: paragraphs first, then sentences (handles Persian sentence-enders), then fixed-char fallback.
 
-### Vector Store (`loom.contrib.rag.vectorstore`)
+### Vector Store (`heddle.contrib.rag.vectorstore`)
 
 **DuckDBVectorStore** — Embedded vector database:
 
 ```python
-from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+from heddle.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
 
 store = DuckDBVectorStore(
     db_path="/tmp/rag.duckdb",
@@ -320,7 +320,7 @@ Uses `list_cosine_similarity` (not `array_cosine_similarity`) because DuckDB `FL
 **LanceDBVectorStore** — ANN vector database (faster search for large datasets):
 
 ```python
-from loom.contrib.lancedb.store import LanceDBVectorStore
+from heddle.contrib.lancedb.store import LanceDBVectorStore
 
 store = LanceDBVectorStore(
     db_path="/tmp/rag.lance",
@@ -341,16 +341,16 @@ Install: `uv sync --extra lancedb`
 ```yaml
 # In worker YAML config
 backend_config:
-  store_class: "loom.contrib.lancedb.store.LanceDBVectorStore"
+  store_class: "heddle.contrib.lancedb.store.LanceDBVectorStore"
   db_path: "/tmp/rag-vectors.lance"
 ```
 
-### Live Telegram Capture (`loom.contrib.rag.ingestion.telegram_live`)
+### Live Telegram Capture (`heddle.contrib.rag.ingestion.telegram_live`)
 
 **TelegramLiveIngestor** — Monitors Telegram channels in real-time via Telethon:
 
 ```python
-from loom.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
+from heddle.contrib.rag.ingestion.telegram_live import TelegramLiveIngestor
 
 ingestor = TelegramLiveIngestor(
     channels=["@farsna", "@IranIntl_Fa"],
@@ -372,12 +372,12 @@ await ingestor.stop()
 Requires: `uv sync --extra telegram` and Telegram API credentials
 (`TELEGRAM_API_ID`, `TELEGRAM_API_HASH` env vars).
 
-### Analysis Actors (`loom.contrib.rag.analysis`)
+### Analysis Actors (`heddle.contrib.rag.analysis`)
 
 LLM-powered analysis actors for trend detection, cross-channel corroboration, anomaly detection, and data extraction.
 
 ```python
-from loom.contrib.rag.analysis.llm_analyzers import (
+from heddle.contrib.rag.analysis.llm_analyzers import (
     LLMBackend, TrendAnalyzer, CorroborationFinder,
     AnomalyDetector, DataExtractor,
 )
@@ -406,11 +406,11 @@ extractor = DataExtractor(backend)
 data = extractor.analyze(window_entries, ...)
 ```
 
-## Loom Pipeline Integration
+## Heddle Pipeline Integration
 
-The RAG module includes Loom backend wrappers and YAML configs for running as distributed Loom workers.
+The RAG module includes Heddle backend wrappers and YAML configs for running as distributed Heddle workers.
 
-### Backend Wrappers (`loom.contrib.rag.backends`)
+### Backend Wrappers (`heddle.contrib.rag.backends`)
 
 | Backend | Worker Type | Wraps |
 |---------|------------|-------|
@@ -432,25 +432,25 @@ rag_vectorstore_lance.yaml   # Vector store operations (LanceDB)
 rag_trend_analyzer.yaml # LLM trend analysis
 ```
 
-### Running with Loom Infrastructure
+### Running with Heddle Infrastructure
 
 ```bash
 # Start NATS
 docker run -p 4222:4222 nats:latest
 
 # Start router
-loom router --nats-url nats://localhost:4222
+heddle router --nats-url nats://localhost:4222
 
 # Start workers
-loom processor --config configs/workers/rag_ingestor.yaml --nats-url nats://localhost:4222
-loom processor --config configs/workers/rag_chunker.yaml --nats-url nats://localhost:4222
-loom processor --config configs/workers/rag_vectorstore.yaml --nats-url nats://localhost:4222
+heddle processor --config configs/workers/rag_ingestor.yaml --nats-url nats://localhost:4222
+heddle processor --config configs/workers/rag_chunker.yaml --nats-url nats://localhost:4222
+heddle processor --config configs/workers/rag_vectorstore.yaml --nats-url nats://localhost:4222
 
 # Start pipeline
-loom pipeline --config configs/orchestrators/rag_pipeline.yaml --nats-url nats://localhost:4222
+heddle pipeline --config configs/orchestrators/rag_pipeline.yaml --nats-url nats://localhost:4222
 
 # Submit work
-loom submit "Ingest telegram export" \
+heddle submit "Ingest telegram export" \
   --context source_path=/data/exports/result-1.json \
   --nats-url nats://localhost:4222
 ```
@@ -470,8 +470,8 @@ Each stage maps outputs to the next stage's inputs via `input_mapping`.
 To support a new data source, extend the `Ingestor` ABC:
 
 ```python
-from loom.contrib.rag.ingestion.base import Ingestor
-from loom.contrib.rag.schemas.post import NormalizedPost, Language
+from heddle.contrib.rag.ingestion.base import Ingestor
+from heddle.contrib.rag.schemas.post import NormalizedPost, Language
 
 class MyIngestor(Ingestor):
     def __init__(self, source_path: str):
@@ -552,9 +552,9 @@ python examples/rag_demo.py --embed
 ## File Layout
 
 ```text
-src/loom/contrib/rag/
+src/heddle/contrib/rag/
   __init__.py
-  backends.py                    # Loom SyncProcessingBackend wrappers (configurable classes)
+  backends.py                    # Heddle SyncProcessingBackend wrappers (configurable classes)
   schemas/
     __init__.py                  # Re-exports all public schemas
     post.py                      # NormalizedPost, Language, ChannelBias
@@ -587,7 +587,7 @@ src/loom/contrib/rag/
     rtl_normalizer.py            # normalize(), Persian/RTL text processing
     temporal_batcher.py          # tumbling_windows, sliding_windows, daily_windows
 
-src/loom/contrib/lancedb/
+src/heddle/contrib/lancedb/
   __init__.py
   store.py                       # LanceDBVectorStore(VectorStore) — ANN search
   tool.py                        # LanceDBVectorTool — LLM function-calling tool

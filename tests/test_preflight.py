@@ -1,5 +1,5 @@
 """
-Tests for CLI pre-flight checks (loom.cli.preflight).
+Tests for CLI pre-flight checks (heddle.cli.preflight).
 
 All NATS connectivity tests use mocks — no infrastructure needed.
 Environment variable tests use monkeypatch for isolation.
@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from loom.cli.preflight import check_config_readable, check_env_vars, check_nats_connectivity
+from heddle.cli.preflight import check_config_readable, check_env_vars, check_nats_connectivity
 
 # ---------------------------------------------------------------------------
 # check_nats_connectivity
@@ -25,7 +25,7 @@ async def test_nats_connectivity_success():
     mock_nc = AsyncMock()
     mock_nc.drain = AsyncMock()
 
-    with patch("loom.cli.preflight.nats_lib") as mock_nats:
+    with patch("heddle.cli.preflight.nats_lib") as mock_nats:
         mock_nats.connect = AsyncMock(return_value=mock_nc)
         ok, msg = await check_nats_connectivity("nats://localhost:4222")
 
@@ -37,7 +37,7 @@ async def test_nats_connectivity_success():
 @pytest.mark.asyncio
 async def test_nats_connectivity_failure():
     """Failed NATS connection returns (False, message with fix suggestion)."""
-    with patch("loom.cli.preflight.nats_lib") as mock_nats:
+    with patch("heddle.cli.preflight.nats_lib") as mock_nats:
         mock_nats.connect = AsyncMock(side_effect=ConnectionRefusedError("refused"))
         ok, msg = await check_nats_connectivity("nats://localhost:4222", timeout=1.0)
 

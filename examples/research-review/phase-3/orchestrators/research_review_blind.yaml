@@ -8,7 +8,7 @@
 #             │                                    ├──► synthesize
 #             └──► neutralize ──► blind_review ───┘
 #
-# Loom infers the execution plan from input_mapping paths:
+# Heddle infers the execution plan from input_mapping paths:
 #   - sighted_review depends on extract (reads extract.output.*)
 #   - neutralize depends on extract (reads extract.output.*)
 #   - blind_review depends on neutralize (reads neutralize.output.*)

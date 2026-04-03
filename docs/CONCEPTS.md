@@ -1,8 +1,8 @@
-# Concepts — How Loom Works
+# Concepts — How Heddle Works
 
 ## The big idea
 
-Instead of cramming everything into one giant AI prompt, Loom splits work into
+Instead of cramming everything into one giant AI prompt, Heddle splits work into
 small, focused steps. Each step does one thing well — summarize, classify,
 extract entities, convert a PDF. Steps can run in parallel, use different AI
 models, and be tested independently.
@@ -43,7 +43,7 @@ There are two flavors:
 Each step processes one task and resets. No state carries between tasks —
 this keeps things predictable and testable.
 
-> Loom terminology: steps are called **workers**.
+> Heddle terminology: steps are called **workers**.
 
 ### Workflows (pipelines)
 
@@ -59,15 +59,15 @@ A **workflow** chains steps together so data flows from one to the next:
 ```
 
 - Steps that don't depend on each other run **in parallel** automatically.
-- Loom figures out the dependencies from your configuration — you don't
+- Heddle figures out the dependencies from your configuration — you don't
   need to wire them by hand.
 - If a step fails, the workflow reports which step broke and why.
 
-> Loom terminology: workflows are called **pipelines**.
+> Heddle terminology: workflows are called **pipelines**.
 
 ### Models
 
-Loom supports three tiers of AI model. Each step can use a different one:
+Heddle supports three tiers of AI model. Each step can use a different one:
 
 | Tier | What it is | Best for | Cost |
 |------|-----------|----------|------|
@@ -78,14 +78,14 @@ Loom supports three tiers of AI model. Each step can use a different one:
 The rule of thumb: use the cheapest model that does the job well. Reserve
 frontier for the hard stuff.
 
-> Loom terminology: this is called the **model tier**.
+> Heddle terminology: this is called the **model tier**.
 
 ### The message bus (you can skip this)
 
-When running in production, Loom connects its pieces through a message bus
+When running in production, Heddle connects its pieces through a message bus
 (NATS). You do **not** need to understand this to get started:
 
-- **For development:** Workshop and `loom rag` work without it.
+- **For development:** Workshop and `heddle rag` work without it.
 - **For production:** NATS connects workers, the router, and orchestrators
   so they can scale independently.
 
@@ -93,7 +93,7 @@ Come back to this when you need to deploy to a team or run continuously.
 
 ---
 
-## Two ways to use Loom
+## Two ways to use Heddle
 
 ### Direct mode (no infrastructure)
 
@@ -101,23 +101,23 @@ The fastest path. No servers, no message bus, no containers.
 
 ```bash
 # 1. Set up (interactive wizard — detects Ollama, sets paths)
-uv run loom setup
+uv run heddle setup
 
 # 2. Ingest data
-uv run loom rag ingest /path/to/data/*.json
+uv run heddle rag ingest /path/to/data/*.json
 
 # 3. Search
-uv run loom rag search "earthquake damage reports"
+uv run heddle rag search "earthquake damage reports"
 
 # 4. Open the web dashboard
-uv run loom rag serve
+uv run heddle rag serve
 ```
 
 You also get **Workshop**, a web UI for building and testing individual
 steps without any infrastructure:
 
 ```bash
-uv run loom workshop --port 8080
+uv run heddle workshop --port 8080
 ```
 
 Best for: getting started, research, solo development, testing new steps.
@@ -141,7 +141,7 @@ orchestrator communicate through a message bus:
 ```
 
 - Scale any piece independently by running more copies.
-- Monitor everything with the TUI dashboard (`uv run loom ui`).
+- Monitor everything with the TUI dashboard (`uv run heddle ui`).
 - Schedule recurring jobs with the built-in scheduler.
 
 Best for: production, multi-user, continuous processing, team deployments.
@@ -150,14 +150,14 @@ Best for: production, multi-user, continuous processing, team deployments.
 
 ## Configuration
 
-All settings live in one place: `~/.loom/config.yaml`, created by
-`uv run loom setup`.
+All settings live in one place: `~/.heddle/config.yaml`, created by
+`uv run heddle setup`.
 
 **Priority order** (highest wins):
 
 1. CLI flags (`--tier local`)
 2. Environment variables (`OLLAMA_URL=...`)
-3. Config file (`~/.loom/config.yaml`)
+3. Config file (`~/.heddle/config.yaml`)
 4. Built-in defaults
 
 The config file stores your model preferences, API keys, data paths,

@@ -1,8 +1,8 @@
-site_name: Loom
+site_name: Heddle
 site_description: Turn what you know into testable AI steps. Chain them into workflows. Scale when ready.
-site_url: https://irantransitionproject.github.io/loom/
-repo_url: https://github.com/IranTransitionProject/loom
-repo_name: IranTransitionProject/loom
+site_url: https://getheddle.github.io/heddle/
+repo_url: https://github.com/getheddle/heddle
+repo_name: getheddle/heddle
 
 theme:
   name: material
@@ -72,7 +72,7 @@ nav:
   - User Guide:
     - Concepts: CONCEPTS.md
     - Getting Started: GETTING_STARTED.md
-    - Why Loom: WHY_LOOM.md
+    - Why Heddle: WHY_HEDDLE.md
     - Workshop Tour: WORKSHOP_TOUR.md
     - Configuration: CONFIG.md
     - CLI Reference: CLI_REFERENCE.md

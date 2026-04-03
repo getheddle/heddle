@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from loom.workshop.app import create_app
+from heddle.workshop.app import create_app
 
 
 @pytest.fixture
@@ -237,7 +237,7 @@ class TestDetectAvailableBackends:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
-        from loom.workshop.app import _detect_available_backends
+        from heddle.workshop.app import _detect_available_backends
 
         result = _detect_available_backends()
         assert result == []
@@ -248,7 +248,7 @@ class TestDetectAvailableBackends:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
-        from loom.workshop.app import _detect_available_backends
+        from heddle.workshop.app import _detect_available_backends
 
         result = _detect_available_backends()
         names = [b["name"] for b in result]
@@ -260,7 +260,7 @@ class TestDetectAvailableBackends:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
-        from loom.workshop.app import _detect_available_backends
+        from heddle.workshop.app import _detect_available_backends
 
         result = _detect_available_backends()
         names = [b["name"] for b in result]
@@ -272,7 +272,7 @@ class TestDetectAvailableBackends:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
-        from loom.workshop.app import _detect_available_backends
+        from heddle.workshop.app import _detect_available_backends
 
         result = _detect_available_backends()
         names = [b["name"] for b in result]
@@ -284,7 +284,7 @@ class TestDetectAvailableBackends:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
 
-        from loom.workshop.app import _detect_available_backends
+        from heddle.workshop.app import _detect_available_backends
 
         result = _detect_available_backends()
         names = [b["name"] for b in result]
@@ -296,7 +296,7 @@ class TestDetectAvailableBackends:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
-        from loom.workshop.app import _detect_available_backends
+        from heddle.workshop.app import _detect_available_backends
 
         result = _detect_available_backends()
         names = [b["name"] for b in result]
@@ -312,16 +312,16 @@ class TestDetectAvailableBackends:
 
 class TestBuildExtraConfigDirs:
     def test_no_apps_returns_empty(self, tmp_path):
-        from loom.workshop.app import _build_extra_config_dirs
-        from loom.workshop.app_manager import AppManager
+        from heddle.workshop.app import _build_extra_config_dirs
+        from heddle.workshop.app_manager import AppManager
 
         mgr = AppManager(apps_dir=str(tmp_path / "apps"))
         result = _build_extra_config_dirs(mgr)
         assert result == []
 
     def test_deployed_app_with_configs_included(self, tmp_path):
-        from loom.workshop.app import _build_extra_config_dirs
-        from loom.workshop.app_manager import AppManager
+        from heddle.workshop.app import _build_extra_config_dirs
+        from heddle.workshop.app_manager import AppManager
 
         apps_dir = tmp_path / "apps"
         apps_dir.mkdir()
@@ -339,8 +339,8 @@ class TestBuildExtraConfigDirs:
         assert configs_dir in result
 
     def test_deployed_app_without_configs_excluded(self, tmp_path):
-        from loom.workshop.app import _build_extra_config_dirs
-        from loom.workshop.app_manager import AppManager
+        from heddle.workshop.app import _build_extra_config_dirs
+        from heddle.workshop.app_manager import AppManager
 
         apps_dir = tmp_path / "apps"
         apps_dir.mkdir()
@@ -363,17 +363,17 @@ class TestBuildExtraConfigDirs:
 
 class TestLifespan:
     def test_lifespan_mdns_import_error_is_swallowed(self, tmp_path):
-        """If loom[mdns] is not installed, lifespan should not raise."""
+        """If heddle[mdns] is not installed, lifespan should not raise."""
         import unittest.mock as mock
 
         configs_dir = tmp_path / "configs"
         (configs_dir / "workers").mkdir(parents=True)
         (configs_dir / "orchestrators").mkdir()
 
-        from loom.workshop.app import create_app
+        from heddle.workshop.app import create_app
 
         # Patch the import inside lifespan to simulate ImportError
-        with mock.patch.dict("sys.modules", {"loom.discovery.mdns": None}):
+        with mock.patch.dict("sys.modules", {"heddle.discovery.mdns": None}):
             app = create_app(
                 configs_dir=str(configs_dir),
                 db_path=":memory:",
@@ -400,11 +400,11 @@ class TestLifespan:
         mock_advertiser.register_workshop = mock.MagicMock()
 
         mock_mdns_module = mock.MagicMock()
-        mock_mdns_module.LoomServiceAdvertiser.return_value = mock_advertiser
+        mock_mdns_module.HeddleServiceAdvertiser.return_value = mock_advertiser
 
-        from loom.workshop.app import create_app
+        from heddle.workshop.app import create_app
 
-        with mock.patch.dict("sys.modules", {"loom.discovery.mdns": mock_mdns_module}):
+        with mock.patch.dict("sys.modules", {"heddle.discovery.mdns": mock_mdns_module}):
             app = create_app(
                 configs_dir=str(configs_dir),
                 db_path=":memory:",
@@ -551,12 +551,12 @@ class TestWorkerTestRun:
     def test_run_returns_result_partial(self, client):
         import unittest.mock as mock
 
-        from loom.workshop.test_runner import WorkerTestResult
+        from heddle.workshop.test_runner import WorkerTestResult
 
         mock_result = WorkerTestResult(output={"summary": "hello"}, latency_ms=42)
 
         with mock.patch(
-            "loom.workshop.test_runner.WorkerTestRunner.run",
+            "heddle.workshop.test_runner.WorkerTestRunner.run",
             new=mock.AsyncMock(return_value=mock_result),
         ):
             resp = client.post(
@@ -610,7 +610,7 @@ class TestWorkerEvalRun:
 
         fake_run_id = "run-abc-123"
         with mock.patch(
-            "loom.workshop.eval_runner.EvalRunner.run_suite",
+            "heddle.workshop.eval_runner.EvalRunner.run_suite",
             new=mock.AsyncMock(return_value=fake_run_id),
         ):
             resp = client.post(
@@ -660,7 +660,7 @@ class TestWorkerEvalRun:
         import unittest.mock as mock
 
         with mock.patch(
-            "loom.workshop.eval_runner.EvalRunner.run_suite",
+            "heddle.workshop.eval_runner.EvalRunner.run_suite",
             new=mock.AsyncMock(return_value="run-id-x"),
         ):
             resp = client.post(

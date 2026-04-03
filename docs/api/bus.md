@@ -2,12 +2,12 @@
 
 ## Base
 
-::: loom.bus.base
+::: heddle.bus.base
 
 ## NATS Adapter
 
-::: loom.bus.nats_adapter
+::: heddle.bus.nats_adapter
 
 ## Memory Bus
 
-::: loom.bus.memory
+::: heddle.bus.memory

@@ -7,7 +7,7 @@ import textwrap
 import pytest
 from pydantic import BaseModel
 
-from loom.core.config import ConfigValidationError, load_config, resolve_schema_refs
+from heddle.core.config import ConfigValidationError, load_config, resolve_schema_refs
 
 # ---------------------------------------------------------------------------
 # A minimal Pydantic model used by the tests (importable from this module)

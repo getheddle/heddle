@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from loom.orchestrator.store import InMemoryCheckpointStore
+from heddle.orchestrator.store import InMemoryCheckpointStore
 
 
 @pytest.fixture

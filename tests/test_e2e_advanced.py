@@ -16,18 +16,18 @@ import tempfile
 import pytest
 import yaml
 
-from loom.bus.memory import InMemoryBus
-from loom.core.messages import (
+from heddle.bus.memory import InMemoryBus
+from heddle.core.messages import (
     ModelTier,
     OrchestratorGoal,
     TaskMessage,
     TaskResult,
     TaskStatus,
 )
-from loom.orchestrator.pipeline import PipelineOrchestrator
-from loom.orchestrator.runner import OrchestratorActor
-from loom.router.router import TaskRouter
-from loom.worker.backends import LLMBackend
+from heddle.orchestrator.pipeline import PipelineOrchestrator
+from heddle.orchestrator.runner import OrchestratorActor
+from heddle.router.router import TaskRouter
+from heddle.worker.backends import LLMBackend
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -113,7 +113,7 @@ async def _failing_worker(
         )
         if task.parent_task_id:
             await bus.publish(
-                f"loom.results.{task.parent_task_id}",
+                f"heddle.results.{task.parent_task_id}",
                 result.model_dump(mode="json"),
             )
 
@@ -152,7 +152,7 @@ async def _delayed_worker(
         )
         if task.parent_task_id:
             await bus.publish(
-                f"loom.results.{task.parent_task_id}",
+                f"heddle.results.{task.parent_task_id}",
                 result.model_dump(mode="json"),
             )
 
@@ -209,10 +209,10 @@ class TestPipelineFailurePropagation:
                 instruction="Process document",
                 context={"file_ref": "test.pdf"},
             )
-            result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
             # Extractor succeeds, classifier fails
-            worker_sub = await bus.subscribe("loom.tasks.incoming")
+            worker_sub = await bus.subscribe("heddle.tasks.incoming")
 
             async def _worker():
                 count = 0
@@ -240,7 +240,7 @@ class TestPipelineFailurePropagation:
                             processing_time_ms=10,
                         )
                     await bus.publish(
-                        f"loom.results.{task.parent_task_id}",
+                        f"heddle.results.{task.parent_task_id}",
                         result.model_dump(mode="json"),
                     )
                     count += 1
@@ -303,10 +303,10 @@ class TestPipelineStageTimeout:
                 instruction="Process slowly",
                 context={"data": "test"},
             )
-            result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
             # Worker that never responds (simulating timeout)
-            worker_sub = await bus.subscribe("loom.tasks.incoming")
+            worker_sub = await bus.subscribe("heddle.tasks.incoming")
 
             await pipeline.handle_message(goal.model_dump(mode="json"))
 
@@ -338,10 +338,10 @@ class TestRouterDeadLetter:
             router = TaskRouter(rules_path, bus)
             await router.run()
 
-            dead_sub = await bus.subscribe("loom.tasks.dead_letter")
+            dead_sub = await bus.subscribe("heddle.tasks.dead_letter")
 
             # Publish a malformed message (missing required fields)
-            await bus.publish("loom.tasks.incoming", {"bad": "data"})
+            await bus.publish("heddle.tasks.incoming", {"bad": "data"})
 
             process_task = asyncio.create_task(router.process_messages())
 
@@ -376,8 +376,8 @@ class TestRouterDeadLetter:
             router = TaskRouter(rules_path, bus)
             await router.run()
 
-            dead_sub = await bus.subscribe("loom.tasks.dead_letter")
-            await bus.subscribe("loom.tasks.summarizer.local")
+            dead_sub = await bus.subscribe("heddle.tasks.dead_letter")
+            await bus.subscribe("heddle.tasks.summarizer.local")
 
             process_task = asyncio.create_task(router.process_messages())
 
@@ -389,7 +389,7 @@ class TestRouterDeadLetter:
                     model_tier=ModelTier.LOCAL,
                 )
                 await bus.publish(
-                    "loom.tasks.incoming",
+                    "heddle.tasks.incoming",
                     task.model_dump(mode="json"),
                 )
 
@@ -467,9 +467,9 @@ class TestPipelineConditionalStages:
                 instruction="Process doc with conditional OCR",
                 context={"file_ref": "test.pdf"},
             )
-            result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
-            worker_sub = await bus.subscribe("loom.tasks.incoming")
+            worker_sub = await bus.subscribe("heddle.tasks.incoming")
 
             async def _worker():
                 async for data in worker_sub:
@@ -485,7 +485,7 @@ class TestPipelineConditionalStages:
                         processing_time_ms=10,
                     )
                     await bus.publish(
-                        f"loom.results.{task.parent_task_id}",
+                        f"heddle.results.{task.parent_task_id}",
                         result.model_dump(mode="json"),
                     )
                     break
@@ -533,7 +533,7 @@ class TestRouterTierOverride:
             await router.run()
 
             # Subscribe to the overridden subject
-            frontier_sub = await bus.subscribe("loom.tasks.classifier.frontier")
+            frontier_sub = await bus.subscribe("heddle.tasks.classifier.frontier")
 
             process_task = asyncio.create_task(router.process_messages())
 
@@ -543,7 +543,7 @@ class TestRouterTierOverride:
                 payload={"text": "test"},
                 model_tier=ModelTier.LOCAL,
             )
-            await bus.publish("loom.tasks.incoming", task.model_dump(mode="json"))
+            await bus.publish("heddle.tasks.incoming", task.model_dump(mode="json"))
 
             msg = await asyncio.wait_for(frontier_sub.__anext__(), timeout=2.0)
             received = TaskMessage(**msg)
@@ -605,7 +605,7 @@ class TestOrchestratorEmptyDecomposition:
             )
 
             goal = OrchestratorGoal(instruction="Nothing to do")
-            result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
             await actor.handle_message(goal.model_dump(mode="json"))
 
@@ -672,10 +672,10 @@ class TestPipelineThreeLevelChain:
                 instruction="Full pipeline",
                 context={"source": "data.csv"},
             )
-            result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
             execution_order = []
 
-            worker_sub = await bus.subscribe("loom.tasks.incoming")
+            worker_sub = await bus.subscribe("heddle.tasks.incoming")
 
             async def _worker():
                 count = 0
@@ -701,7 +701,7 @@ class TestPipelineThreeLevelChain:
                         processing_time_ms=10,
                     )
                     await bus.publish(
-                        f"loom.results.{task.parent_task_id}",
+                        f"heddle.results.{task.parent_task_id}",
                         result.model_dump(mode="json"),
                     )
                     count += 1
@@ -793,9 +793,9 @@ class TestPipelineDiamondDependency:
                 instruction="Diamond analysis",
                 context={"source": "doc.pdf"},
             )
-            result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
-            worker_sub = await bus.subscribe("loom.tasks.incoming")
+            worker_sub = await bus.subscribe("heddle.tasks.incoming")
 
             async def _worker():
                 count = 0
@@ -821,7 +821,7 @@ class TestPipelineDiamondDependency:
                         processing_time_ms=10,
                     )
                     await bus.publish(
-                        f"loom.results.{task.parent_task_id}",
+                        f"heddle.results.{task.parent_task_id}",
                         result.model_dump(mode="json"),
                     )
                     count += 1

@@ -1,18 +1,18 @@
-# Loom
+# Heddle
 
 **Turn what you know into testable AI steps. Chain them into workflows.
 Measure whether they work. Scale when ready.**
 
 ---
 
-## What Loom Does
+## What Heddle Does
 
 Most AI tools give you one big prompt and one model. That works until it
 doesn't — the prompt gets unwieldy, you can't test parts independently,
 and asking the same model to review its own work doesn't catch real
 problems.
 
-Loom splits AI work into focused **steps**. Each step has a clear job, a
+Heddle splits AI work into focused **steps**. Each step has a clear job, a
 typed contract (so you know what goes in and what comes out), and can use
 a different model. You test steps individually, chain them into pipelines,
 and measure whether changes help or hurt.
@@ -31,9 +31,9 @@ built-in Workshop web UI — all without deploying any infrastructure.
 ## Quick Start
 
 ```bash
-pip install loom-ai[workshop]    # install from PyPI
-loom setup                       # configure (auto-detects Ollama)
-loom workshop                    # open the web UI at localhost:8080
+pip install heddle-ai[workshop]    # install from PyPI
+heddle setup                       # configure (auto-detects Ollama)
+heddle workshop                    # open the web UI at localhost:8080
 ```
 
 Open your browser, pick a worker (summarizer, classifier, extractor, qa,
@@ -76,9 +76,9 @@ Start here:
 
 | Guide | Description |
 |-------|-------------|
-| **[Concepts](CONCEPTS.md)** | How Loom works — the mental model in plain language |
+| **[Concepts](CONCEPTS.md)** | How Heddle works — the mental model in plain language |
 | **[Getting Started](GETTING_STARTED.md)** | Install, configure, and get your first result |
-| **[Why Loom?](WHY_LOOM.md)** | How Loom compares to other frameworks — and when not to use it |
+| **[Why Heddle?](WHY_HEDDLE.md)** | How Heddle compares to other frameworks — and when not to use it |
 | **[Workshop Tour](WORKSHOP_TOUR.md)** | What each Workshop screen does and when to use it |
 | **[Workers Reference](workers-reference.md)** | 6 shipped workers with I/O schemas and examples |
 | **[CLI Reference](CLI_REFERENCE.md)** | All commands with every flag and default |

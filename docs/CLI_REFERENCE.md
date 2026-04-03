@@ -1,48 +1,48 @@
 # CLI Reference
 
-All commands are invoked as `loom COMMAND [OPTIONS]`. Commands are grouped by
+All commands are invoked as `heddle COMMAND [OPTIONS]`. Commands are grouped by
 whether they need a running NATS server.
 
 ## Overview
 
 | Command | Purpose | NATS Required |
 |---|---|---|
-| `loom setup` | Interactive configuration wizard | No |
-| `loom new worker` | Scaffold a new worker config | No |
-| `loom new pipeline` | Scaffold a new pipeline config | No |
-| `loom validate` | Validate config files | No |
-| `loom rag ingest` | Ingest Telegram exports into vector store | No |
-| `loom rag search` | Semantic search | No |
-| `loom rag stats` | Vector store statistics | No |
-| `loom rag serve` | Workshop with RAG dashboard | No |
-| `loom worker` | LLM worker actor | Yes |
-| `loom processor` | Non-LLM processor worker | Yes |
-| `loom pipeline` | Pipeline orchestrator | Yes |
-| `loom orchestrator` | Dynamic LLM orchestrator | Yes |
-| `loom scheduler` | Time-driven task scheduler | Yes |
-| `loom router` | Deterministic task router | Yes |
-| `loom submit` | Submit a goal | Yes |
-| `loom mcp` | MCP server gateway | Yes |
-| `loom workshop` | Worker Workshop web UI | No |
-| `loom ui` | Terminal dashboard (TUI) | Yes |
-| `loom mdns` | mDNS service discovery | No |
-| `loom dead-letter monitor` | Dead-letter queue consumer | Yes |
+| `heddle setup` | Interactive configuration wizard | No |
+| `heddle new worker` | Scaffold a new worker config | No |
+| `heddle new pipeline` | Scaffold a new pipeline config | No |
+| `heddle validate` | Validate config files | No |
+| `heddle rag ingest` | Ingest Telegram exports into vector store | No |
+| `heddle rag search` | Semantic search | No |
+| `heddle rag stats` | Vector store statistics | No |
+| `heddle rag serve` | Workshop with RAG dashboard | No |
+| `heddle worker` | LLM worker actor | Yes |
+| `heddle processor` | Non-LLM processor worker | Yes |
+| `heddle pipeline` | Pipeline orchestrator | Yes |
+| `heddle orchestrator` | Dynamic LLM orchestrator | Yes |
+| `heddle scheduler` | Time-driven task scheduler | Yes |
+| `heddle router` | Deterministic task router | Yes |
+| `heddle submit` | Submit a goal | Yes |
+| `heddle mcp` | MCP server gateway | Yes |
+| `heddle workshop` | Worker Workshop web UI | No |
+| `heddle ui` | Terminal dashboard (TUI) | Yes |
+| `heddle mdns` | mDNS service discovery | No |
+| `heddle dead-letter monitor` | Dead-letter queue consumer | Yes |
 
 ---
 
 ## Getting Started Commands (no NATS)
 
-### loom setup
+### heddle setup
 
 Interactive wizard that detects your environment and writes a config file.
 
 ```bash
-loom setup [OPTIONS]
+heddle setup [OPTIONS]
 ```
 
 | Option | Default | Description |
 |---|---|---|
-| `--config-path` | `~/.loom/config.yaml` | Config file path |
+| `--config-path` | `~/.heddle/config.yaml` | Config file path |
 | `--non-interactive` | `false` | Skip prompts, use defaults |
 
 Steps performed:
@@ -51,19 +51,19 @@ Steps performed:
 2. Prompts for Anthropic API key (optional)
 3. Checks/pulls the embedding model
 4. Scans for Telegram export files
-5. Writes `~/.loom/config.yaml`
+5. Writes `~/.heddle/config.yaml`
 
 ---
 
-### loom new (group)
+### heddle new (group)
 
 Scaffold new worker and pipeline configs interactively. YAML is generated
 from your answers — you don't need to write it from scratch.
 
-#### loom new worker
+#### heddle new worker
 
 ```bash
-loom new worker [OPTIONS]
+heddle new worker [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -77,10 +77,10 @@ loom new worker [OPTIONS]
 Prompts for: name, kind, system prompt (or editor), model tier, input/output
 field names, timeout. Validates before writing.
 
-#### loom new pipeline
+#### heddle new pipeline
 
 ```bash
-loom new pipeline [OPTIONS]
+heddle new pipeline [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -95,13 +95,13 @@ pipeline graph before writing.
 
 ---
 
-### loom validate
+### heddle validate
 
 Validate worker, pipeline, and orchestrator configs without starting any
 infrastructure. Auto-detects config type from file content.
 
 ```bash
-loom validate [OPTIONS] [PATHS...]
+heddle validate [OPTIONS] [PATHS...]
 ```
 
 | Option | Default | Description |
@@ -112,9 +112,9 @@ loom validate [OPTIONS] [PATHS...]
 Examples:
 
 ```bash
-loom validate configs/workers/my_worker.yaml       # single file
-loom validate configs/workers/*.yaml               # multiple files
-loom validate --all                                 # everything in configs/
+heddle validate configs/workers/my_worker.yaml       # single file
+heddle validate configs/workers/*.yaml               # multiple files
+heddle validate --all                                 # everything in configs/
 ```
 
 Exit code 0 if all valid, 1 if any errors. Colored output with per-file
@@ -122,30 +122,30 @@ pass/fail indicators.
 
 ---
 
-### loom rag (group)
+### heddle rag (group)
 
 All RAG subcommands share a set of group-level options.
 
 ```bash
-loom rag [GROUP-OPTIONS] COMMAND
+heddle rag [GROUP-OPTIONS] COMMAND
 ```
 
 **Group options** (inherited by every subcommand):
 
 | Option | Default | Description |
 |---|---|---|
-| `--config-path` | `~/.loom/config.yaml` | Config file path |
+| `--config-path` | `~/.heddle/config.yaml` | Config file path |
 | `--db-path` | *(from config)* | Override vector store path |
 | `--store` | *(from config)* | Backend: `duckdb` or `lancedb` |
 | `--ollama-url` | *(from config)* | Override Ollama URL |
 | `--embedding-model` | *(from config)* | Override embedding model |
 
-#### loom rag ingest
+#### heddle rag ingest
 
 Ingest Telegram JSON exports into the vector store.
 
 ```bash
-loom rag ingest [OPTIONS] PATHS...
+heddle rag ingest [OPTIONS] PATHS...
 ```
 
 | Option | Default | Description |
@@ -157,12 +157,12 @@ loom rag ingest [OPTIONS] PATHS...
 
 `PATHS` accepts one or more directories or `result.json` files.
 
-#### loom rag search
+#### heddle rag search
 
 Run a semantic similarity search against the vector store.
 
 ```bash
-loom rag search [OPTIONS] QUERY
+heddle rag search [OPTIONS] QUERY
 ```
 
 | Option | Default | Description |
@@ -170,22 +170,22 @@ loom rag search [OPTIONS] QUERY
 | `--limit`, `-n` | `10` | Max results |
 | `--min-score` | `0.0` | Minimum similarity score |
 
-#### loom rag stats
+#### heddle rag stats
 
 Print vector store statistics (row count, embedding dimensions, disk size).
 
 ```bash
-loom rag stats
+heddle rag stats
 ```
 
 No additional options beyond the group options.
 
-#### loom rag serve
+#### heddle rag serve
 
 Start the Workshop web UI with the RAG dashboard enabled.
 
 ```bash
-loom rag serve [OPTIONS]
+heddle rag serve [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -201,12 +201,12 @@ All infrastructure commands connect to NATS and typically accept `--nats-url`
 and `--skip-preflight`. Most also require a `--config` YAML file that describes
 the actor.
 
-### loom worker
+### heddle worker
 
 Start an LLM worker actor.
 
 ```bash
-loom worker --config PATH [OPTIONS]
+heddle worker --config PATH [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -216,12 +216,12 @@ loom worker --config PATH [OPTIONS]
 | `--tier` | `standard` | Model tier: `local`, `standard`, `frontier` |
 | `--skip-preflight` | `false` | Skip connectivity checks |
 
-### loom processor
+### heddle processor
 
 Start a non-LLM processor worker (e.g. extractors, validators).
 
 ```bash
-loom processor --config PATH [OPTIONS]
+heddle processor --config PATH [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -231,12 +231,12 @@ loom processor --config PATH [OPTIONS]
 | `--tier` | `local` | Model tier |
 | `--skip-preflight` | `false` | Skip connectivity checks |
 
-### loom pipeline
+### heddle pipeline
 
 Start a pipeline orchestrator that chains workers in sequence.
 
 ```bash
-loom pipeline --config PATH [OPTIONS]
+heddle pipeline --config PATH [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -245,12 +245,12 @@ loom pipeline --config PATH [OPTIONS]
 | `--nats-url` | `nats://nats:4222` | NATS server URL |
 | `--skip-preflight` | `false` | Skip connectivity checks |
 
-### loom orchestrator
+### heddle orchestrator
 
 Start the dynamic LLM orchestrator (goal decomposition, delegation).
 
 ```bash
-loom orchestrator --config PATH [OPTIONS]
+heddle orchestrator --config PATH [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -260,12 +260,12 @@ loom orchestrator --config PATH [OPTIONS]
 | `--redis-url` | `redis://redis:6379` | Redis URL (state store) |
 | `--skip-preflight` | `false` | Skip connectivity checks |
 
-### loom scheduler
+### heddle scheduler
 
 Start the time-driven task scheduler.
 
 ```bash
-loom scheduler --config PATH [OPTIONS]
+heddle scheduler --config PATH [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -274,12 +274,12 @@ loom scheduler --config PATH [OPTIONS]
 | `--nats-url` | `nats://nats:4222` | NATS server URL |
 | `--skip-preflight` | `false` | Skip connectivity checks |
 
-### loom router
+### heddle router
 
 Start the deterministic task router.
 
 ```bash
-loom router [OPTIONS]
+heddle router [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -288,12 +288,12 @@ loom router [OPTIONS]
 | `--nats-url` | `nats://nats:4222` | NATS server URL |
 | `--skip-preflight` | `false` | Skip connectivity checks |
 
-### loom submit
+### heddle submit
 
 Submit a goal to the orchestrator for processing.
 
 ```bash
-loom submit GOAL [OPTIONS]
+heddle submit GOAL [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -304,19 +304,19 @@ loom submit GOAL [OPTIONS]
 Example:
 
 ```bash
-loom submit "Process document" --context file_ref=test.pdf --context lang=en
+heddle submit "Process document" --context file_ref=test.pdf --context lang=en
 ```
 
 ---
 
 ## UI & Discovery Commands
 
-### loom workshop
+### heddle workshop
 
 Start the Worker Workshop web UI.
 
 ```bash
-loom workshop [OPTIONS]
+heddle workshop [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -324,28 +324,28 @@ loom workshop [OPTIONS]
 | `--port` | `8080` | HTTP port |
 | `--host` | `127.0.0.1` | Bind address |
 | `--configs-dir` | `configs/` | Directory of worker configs |
-| `--db-path` | `~/.loom/workshop.duckdb` | Workshop database |
+| `--db-path` | `~/.heddle/workshop.duckdb` | Workshop database |
 | `--nats-url` | *(none)* | Optional NATS URL for live status |
-| `--apps-dir` | `~/.loom/apps` | Custom apps directory |
+| `--apps-dir` | `~/.heddle/apps` | Custom apps directory |
 
-### loom ui
+### heddle ui
 
 Launch the terminal dashboard (TUI) for monitoring actors in real time.
 
 ```bash
-loom ui [OPTIONS]
+heddle ui [OPTIONS]
 ```
 
 | Option | Default | Description |
 |---|---|---|
 | `--nats-url` | `nats://localhost:4222` | NATS server URL |
 
-### loom mdns
+### heddle mdns
 
-Broadcast mDNS service records so other Loom nodes can discover this machine.
+Broadcast mDNS service records so other Heddle nodes can discover this machine.
 
 ```bash
-loom mdns [OPTIONS]
+heddle mdns [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -355,12 +355,12 @@ loom mdns [OPTIONS]
 | `--mcp-port` | `0` | Advertised MCP port (0 = disabled) |
 | `--host` | *(auto-detect)* | Hostname to advertise |
 
-### loom mcp
+### heddle mcp
 
 Start the MCP (Model Context Protocol) server gateway.
 
 ```bash
-loom mcp --config PATH [OPTIONS]
+heddle mcp --config PATH [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -371,12 +371,12 @@ loom mcp --config PATH [OPTIONS]
 | `--port` | `8000` | Port (SSE only) |
 | `--skip-preflight` | `false` | Skip connectivity checks |
 
-### loom dead-letter monitor
+### heddle dead-letter monitor
 
 Consume and display messages from the dead-letter queue.
 
 ```bash
-loom dead-letter monitor [OPTIONS]
+heddle dead-letter monitor [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -413,5 +413,5 @@ know the infrastructure is already running.
 | `FRONTIER_MODEL` | `worker` | Model name for the frontier tier |
 | `OPENAI_API_KEY` | `worker` | OpenAI-compatible API key |
 | `OPENAI_BASE_URL` | `worker` | OpenAI-compatible base URL |
-| `LOOM_TRACE` | All infrastructure | Enable trace logging (`1` / `true`) |
-| `LOOM_TRACE_CONTENT` | All infrastructure | Include message payloads in traces |
+| `HEDDLE_TRACE` | All infrastructure | Enable trace logging (`1` / `true`) |
+| `HEDDLE_TRACE_CONTENT` | All infrastructure | Include message payloads in traces |

@@ -1,10 +1,10 @@
 """
 Test CLI commands (unit tests, no infrastructure).
 
-Tests the Click CLI from loom.cli.main using Click's CliRunner.
+Tests the Click CLI from heddle.cli.main using Click's CliRunner.
 All async operations are mocked — no NATS or external services needed.
 
-NOTE: Importing loom.cli.main triggers a global structlog.configure() call.
+NOTE: Importing heddle.cli.main triggers a global structlog.configure() call.
 We save and restore the structlog config to prevent pollution of other tests.
 """
 
@@ -18,7 +18,7 @@ from click.testing import CliRunner
 # Save structlog config before importing cli (which reconfigures it globally).
 _saved_structlog_config = structlog.get_config()
 
-from loom.cli.main import _load_processing_backend, cli  # noqa: E402
+from heddle.cli.main import _load_processing_backend, cli  # noqa: E402
 
 # Restore structlog config immediately after import.
 structlog.configure(**_saved_structlog_config)
@@ -112,7 +112,7 @@ def test_submit_parses_context_key_value(tmp_path):
     """submit with --context key=value parses into a context dict."""
     runner = CliRunner()
 
-    with patch("loom.cli.main.asyncio.run") as mock_run:
+    with patch("heddle.cli.main.asyncio.run") as mock_run:
         result = runner.invoke(
             cli,
             [
@@ -135,7 +135,7 @@ def test_submit_bad_context_no_equals():
     """submit with context missing '=' raises a ClickException."""
     runner = CliRunner()
 
-    with patch("loom.cli.main.asyncio.run"):
+    with patch("heddle.cli.main.asyncio.run"):
         result = runner.invoke(
             cli,
             [
@@ -163,7 +163,7 @@ def test_processor_missing_backend_raises(tmp_path):
     )
     runner = CliRunner()
 
-    with patch("loom.cli.main.asyncio.run"):
+    with patch("heddle.cli.main.asyncio.run"):
         result = runner.invoke(
             cli,
             [
@@ -264,7 +264,7 @@ def test_worker_loads_config_and_runs(tmp_path):
 
     with (
         patch.dict("os.environ", {"OLLAMA_URL": "http://localhost:11434"}, clear=False),
-        patch("loom.cli.main.asyncio.run") as mock_run,
+        patch("heddle.cli.main.asyncio.run") as mock_run,
     ):
         result = runner.invoke(
             cli,
@@ -293,7 +293,7 @@ def test_worker_tier_mismatch_warns(tmp_path):
     )
     runner = CliRunner()
 
-    with patch("loom.cli.main.asyncio.run"):
+    with patch("heddle.cli.main.asyncio.run"):
         result = runner.invoke(
             cli,
             [
@@ -322,7 +322,7 @@ def test_worker_no_backend_for_tier_warns(tmp_path):
 
     # No env vars set, so no backends are configured
     with (
-        patch("loom.cli.main.asyncio.run"),
+        patch("heddle.cli.main.asyncio.run"),
         patch.dict("os.environ", {}, clear=False),
     ):
         # Remove env vars that could configure backends
@@ -368,7 +368,7 @@ def test_worker_with_anthropic_backend(tmp_path):
 
     try:
         os.environ["ANTHROPIC_API_KEY"] = "test-key-123"
-        with patch("loom.cli.main.asyncio.run") as mock_run:
+        with patch("heddle.cli.main.asyncio.run") as mock_run:
             result = runner.invoke(
                 cli,
                 [
@@ -409,8 +409,8 @@ def test_processor_loads_backend_and_runs(tmp_path):
 
     mock_backend = MagicMock()
     with (
-        patch("loom.cli.main._load_processing_backend", return_value=mock_backend),
-        patch("loom.cli.main.asyncio.run") as mock_run,
+        patch("heddle.cli.main._load_processing_backend", return_value=mock_backend),
+        patch("heddle.cli.main.asyncio.run") as mock_run,
     ):
         result = runner.invoke(
             cli,
@@ -443,7 +443,7 @@ def test_pipeline_loads_config_and_runs(tmp_path):
     )
     runner = CliRunner()
 
-    with patch("loom.cli.main.asyncio.run") as mock_run:
+    with patch("heddle.cli.main.asyncio.run") as mock_run:
         result = runner.invoke(
             cli,
             [
@@ -475,8 +475,8 @@ def test_orchestrator_loads_config_and_runs(tmp_path):
 
     mock_actor = MagicMock()
     with (
-        patch("loom.cli.main.asyncio.run") as mock_run,
-        patch("loom.orchestrator.runner.OrchestratorActor", return_value=mock_actor),
+        patch("heddle.cli.main.asyncio.run") as mock_run,
+        patch("heddle.orchestrator.runner.OrchestratorActor", return_value=mock_actor),
     ):
         result = runner.invoke(
             cli,
@@ -509,14 +509,14 @@ def test_orchestrator_with_redis_import_error(tmp_path):
     # Simulate ImportError for redis store by removing it from sys.modules
     import sys
 
-    saved = sys.modules.pop("loom.contrib.redis.store", "NOT_PRESENT")
+    saved = sys.modules.pop("heddle.contrib.redis.store", "NOT_PRESENT")
     # Insert None to force ImportError on import
-    sys.modules["loom.contrib.redis.store"] = None
+    sys.modules["heddle.contrib.redis.store"] = None
 
     try:
         with (
-            patch("loom.cli.main.asyncio.run") as mock_run,
-            patch("loom.orchestrator.runner.OrchestratorActor", return_value=mock_actor),
+            patch("heddle.cli.main.asyncio.run") as mock_run,
+            patch("heddle.orchestrator.runner.OrchestratorActor", return_value=mock_actor),
         ):
             result = runner.invoke(
                 cli,
@@ -532,9 +532,9 @@ def test_orchestrator_with_redis_import_error(tmp_path):
                 ],
             )
     finally:
-        del sys.modules["loom.contrib.redis.store"]
+        del sys.modules["heddle.contrib.redis.store"]
         if saved != "NOT_PRESENT":
-            sys.modules["loom.contrib.redis.store"] = saved
+            sys.modules["heddle.contrib.redis.store"] = saved
 
     assert result.exit_code == 0
     mock_run.assert_called_once()
@@ -551,9 +551,9 @@ def test_orchestrator_with_redis_store(tmp_path):
     mock_store = MagicMock()
     mock_actor = MagicMock()
     with (
-        patch("loom.cli.main.asyncio.run") as mock_run,
-        patch("loom.contrib.redis.store.RedisCheckpointStore", return_value=mock_store),
-        patch("loom.orchestrator.runner.OrchestratorActor", return_value=mock_actor),
+        patch("heddle.cli.main.asyncio.run") as mock_run,
+        patch("heddle.contrib.redis.store.RedisCheckpointStore", return_value=mock_store),
+        patch("heddle.orchestrator.runner.OrchestratorActor", return_value=mock_actor),
     ):
         result = runner.invoke(
             cli,
@@ -590,9 +590,9 @@ def test_scheduler_loads_config_and_runs(tmp_path):
 
     mock_actor = MagicMock()
     with (
-        patch("loom.cli.main.asyncio.run") as mock_run,
-        patch("loom.scheduler.config.validate_scheduler_config", return_value=[]),
-        patch("loom.scheduler.scheduler.SchedulerActor", return_value=mock_actor),
+        patch("heddle.cli.main.asyncio.run") as mock_run,
+        patch("heddle.scheduler.config.validate_scheduler_config", return_value=[]),
+        patch("heddle.scheduler.scheduler.SchedulerActor", return_value=mock_actor),
     ):
         result = runner.invoke(
             cli,
@@ -619,7 +619,7 @@ def test_scheduler_config_validation_errors(tmp_path):
     runner = CliRunner()
 
     with patch(
-        "loom.scheduler.config.validate_scheduler_config",
+        "heddle.scheduler.config.validate_scheduler_config",
         return_value=["Missing 'schedules' field", "Invalid cron expression"],
     ):
         result = runner.invoke(
@@ -652,9 +652,9 @@ def test_router_loads_config_and_runs(tmp_path):
     mock_router.process_messages = MagicMock(return_value=None)
 
     with (
-        patch("loom.cli.main.asyncio.run") as mock_run,
-        patch("loom.bus.nats_adapter.NATSBus"),
-        patch("loom.router.router.TaskRouter", return_value=mock_router),
+        patch("heddle.cli.main.asyncio.run") as mock_run,
+        patch("heddle.bus.nats_adapter.NATSBus"),
+        patch("heddle.router.router.TaskRouter", return_value=mock_router),
     ):
         result = runner.invoke(
             cli,
@@ -681,7 +681,7 @@ def test_submit_calls_asyncio_run(tmp_path):
     """submit command invokes asyncio.run with the _submit coroutine."""
     runner = CliRunner()
 
-    with patch("loom.cli.main.asyncio.run") as mock_run:
+    with patch("heddle.cli.main.asyncio.run") as mock_run:
         result = runner.invoke(
             cli,
             [
@@ -700,7 +700,7 @@ def test_submit_with_multiple_context_pairs():
     """submit with multiple --context pairs all get parsed."""
     runner = CliRunner()
 
-    with patch("loom.cli.main.asyncio.run"):
+    with patch("heddle.cli.main.asyncio.run"):
         result = runner.invoke(
             cli,
             [
@@ -739,8 +739,8 @@ def test_mcp_stdio_transport(tmp_path):
     mock_gateway.resources = None
 
     with (
-        patch("loom.mcp.create_server", return_value=(mock_server, mock_gateway)),
-        patch("loom.mcp.run_stdio") as mock_run_stdio,
+        patch("heddle.mcp.create_server", return_value=(mock_server, mock_gateway)),
+        patch("heddle.mcp.run_stdio") as mock_run_stdio,
     ):
         result = runner.invoke(
             cli,
@@ -772,8 +772,8 @@ def test_mcp_streamable_http_transport(tmp_path):
     mock_gateway.resources = MagicMock()  # resources enabled
 
     with (
-        patch("loom.mcp.create_server", return_value=(mock_server, mock_gateway)),
-        patch("loom.mcp.run_streamable_http") as mock_run_http,
+        patch("heddle.mcp.create_server", return_value=(mock_server, mock_gateway)),
+        patch("heddle.mcp.run_streamable_http") as mock_run_http,
     ):
         result = runner.invoke(
             cli,
@@ -806,7 +806,7 @@ def test_workshop_starts_uvicorn(tmp_path):
 
     mock_app = MagicMock()
     with (
-        patch("loom.workshop.app.create_app", return_value=mock_app) as mock_create,
+        patch("heddle.workshop.app.create_app", return_value=mock_app) as mock_create,
         patch("uvicorn.run") as mock_uvicorn,
     ):
         result = runner.invoke(
@@ -829,7 +829,7 @@ def test_workshop_starts_uvicorn(tmp_path):
         configs_dir="/tmp/configs",
         db_path="/tmp/test.duckdb",
         nats_url=None,
-        apps_dir="~/.loom/apps",
+        apps_dir="~/.heddle/apps",
     )
     mock_uvicorn.assert_called_once_with(mock_app, host="0.0.0.0", port=9090, log_level="info")
 
@@ -840,7 +840,7 @@ def test_workshop_with_nats_url(tmp_path):
 
     mock_app = MagicMock()
     with (
-        patch("loom.workshop.app.create_app", return_value=mock_app) as mock_create,
+        patch("heddle.workshop.app.create_app", return_value=mock_app) as mock_create,
         patch("uvicorn.run"),
     ):
         result = runner.invoke(
@@ -855,9 +855,9 @@ def test_workshop_with_nats_url(tmp_path):
     assert result.exit_code == 0
     mock_create.assert_called_once_with(
         configs_dir="configs/",
-        db_path="~/.loom/workshop.duckdb",
+        db_path="~/.heddle/workshop.duckdb",
         nats_url="nats://localhost:4222",
-        apps_dir="~/.loom/apps",
+        apps_dir="~/.heddle/apps",
     )
 
 
@@ -881,8 +881,8 @@ def test_ui_import_error_when_tui_not_installed():
     import sys
 
     # Force ImportError for the tui app module by blocking the import.
-    saved = sys.modules.pop("loom.tui.app", "NOT_PRESENT")
-    sys.modules["loom.tui.app"] = None  # type: ignore[assignment]
+    saved = sys.modules.pop("heddle.tui.app", "NOT_PRESENT")
+    sys.modules["heddle.tui.app"] = None  # type: ignore[assignment]
 
     try:
         result = runner.invoke(
@@ -890,9 +890,9 @@ def test_ui_import_error_when_tui_not_installed():
             ["ui", "--nats-url", "nats://localhost:4222"],
         )
     finally:
-        del sys.modules["loom.tui.app"]
+        del sys.modules["heddle.tui.app"]
         if saved != "NOT_PRESENT":
-            sys.modules["loom.tui.app"] = saved
+            sys.modules["heddle.tui.app"] = saved
 
     assert result.exit_code != 0
     assert "tui" in result.output.lower() or "tui" in (result.stderr or "").lower()
@@ -917,8 +917,8 @@ def test_mdns_import_error_when_zeroconf_not_installed():
 
     import sys
 
-    saved = sys.modules.pop("loom.discovery.mdns", "NOT_PRESENT")
-    sys.modules["loom.discovery.mdns"] = None  # type: ignore[assignment]
+    saved = sys.modules.pop("heddle.discovery.mdns", "NOT_PRESENT")
+    sys.modules["heddle.discovery.mdns"] = None  # type: ignore[assignment]
 
     try:
         result = runner.invoke(
@@ -926,9 +926,9 @@ def test_mdns_import_error_when_zeroconf_not_installed():
             ["mdns", "--workshop-port", "8080", "--nats-port", "4222"],
         )
     finally:
-        del sys.modules["loom.discovery.mdns"]
+        del sys.modules["heddle.discovery.mdns"]
         if saved != "NOT_PRESENT":
-            sys.modules["loom.discovery.mdns"] = saved
+            sys.modules["heddle.discovery.mdns"] = saved
 
     assert result.exit_code != 0
     assert "zeroconf" in result.output.lower() or "mdns" in result.output.lower()
@@ -957,15 +957,15 @@ def test_dead_letter_monitor_runs_with_mocked_consumer():
 
     # Patch the dead_letter module to expose DEAD_LETTER_SUBJECT (which lives in
     # router.py but the CLI imports from dead_letter — inject it so the import works).
-    import loom.router.dead_letter as _dl_mod
+    import heddle.router.dead_letter as _dl_mod
 
     _orig_subject = getattr(_dl_mod, "DEAD_LETTER_SUBJECT", "NOT_PRESENT")
     _orig_consumer = _dl_mod.DeadLetterConsumer
-    _dl_mod.DEAD_LETTER_SUBJECT = "loom.tasks.dead_letter"
+    _dl_mod.DEAD_LETTER_SUBJECT = "heddle.tasks.dead_letter"
     _dl_mod.DeadLetterConsumer = mock_cls
 
     try:
-        with patch("loom.cli.main.asyncio.run") as mock_run:
+        with patch("heddle.cli.main.asyncio.run") as mock_run:
             result = runner.invoke(
                 cli,
                 [
@@ -1045,8 +1045,8 @@ def test_pipeline_preflight_check_called(tmp_path):
     runner = CliRunner()
 
     with (
-        patch("loom.cli.main._run_preflight") as mock_preflight,
-        patch("loom.cli.main.asyncio.run"),
+        patch("heddle.cli.main._run_preflight") as mock_preflight,
+        patch("heddle.cli.main.asyncio.run"),
     ):
         result = runner.invoke(
             cli,
@@ -1072,8 +1072,8 @@ def test_pipeline_preflight_skip_flag(tmp_path):
     runner = CliRunner()
 
     with (
-        patch("loom.cli.main._run_preflight") as mock_preflight,
-        patch("loom.cli.main.asyncio.run"),
+        patch("heddle.cli.main._run_preflight") as mock_preflight,
+        patch("heddle.cli.main.asyncio.run"),
     ):
         result = runner.invoke(
             cli,
@@ -1105,10 +1105,10 @@ def test_router_preflight_check_called(tmp_path):
     mock_router.process_messages = MagicMock(return_value=None)
 
     with (
-        patch("loom.cli.main._run_preflight") as mock_preflight,
-        patch("loom.cli.main.asyncio.run") as mock_run,
-        patch("loom.bus.nats_adapter.NATSBus"),
-        patch("loom.router.router.TaskRouter", return_value=mock_router),
+        patch("heddle.cli.main._run_preflight") as mock_preflight,
+        patch("heddle.cli.main.asyncio.run") as mock_run,
+        patch("heddle.bus.nats_adapter.NATSBus"),
+        patch("heddle.router.router.TaskRouter", return_value=mock_router),
     ):
         result = runner.invoke(
             cli,
@@ -1137,10 +1137,10 @@ def test_router_preflight_skip_flag(tmp_path):
     mock_router.process_messages = MagicMock(return_value=None)
 
     with (
-        patch("loom.cli.main._run_preflight") as mock_preflight,
-        patch("loom.cli.main.asyncio.run") as mock_run,
-        patch("loom.bus.nats_adapter.NATSBus"),
-        patch("loom.router.router.TaskRouter", return_value=mock_router),
+        patch("heddle.cli.main._run_preflight") as mock_preflight,
+        patch("heddle.cli.main.asyncio.run") as mock_run,
+        patch("heddle.bus.nats_adapter.NATSBus"),
+        patch("heddle.router.router.TaskRouter", return_value=mock_router),
     ):
         result = runner.invoke(
             cli,
@@ -1166,10 +1166,10 @@ def test_router_preflight_skip_flag(tmp_path):
 
 def test_preflight_config_not_readable():
     """_run_preflight aborts when check_config_readable returns failure."""
-    from loom.cli.main import _run_preflight
+    from heddle.cli.main import _run_preflight
 
     with (
-        patch("loom.cli.main.check_config_readable", return_value=(False, "Cannot read config")),
+        patch("heddle.cli.main.check_config_readable", return_value=(False, "Cannot read config")),
         pytest.raises(click.Abort),
     ):
         _run_preflight("nats://localhost:4222", config="bad.yaml")
@@ -1177,11 +1177,11 @@ def test_preflight_config_not_readable():
 
 def test_preflight_nats_fail():
     """_run_preflight aborts when NATS connectivity check fails."""
-    from loom.cli.main import _run_preflight
+    from heddle.cli.main import _run_preflight
 
     with (
-        patch("loom.cli.main.check_config_readable", return_value=(True, "ok")),
-        patch("loom.cli.main._run_async", return_value=(False, "Connection refused")),
+        patch("heddle.cli.main.check_config_readable", return_value=(True, "ok")),
+        patch("heddle.cli.main._run_async", return_value=(False, "Connection refused")),
         pytest.raises(click.Abort),
     ):
         _run_preflight("nats://localhost:4222", config="good.yaml")
@@ -1189,13 +1189,13 @@ def test_preflight_nats_fail():
 
 def test_preflight_nats_ok_with_env_warnings(capsys):
     """_run_preflight echoes env var warnings when check_env=True and tier set."""
-    from loom.cli.main import _run_preflight
+    from heddle.cli.main import _run_preflight
 
     with (
-        patch("loom.cli.main.check_config_readable", return_value=(True, "ok")),
-        patch("loom.cli.main._run_async", return_value=(True, "NATS connected")),
+        patch("heddle.cli.main.check_config_readable", return_value=(True, "ok")),
+        patch("heddle.cli.main._run_async", return_value=(True, "NATS connected")),
         patch(
-            "loom.cli.main.check_env_vars",
+            "heddle.cli.main.check_env_vars",
             return_value=["ANTHROPIC_API_KEY not set"],
         ) as mock_env,
     ):
@@ -1206,12 +1206,12 @@ def test_preflight_nats_ok_with_env_warnings(capsys):
 
 def test_preflight_nats_ok_no_env_check():
     """_run_preflight does not call check_env_vars when check_env=False."""
-    from loom.cli.main import _run_preflight
+    from heddle.cli.main import _run_preflight
 
     with (
-        patch("loom.cli.main.check_config_readable", return_value=(True, "ok")),
-        patch("loom.cli.main._run_async", return_value=(True, "NATS connected")),
-        patch("loom.cli.main.check_env_vars") as mock_env,
+        patch("heddle.cli.main.check_config_readable", return_value=(True, "ok")),
+        patch("heddle.cli.main._run_async", return_value=(True, "NATS connected")),
+        patch("heddle.cli.main.check_env_vars") as mock_env,
     ):
         _run_preflight(
             "nats://localhost:4222", config="good.yaml", tier="standard", check_env=False
@@ -1237,12 +1237,12 @@ def test_mdns_runs_and_registers_services():
     mock_advertiser.stop = AsyncMock()
 
     mock_mdns_module = MagicMock()
-    mock_mdns_module.LoomServiceAdvertiser.return_value = mock_advertiser
+    mock_mdns_module.HeddleServiceAdvertiser.return_value = mock_advertiser
 
     import sys
 
-    saved = sys.modules.get("loom.discovery.mdns", "NOT_PRESENT")
-    sys.modules["loom.discovery.mdns"] = mock_mdns_module
+    saved = sys.modules.get("heddle.discovery.mdns", "NOT_PRESENT")
+    sys.modules["heddle.discovery.mdns"] = mock_mdns_module
 
     try:
         # Make asyncio.sleep raise CancelledError immediately so the command exits
@@ -1259,12 +1259,12 @@ def test_mdns_runs_and_registers_services():
             )
     finally:
         if saved == "NOT_PRESENT":
-            del sys.modules["loom.discovery.mdns"]
+            del sys.modules["heddle.discovery.mdns"]
         else:
-            sys.modules["loom.discovery.mdns"] = saved
+            sys.modules["heddle.discovery.mdns"] = saved
 
     assert result.exit_code == 0
-    mock_mdns_module.LoomServiceAdvertiser.assert_called_once()
+    mock_mdns_module.HeddleServiceAdvertiser.assert_called_once()
     mock_advertiser.start.assert_awaited_once()
     mock_advertiser.register_workshop.assert_called_once_with(port=8080, host=None)
     mock_advertiser.register_nats.assert_called_once_with(port=4222, host=None)
@@ -1283,12 +1283,12 @@ def test_mdns_with_mcp_port():
     mock_advertiser.stop = AsyncMock()
 
     mock_mdns_module = MagicMock()
-    mock_mdns_module.LoomServiceAdvertiser.return_value = mock_advertiser
+    mock_mdns_module.HeddleServiceAdvertiser.return_value = mock_advertiser
 
     import sys
 
-    saved = sys.modules.get("loom.discovery.mdns", "NOT_PRESENT")
-    sys.modules["loom.discovery.mdns"] = mock_mdns_module
+    saved = sys.modules.get("heddle.discovery.mdns", "NOT_PRESENT")
+    sys.modules["heddle.discovery.mdns"] = mock_mdns_module
 
     try:
         with patch("asyncio.sleep", side_effect=asyncio.CancelledError):
@@ -1306,9 +1306,9 @@ def test_mdns_with_mcp_port():
             )
     finally:
         if saved == "NOT_PRESENT":
-            del sys.modules["loom.discovery.mdns"]
+            del sys.modules["heddle.discovery.mdns"]
         else:
-            sys.modules["loom.discovery.mdns"] = saved
+            sys.modules["heddle.discovery.mdns"] = saved
 
     assert result.exit_code == 0
     mock_advertiser.register_mcp.assert_called_once_with(port=9000, host=None)
@@ -1327,7 +1327,7 @@ def test_worker_config_validation_errors(tmp_path):
     )
     runner = CliRunner()
 
-    with patch("loom.cli.main.asyncio.run"):
+    with patch("heddle.cli.main.asyncio.run"):
         result = runner.invoke(
             cli,
             [
@@ -1359,7 +1359,7 @@ def test_processor_config_validation_errors(tmp_path):
     )
     runner = CliRunner()
 
-    with patch("loom.cli.main.asyncio.run"):
+    with patch("heddle.cli.main.asyncio.run"):
         result = runner.invoke(
             cli,
             [
@@ -1390,9 +1390,9 @@ def test_worker_preflight_check_called(tmp_path):
     runner = CliRunner()
 
     with (
-        patch("loom.cli.main._run_preflight") as mock_preflight,
+        patch("heddle.cli.main._run_preflight") as mock_preflight,
         patch.dict("os.environ", {"OLLAMA_URL": "http://localhost:11434"}, clear=False),
-        patch("loom.cli.main.asyncio.run"),
+        patch("heddle.cli.main.asyncio.run"),
     ):
         result = runner.invoke(
             cli,
@@ -1428,9 +1428,9 @@ def test_processor_preflight_check_called(tmp_path):
 
     mock_backend = MagicMock()
     with (
-        patch("loom.cli.main._run_preflight") as mock_preflight,
-        patch("loom.cli.main._load_processing_backend", return_value=mock_backend),
-        patch("loom.cli.main.asyncio.run"),
+        patch("heddle.cli.main._run_preflight") as mock_preflight,
+        patch("heddle.cli.main._load_processing_backend", return_value=mock_backend),
+        patch("heddle.cli.main.asyncio.run"),
     ):
         result = runner.invoke(
             cli,

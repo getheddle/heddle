@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from loom.worker.processor import SyncProcessingBackend
+from heddle.worker.processor import SyncProcessingBackend
 
 
 class CountingBackend(SyncProcessingBackend):

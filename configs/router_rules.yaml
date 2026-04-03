@@ -5,25 +5,25 @@
 # Deterministic routing rules for the TaskRouter. No LLM is involved — the
 # router uses these rules to decide where each task goes.
 #
-# Component:  src/loom/router/router.py (TaskRouter)
-# Loaded by:  loom.core.config.load_config()
+# Component:  src/heddle/router/router.py (TaskRouter)
+# Loaded by:  heddle.core.config.load_config()
 #
 # Run with:
-#   loom router --nats-url nats://localhost:4222
-#   loom router --config configs/router_rules.yaml --nats-url nats://localhost:4222
+#   heddle router --nats-url nats://localhost:4222
+#   heddle router --config configs/router_rules.yaml --nats-url nats://localhost:4222
 #
 # How routing works:
-#   1. Router subscribes to loom.tasks.incoming
+#   1. Router subscribes to heddle.tasks.incoming
 #   2. For each TaskMessage, it resolves the tier:
 #      a. If worker_type is in tier_overrides, use that tier (ignoring the message's tier)
 #      b. Otherwise, use the tier from the TaskMessage itself
-#   3. Router publishes to loom.tasks.{worker_type}.{resolved_tier}
-#   4. If rate-limited, the task goes to loom.tasks.dead_letter instead
+#   3. Router publishes to heddle.tasks.{worker_type}.{resolved_tier}
+#   4. If rate-limited, the task goes to heddle.tasks.dead_letter instead
 #
 # NATS subjects:
-#   loom.tasks.incoming                     — Router subscribes here
-#   loom.tasks.{worker_type}.{tier}         — Routed tasks land here
-#   loom.tasks.dead_letter                  — Unroutable or rate-limited tasks
+#   heddle.tasks.incoming                     — Router subscribes here
+#   heddle.tasks.{worker_type}.{tier}         — Routed tasks land here
+#   heddle.tasks.dead_letter                  — Unroutable or rate-limited tasks
 #
 # Related configs:
 #   configs/workers/*.yaml              — workers subscribing to routed subjects
@@ -64,7 +64,7 @@ tier_overrides:
 #   - If the bucket is empty (all tokens consumed), the task is rate-limited.
 #
 # Rate-limited tasks:
-#   Tasks that exceed the bucket capacity are sent to loom.tasks.dead_letter
+#   Tasks that exceed the bucket capacity are sent to heddle.tasks.dead_letter
 #   with reason="rate_limited". They are NOT retried automatically.
 #   To handle dead-lettered tasks, implement a dead-letter consumer that
 #   retries or alerts. (See CLAUDE.md "What to implement next".)

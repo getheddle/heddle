@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
-from loom.core.messages import ModelTier, TaskMessage, TaskResult, TaskStatus
-from loom.worker.processor import ProcessingBackend, ProcessorWorker, SyncProcessingBackend
+from heddle.core.messages import ModelTier, TaskMessage, TaskResult, TaskStatus
+from heddle.worker.processor import ProcessingBackend, ProcessorWorker, SyncProcessingBackend
 
 # --- Mock backend ---
 

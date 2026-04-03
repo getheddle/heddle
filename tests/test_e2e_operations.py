@@ -2,7 +2,7 @@
 End-to-end operation tests — full actor coordination via InMemoryBus.
 
 These tests exercise multi-actor workflows without external infrastructure
-(no NATS, no LLM APIs). They verify that the Loom actor mesh works correctly
+(no NATS, no LLM APIs). They verify that the Heddle actor mesh works correctly
 when components are wired together through the in-memory message bus.
 
 All tests are self-contained and run as part of the standard test suite:
@@ -19,18 +19,18 @@ import tempfile
 import pytest
 import yaml
 
-from loom.bus.memory import InMemoryBus
-from loom.core.messages import (
+from heddle.bus.memory import InMemoryBus
+from heddle.core.messages import (
     ModelTier,
     OrchestratorGoal,
     TaskMessage,
     TaskResult,
     TaskStatus,
 )
-from loom.orchestrator.pipeline import PipelineOrchestrator
-from loom.orchestrator.runner import OrchestratorActor
-from loom.router.router import TaskRouter
-from loom.worker.backends import LLMBackend
+from heddle.orchestrator.pipeline import PipelineOrchestrator
+from heddle.orchestrator.runner import OrchestratorActor
+from heddle.router.router import TaskRouter
+from heddle.worker.backends import LLMBackend
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -105,7 +105,7 @@ async def _worker_simulator(
     async for data in sub:
         task = TaskMessage(**data)
         # Small delay to let orchestrator set up result subscription
-        # (the orchestrator subscribes to loom.results.{goal_id} AFTER dispatching)
+        # (the orchestrator subscribes to heddle.results.{goal_id} AFTER dispatching)
         await asyncio.sleep(0.05)
         output = {"processed": True, "worker_type": task.worker_type}
         if response_fn:
@@ -124,7 +124,7 @@ async def _worker_simulator(
         # Publish result to the goal's result subject
         if task.parent_task_id:
             await bus.publish(
-                f"loom.results.{task.parent_task_id}",
+                f"heddle.results.{task.parent_task_id}",
                 result.model_dump(mode="json"),
             )
 
@@ -157,7 +157,7 @@ class TestRouterToWorkerRoundtrip:
             await router.run()
 
             # Subscribe where the worker would listen
-            worker_sub = await bus.subscribe("loom.tasks.summarizer.local")
+            worker_sub = await bus.subscribe("heddle.tasks.summarizer.local")
 
             # Start router message processing
             process_task = asyncio.create_task(router.process_messages())
@@ -169,7 +169,7 @@ class TestRouterToWorkerRoundtrip:
                 model_tier=ModelTier.LOCAL,
             )
             await bus.publish(
-                "loom.tasks.incoming",
+                "heddle.tasks.incoming",
                 task.model_dump(mode="json"),
             )
 
@@ -249,14 +249,14 @@ class TestOrchestratorFullGoalFlow:
             goal_data = goal.model_dump(mode="json")
 
             # Subscribe for the final result
-            result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
             # Pre-subscribe worker before handle_message (mirrors real deployment)
-            worker_sub = await bus.subscribe("loom.tasks.incoming")
+            worker_sub = await bus.subscribe("heddle.tasks.incoming")
             worker_task = asyncio.create_task(
                 _worker_simulator(
                     bus,
-                    "loom.tasks.incoming",
+                    "heddle.tasks.incoming",
                     response_fn=lambda t: {"summary": f"Summary of {t.payload.get('text', '')}"},
                     max_messages=2,
                     sub=worker_sub,
@@ -328,7 +328,7 @@ class TestPipelineMultiStage:
             goal_data = goal.model_dump(mode="json")
 
             # Subscribe for final result
-            result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
             # Execution order tracker
             execution_order = []
@@ -342,11 +342,11 @@ class TestPipelineMultiStage:
                 return {"processed": True}
 
             # Pre-subscribe worker before handle_message
-            worker_sub = await bus.subscribe("loom.tasks.incoming")
+            worker_sub = await bus.subscribe("heddle.tasks.incoming")
             worker_task = asyncio.create_task(
                 _worker_simulator(
                     bus,
-                    "loom.tasks.incoming",
+                    "heddle.tasks.incoming",
                     response_fn=make_response,
                     max_messages=2,
                     sub=worker_sub,
@@ -420,7 +420,7 @@ class TestPipelineParallelStages:
                 context={"file_ref": "doc.pdf"},
             )
             goal_data = goal.model_dump(mode="json")
-            result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
             def make_response(task: TaskMessage) -> dict:
                 if task.worker_type == "text_extractor":
@@ -429,10 +429,10 @@ class TestPipelineParallelStages:
                     return {"images": ["img1.png", "img2.png"]}
                 return {}
 
-            worker_sub = await bus.subscribe("loom.tasks.incoming")
+            worker_sub = await bus.subscribe("heddle.tasks.incoming")
             worker_task = asyncio.create_task(
                 _worker_simulator(
-                    bus, "loom.tasks.incoming", make_response, max_messages=2, sub=worker_sub
+                    bus, "heddle.tasks.incoming", make_response, max_messages=2, sub=worker_sub
                 )
             )
 
@@ -502,14 +502,14 @@ class TestConcurrentGoalsE2E:
             # Subscribe for all results
             result_subs = {}
             for g in goals:
-                result_subs[g.goal_id] = await bus.subscribe(f"loom.results.{g.goal_id}")
+                result_subs[g.goal_id] = await bus.subscribe(f"heddle.results.{g.goal_id}")
 
             # Pre-subscribe worker before goals are processed
-            worker_sub = await bus.subscribe("loom.tasks.incoming")
+            worker_sub = await bus.subscribe("heddle.tasks.incoming")
             worker_task = asyncio.create_task(
                 _worker_simulator(
                     bus,
-                    "loom.tasks.incoming",
+                    "heddle.tasks.incoming",
                     response_fn=lambda t: {"summary": f"Done: {t.payload.get('text', '')}"},
                     max_messages=3,
                     sub=worker_sub,
@@ -541,7 +541,7 @@ class TestConcurrentGoalsE2E:
 class TestRouterOrchestratorWired:
     @pytest.mark.asyncio
     async def test_router_forwards_subtasks_to_worker_subjects(self):
-        """Orchestrator dispatches to loom.tasks.incoming → router routes to worker subject."""
+        """Orchestrator dispatches to heddle.tasks.incoming → router routes to worker subject."""
         bus = InMemoryBus()
         await bus.connect()
 
@@ -593,15 +593,15 @@ class TestRouterOrchestratorWired:
             )
 
             goal = OrchestratorGoal(instruction="Test wired flow")
-            result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+            result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
-            # Worker listens on the routed subject (not loom.tasks.incoming)
+            # Worker listens on the routed subject (not heddle.tasks.incoming)
             # Pre-subscribe before handle_message
-            worker_sub = await bus.subscribe("loom.tasks.summarizer.local")
+            worker_sub = await bus.subscribe("heddle.tasks.summarizer.local")
             worker_task = asyncio.create_task(
                 _worker_simulator(
                     bus,
-                    "loom.tasks.summarizer.local",
+                    "heddle.tasks.summarizer.local",
                     response_fn=lambda t: {"summary": "routed and processed"},
                     max_messages=1,
                     sub=worker_sub,

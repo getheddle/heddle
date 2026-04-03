@@ -1,5 +1,5 @@
 """
-Tests for loom setup command — interactive wizard.
+Tests for heddle setup command — interactive wizard.
 
 All tests use Click's CliRunner and mock HTTP calls.
 No external services needed.
@@ -14,7 +14,7 @@ import structlog
 from click.testing import CliRunner
 
 _saved_structlog_config = structlog.get_config()
-from loom.cli.setup import _detect_ollama, _find_telegram_exports, setup  # noqa: E402
+from heddle.cli.setup import _detect_ollama, _find_telegram_exports, setup  # noqa: E402
 
 structlog.configure(**_saved_structlog_config)
 
@@ -79,7 +79,7 @@ def test_setup_help():
 def test_setup_non_interactive_no_ollama(tmp_path):
     """Non-interactive mode skips prompts and writes config."""
     cfg_path = str(tmp_path / "config.yaml")
-    with patch("loom.cli.setup._detect_ollama", return_value=(False, [])):
+    with patch("heddle.cli.setup._detect_ollama", return_value=(False, [])):
         runner = CliRunner()
         result = runner.invoke(setup, ["--non-interactive", "--config-path", cfg_path])
     assert result.exit_code == 0
@@ -91,7 +91,7 @@ def test_setup_non_interactive_with_ollama(tmp_path):
     """Non-interactive mode detects Ollama and saves URL."""
     cfg_path = str(tmp_path / "config.yaml")
     with patch(
-        "loom.cli.setup._detect_ollama",
+        "heddle.cli.setup._detect_ollama",
         return_value=(True, ["llama3.2:3b", "nomic-embed-text"]),
     ):
         runner = CliRunner()
@@ -101,7 +101,7 @@ def test_setup_non_interactive_with_ollama(tmp_path):
     assert "nomic-embed-text available" in result.output
 
     # Verify saved config
-    from loom.cli.config import load_config
+    from heddle.cli.config import load_config
 
     config = load_config(cfg_path)
     assert config.ollama_url == "http://localhost:11434"
@@ -110,7 +110,7 @@ def test_setup_non_interactive_with_ollama(tmp_path):
 def test_setup_interactive_skips_prompts(tmp_path):
     """Interactive mode with Enter (empty) inputs skips optional fields."""
     cfg_path = str(tmp_path / "config.yaml")
-    with patch("loom.cli.setup._detect_ollama", return_value=(False, [])):
+    with patch("heddle.cli.setup._detect_ollama", return_value=(False, [])):
         runner = CliRunner()
         # Provide empty inputs for: ollama url, anthropic key, data dir
         result = runner.invoke(
@@ -126,8 +126,8 @@ def test_setup_interactive_with_anthropic_key(tmp_path):
     """Interactive mode accepts and validates an Anthropic API key."""
     cfg_path = str(tmp_path / "config.yaml")
     with (
-        patch("loom.cli.setup._detect_ollama", return_value=(False, [])),
-        patch("loom.cli.setup._test_anthropic_key", return_value=True),
+        patch("heddle.cli.setup._detect_ollama", return_value=(False, [])),
+        patch("heddle.cli.setup._test_anthropic_key", return_value=True),
     ):
         runner = CliRunner()
         # Inputs: skip ollama url, enter API key, skip data dir
@@ -139,7 +139,7 @@ def test_setup_interactive_with_anthropic_key(tmp_path):
     assert result.exit_code == 0
     assert "Key validated" in result.output
 
-    from loom.cli.config import load_config
+    from heddle.cli.config import load_config
 
     config = load_config(cfg_path)
     assert config.anthropic_api_key == "sk-ant-test-key"
@@ -150,13 +150,13 @@ def test_setup_rerun_preserves_existing(tmp_path):
     cfg_path = str(tmp_path / "config.yaml")
 
     # First run: save an Ollama URL
-    from loom.cli.config import LoomConfig, save_config
+    from heddle.cli.config import HeddleConfig, save_config
 
-    save_config(LoomConfig(ollama_url="http://saved:11434"), cfg_path)
+    save_config(HeddleConfig(ollama_url="http://saved:11434"), cfg_path)
 
     # Second run: non-interactive, Ollama at saved URL
     with patch(
-        "loom.cli.setup._detect_ollama",
+        "heddle.cli.setup._detect_ollama",
         return_value=(True, ["llama3.2:3b"]),
     ):
         runner = CliRunner()
@@ -174,7 +174,7 @@ def test_setup_data_dir_with_exports(tmp_path):
     (data_dir / "result-1.json").write_text("{}")
     (data_dir / "result-2.json").write_text("{}")
 
-    with patch("loom.cli.setup._detect_ollama", return_value=(False, [])):
+    with patch("heddle.cli.setup._detect_ollama", return_value=(False, [])):
         runner = CliRunner()
         # Inputs: skip ollama url, skip API key, enter data dir
         result = runner.invoke(

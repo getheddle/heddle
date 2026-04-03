@@ -1,10 +1,10 @@
-"""Tests for loom.workshop.config_impact module."""
+"""Tests for heddle.workshop.config_impact module."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from loom.workshop.config_impact import _find_downstream, _infer_dependencies, get_impact
+from heddle.workshop.config_impact import _find_downstream, _infer_dependencies, get_impact
 
 
 class TestInferDependencies:
@@ -202,7 +202,7 @@ class TestGetImpactViaApp:
     def test_impact_endpoint(self, tmp_path):
         from fastapi.testclient import TestClient
 
-        from loom.workshop.app import create_app
+        from heddle.workshop.app import create_app
 
         configs_dir = tmp_path / "configs"
         workers_dir = configs_dir / "workers"
@@ -244,7 +244,7 @@ class TestGetImpactViaApp:
     def test_impact_panel_endpoint(self, tmp_path):
         from fastapi.testclient import TestClient
 
-        from loom.workshop.app import create_app
+        from heddle.workshop.app import create_app
 
         configs_dir = tmp_path / "configs"
         workers_dir = configs_dir / "workers"
@@ -283,7 +283,7 @@ class TestGetImpactViaApp:
     def test_impact_panel_with_pipeline(self, tmp_path):
         from fastapi.testclient import TestClient
 
-        from loom.workshop.app import create_app
+        from heddle.workshop.app import create_app
 
         configs_dir = tmp_path / "configs"
         workers_dir = configs_dir / "workers"

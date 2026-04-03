@@ -1,4 +1,4 @@
-"""Tests for loom.mcp.workshop_bridge — Workshop MCP tool execution."""
+"""Tests for heddle.mcp.workshop_bridge — Workshop MCP tool execution."""
 
 import os
 from dataclasses import dataclass, field
@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import yaml
 
-from loom.mcp.workshop_bridge import WorkshopBridge, WorkshopBridgeError
+from heddle.mcp.workshop_bridge import WorkshopBridge, WorkshopBridgeError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -24,7 +24,7 @@ def _write_yaml(dir_path: str, filename: str, data: dict) -> str:
 
 def _make_config_manager(tmp_path, workers=None):
     """Create a ConfigManager with optional worker configs."""
-    from loom.workshop.config_manager import ConfigManager
+    from heddle.workshop.config_manager import ConfigManager
 
     workers_dir = tmp_path / "workers"
     workers_dir.mkdir(exist_ok=True)

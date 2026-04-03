@@ -1,11 +1,11 @@
-# Dockerfile for the Loom dynamic orchestrator.
+# Dockerfile for the Heddle dynamic orchestrator.
 #
 # The orchestrator uses an LLM to decompose high-level goals into subtasks,
 # dispatches them to workers via the router, and synthesizes the results.
 # It requires both NATS (messaging) and Valkey (checkpoint state).
 #
-# Build:  docker build -f docker/Dockerfile.orchestrator -t loom-orchestrator .
-# Run:    docker run -e NATS_URL=nats://nats:4222 -e REDIS_URL=redis://redis:6379 loom-orchestrator
+# Build:  docker build -f docker/Dockerfile.orchestrator -t heddle-orchestrator .
+# Run:    docker run -e NATS_URL=nats://nats:4222 -e REDIS_URL=redis://redis:6379 heddle-orchestrator
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -20,8 +20,8 @@ ENV NATS_URL="nats://nats:4222"
 ENV REDIS_URL="redis://redis:6379"
 
 # Start the dynamic orchestrator with the default config.
-# The orchestrator subscribes to loom.goals.incoming and uses an LLM to
+# The orchestrator subscribes to heddle.goals.incoming and uses an LLM to
 # decide which workers to invoke for each goal.
-CMD ["python", "-m", "loom.cli.main", "orchestrator", \
+CMD ["python", "-m", "heddle.cli.main", "orchestrator", \
      "--config", "configs/orchestrators/default.yaml", \
      "--nats-url", "nats://nats:4222"]

@@ -1,5 +1,5 @@
 """
-Tests for loom new worker / loom new pipeline — interactive scaffolding.
+Tests for heddle new worker / heddle new pipeline — interactive scaffolding.
 
 All tests use CliRunner with input= for interactive prompts and tmp_path for isolation.
 """
@@ -11,7 +11,7 @@ import yaml
 from click.testing import CliRunner
 
 _saved_structlog_config = structlog.get_config()
-from loom.cli.new import _build_schema, _validate_name, new  # noqa: E402
+from heddle.cli.new import _build_schema, _validate_name, new  # noqa: E402
 
 structlog.configure(**_saved_structlog_config)
 
@@ -54,7 +54,7 @@ def test_build_schema_empty():
 
 
 # ---------------------------------------------------------------------------
-# loom new --help
+# heddle new --help
 # ---------------------------------------------------------------------------
 
 
@@ -77,7 +77,7 @@ def test_new_pipeline_help():
 
 
 # ---------------------------------------------------------------------------
-# loom new worker
+# heddle new worker
 # ---------------------------------------------------------------------------
 
 
@@ -208,7 +208,7 @@ def test_new_worker_invalid_name():
 
 
 # ---------------------------------------------------------------------------
-# loom new pipeline
+# heddle new pipeline
 # ---------------------------------------------------------------------------
 
 

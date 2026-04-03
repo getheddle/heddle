@@ -1,4 +1,4 @@
-"""Tests for loom.workshop.app_manager — ZIP deployment, list, remove."""
+"""Tests for heddle.workshop.app_manager — ZIP deployment, list, remove."""
 
 import zipfile
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from loom.workshop.app_manager import AppDeployError, AppManager, _validate_config_path
+from heddle.workshop.app_manager import AppDeployError, AppManager, _validate_config_path
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -16,7 +16,7 @@ VALID_MANIFEST = {
     "name": "test-app",
     "version": "1.0.0",
     "description": "A test application",
-    "loom_version": ">=0.4.0",
+    "heddle_version": ">=0.4.0",
     "entry_configs": {
         "workers": [
             {"config": "configs/workers/my_worker.yaml"},
@@ -196,12 +196,12 @@ class TestAppManagerReload:
 
     @pytest.mark.asyncio
     async def test_notify_reload_with_bus(self, tmp_path):
-        """notify_reload publishes to loom.control.reload."""
-        from loom.bus.memory import InMemoryBus
+        """notify_reload publishes to heddle.control.reload."""
+        from heddle.bus.memory import InMemoryBus
 
         bus = InMemoryBus()
         await bus.connect()
-        sub = await bus.subscribe("loom.control.reload")
+        sub = await bus.subscribe("heddle.control.reload")
 
         mgr = AppManager(apps_dir=str(tmp_path), bus=bus)
         await mgr.notify_reload()
@@ -340,7 +340,7 @@ class TestDeploymentSafety:
 
     def test_config_path_escapes_app_dir(self):
         """Config path that resolves to app-root itself (no trailing slash) is rejected."""
-        from loom.workshop.app_manager import _validate_config_path
+        from heddle.workshop.app_manager import _validate_config_path
 
         # A path like "." resolves to "/app-root" which doesn't start with "/app-root/"
         with pytest.raises(AppDeployError, match="escapes app directory"):

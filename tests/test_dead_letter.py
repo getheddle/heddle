@@ -6,7 +6,7 @@ Tests cover:
 - list_entries with limit/offset
 - count() and clear()
 - Bounded list eviction when max_size is exceeded
-- replay() re-publishes to loom.tasks.incoming
+- replay() re-publishes to heddle.tasks.incoming
 - Entry structure and metadata extraction
 """
 
@@ -17,9 +17,9 @@ from typing import Any
 
 import pytest
 
-from loom.bus.memory import InMemoryBus
-from loom.core.messages import ModelTier, TaskMessage
-from loom.router.dead_letter import (
+from heddle.bus.memory import InMemoryBus
+from heddle.core.messages import ModelTier, TaskMessage
+from heddle.router.dead_letter import (
     INCOMING_SUBJECT,
     DeadLetterConsumer,
     DeadLetterEntry,
@@ -290,7 +290,7 @@ class TestHandleMessage:
 class TestReplay:
     @pytest.mark.asyncio
     async def test_replay_publishes_to_incoming(self):
-        """Replay re-publishes the original task to loom.tasks.incoming."""
+        """Replay re-publishes the original task to heddle.tasks.incoming."""
         bus = InMemoryBus()
         await bus.connect()
         consumer = DeadLetterConsumer(bus=bus)

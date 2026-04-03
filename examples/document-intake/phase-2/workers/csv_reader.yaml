@@ -4,7 +4,7 @@
 #
 # Processor worker (non-LLM) that reads a CSV file and returns rows as
 # structured records. Demonstrates how to wire a custom ProcessingBackend
-# into a Loom pipeline.
+# into a Heddle pipeline.
 #
 # Note: worker_kind is "processor" — this worker runs Python code, not
 # an LLM. No system_prompt, no model tier, no token limits. But it uses

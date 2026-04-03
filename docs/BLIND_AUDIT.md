@@ -1,6 +1,6 @@
 # Adversarial Review Pipeline
 
-How to set up genuine blind review of AI-generated analysis using Loom's
+How to set up genuine blind review of AI-generated analysis using Heddle's
 knowledge silo isolation.
 
 ---
@@ -18,7 +18,7 @@ can't be independent if it can see the framework it's reviewing against.
 
 ## The Solution: Blind Audit
 
-Loom's knowledge silo system lets you architecturally enforce reviewer
+Heddle's knowledge silo system lets you architecturally enforce reviewer
 independence. A "blind" worker has an empty knowledge silo — it literally
 cannot access the domain knowledge that the analytical worker used. It
 can't conform to the analytical frame because it can't see it.
@@ -296,7 +296,7 @@ pipeline_stages:
 Validate:
 
 ```bash
-loom validate configs/workers/analyst.yaml \
+heddle validate configs/workers/analyst.yaml \
               configs/workers/neutralizer.yaml \
               configs/workers/blind_reviewer.yaml \
               configs/orchestrators/blind_audit_pipeline.yaml
@@ -307,7 +307,7 @@ loom validate configs/workers/analyst.yaml \
 Before running the full pipeline, test each worker individually:
 
 ```bash
-loom workshop
+heddle workshop
 ```
 
 1. **Test the analyst** — paste source text, check that findings are
@@ -395,8 +395,8 @@ final report that incorporates the reviewer's concerns.
 
 - **[Building Workflows](building-workflows.md)** — full guide to workers,
   pipelines, and knowledge silos
-- **[Why Loom?](WHY_LOOM.md)** — how the blind audit pattern fits into
-  Loom's input-layer approach
+- **[Why Heddle?](WHY_HEDDLE.md)** — how the blind audit pattern fits into
+  Heddle's input-layer approach
 - **[Design Invariants](DESIGN_INVARIANTS.md)** — architectural rules
   for knowledge isolation (invariants 17-19)
 - **[Workers Reference](workers-reference.md)** — the shipped `reviewer`

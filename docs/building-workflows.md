@@ -1,7 +1,7 @@
-# Building AI Workflows with Loom
+# Building AI Workflows with Heddle
 
 This guide walks you through building your own AI-powered workflows using
-Loom. By the end, you'll know how to create workers, test them in the
+Heddle. By the end, you'll know how to create workers, test them in the
 Workshop, chain them into pipelines, and optionally deploy to infrastructure.
 
 ## Core concepts
@@ -20,7 +20,7 @@ There are two kinds of workers:
   scikit-learn, custom Python). They implement a `ProcessingBackend` interface.
 
 **Pipelines** chain workers together so data flows from one to the next.
-Loom figures out which stages can run in parallel from the input mappings —
+Heddle figures out which stages can run in parallel from the input mappings —
 you don't wire dependencies by hand.
 
 ```text
@@ -40,9 +40,9 @@ develop and refine workers before deploying them.
 
 ## Prerequisites
 
-- Python 3.11+ with `pip install loom-ai[workshop]` (or `uv sync --extra workshop`)
+- Python 3.11+ with `pip install heddle-ai[workshop]` (or `uv sync --extra workshop`)
 - At least one LLM backend (Ollama recommended: `ollama pull llama3.2:3b`)
-- Run `loom setup` if you haven't already
+- Run `heddle setup` if you haven't already
 
 That's it. No NATS, no Valkey, no Docker — those are for production later.
 
@@ -56,7 +56,7 @@ worker entirely in YAML — no Python code needed.
 Use the interactive scaffolding (generates YAML from your answers):
 
 ```bash
-loom new worker
+heddle new worker
 ```
 
 Or copy the template and edit manually:
@@ -134,7 +134,7 @@ rather than propagating garbage downstream.
 ### Step 3: Validate the config
 
 ```bash
-loom validate configs/workers/entity_extractor.yaml
+heddle validate configs/workers/entity_extractor.yaml
 ```
 
 This checks the config without starting any infrastructure. If there
@@ -144,7 +144,7 @@ them immediately.
 ### Step 4: Test in Workshop
 
 ```bash
-loom workshop
+heddle workshop
 # Open http://localhost:8080 → Workers → entity_extractor → Test
 ```
 
@@ -180,7 +180,7 @@ each iteration makes the worker measurably better.
 
 ### Worker config validation
 
-Worker configs are validated at startup (and by `loom validate`).
+Worker configs are validated at startup (and by `heddle validate`).
 Validation checks:
 
 - `name` is required (string)
@@ -208,7 +208,7 @@ deterministic computation.
 For async-native backends, implement `ProcessingBackend`:
 
 ```python
-from loom.worker.processor import ProcessingBackend
+from heddle.worker.processor import ProcessingBackend
 
 class MyAsyncBackend(ProcessingBackend):
     async def process(self, payload, config):
@@ -224,7 +224,7 @@ For synchronous/CPU-bound backends (the common case), use
 `SyncProcessingBackend`:
 
 ```python
-from loom.worker.processor import SyncProcessingBackend
+from heddle.worker.processor import SyncProcessingBackend
 
 class DoclingBackend(SyncProcessingBackend):
     def process_sync(self, payload, config):
@@ -244,7 +244,7 @@ class DoclingBackend(SyncProcessingBackend):
 For structured error handling, subclass `BackendError`:
 
 ```python
-from loom.worker.processor import BackendError, SyncProcessingBackend
+from heddle.worker.processor import BackendError, SyncProcessingBackend
 
 class ConversionError(BackendError):
     """Raised when document conversion fails."""
@@ -290,10 +290,10 @@ timeout_seconds: 120
 
 ```bash
 # Validate the config
-loom validate configs/workers/my_processor.yaml
+heddle validate configs/workers/my_processor.yaml
 
 # Test in Workshop (processor workers are testable too)
-loom workshop
+heddle workshop
 ```
 
 ## Part 3: Chain workers into a pipeline
@@ -308,7 +308,7 @@ paths or shared earlier stages are independent and run concurrently.
 Use the interactive scaffolding:
 
 ```bash
-loom new pipeline
+heddle new pipeline
 ```
 
 Or write the YAML manually:
@@ -365,7 +365,7 @@ To override automatic inference, add explicit `depends_on` lists:
 ### Step 2: Validate the pipeline
 
 ```bash
-loom validate configs/orchestrators/analysis_pipeline.yaml
+heddle validate configs/orchestrators/analysis_pipeline.yaml
 ```
 
 This checks for duplicate stage names, invalid tier values, malformed
@@ -379,7 +379,7 @@ individually. This lets you iterate on system prompts and validate I/O
 contracts before wiring everything together.
 
 ```bash
-loom workshop
+heddle workshop
 # Test each worker: entity_extractor, doc_classifier, doc_extractor
 ```
 
@@ -453,21 +453,21 @@ the config before restarting.
 
 ```bash
 # Terminal 1: Start the router
-loom router --nats-url nats://localhost:4222
+heddle router --nats-url nats://localhost:4222
 
 # Terminal 2: Start a worker
-loom worker --config configs/workers/entity_extractor.yaml --tier local --nats-url nats://localhost:4222
+heddle worker --config configs/workers/entity_extractor.yaml --tier local --nats-url nats://localhost:4222
 
 # Terminal 3: Start the pipeline orchestrator
-loom pipeline --config configs/orchestrators/analysis_pipeline.yaml --nats-url nats://localhost:4222
+heddle pipeline --config configs/orchestrators/analysis_pipeline.yaml --nats-url nats://localhost:4222
 
 # Terminal 4: Submit a goal
-loom submit "Extract entities from this text" \
+heddle submit "Extract entities from this text" \
   --context text="The United Nations was founded in San Francisco in 1945." \
   --nats-url nats://localhost:4222
 ```
 
-The worker subscribes to `loom.tasks.entity_extractor.local` and receives
+The worker subscribes to `heddle.tasks.entity_extractor.local` and receives
 dispatched work. Scale any component by running more copies — NATS
 load-balances via queue groups automatically.
 
@@ -549,7 +549,7 @@ The LLM sees the full extracted data without it traveling through NATS messages.
 Processor backends can use `WorkspaceManager` directly for safe file I/O:
 
 ```python
-from loom.core.workspace import WorkspaceManager
+from heddle.core.workspace import WorkspaceManager
 
 class MyBackend(SyncProcessingBackend):
     def process_sync(self, payload, config):
@@ -597,7 +597,7 @@ rate_limits:
     tokens_per_minute: 50000
 ```
 
-Tasks that exceed rate limits are sent to `loom.tasks.dead_letter` rather than dropped.
+Tasks that exceed rate limits are sent to `heddle.tasks.dead_letter` rather than dropped.
 
 ## Worker config reference
 
@@ -658,11 +658,11 @@ identically.
 
 | Subject | Purpose |
 |---------|---------|
-| `loom.goals.incoming` | Orchestrators subscribe here for new goals |
-| `loom.tasks.incoming` | Router subscribes here for task dispatch |
-| `loom.tasks.{worker_type}.{tier}` | Workers subscribe here (queue groups for competing consumers) |
-| `loom.tasks.dead_letter` | Unroutable or rate-limited tasks land here |
-| `loom.results.{goal_id}` | Results flow back to the orchestrator that owns the goal |
+| `heddle.goals.incoming` | Orchestrators subscribe here for new goals |
+| `heddle.tasks.incoming` | Router subscribes here for task dispatch |
+| `heddle.tasks.{worker_type}.{tier}` | Workers subscribe here (queue groups for competing consumers) |
+| `heddle.tasks.dead_letter` | Unroutable or rate-limited tasks land here |
+| `heddle.results.{goal_id}` | Results flow back to the orchestrator that owns the goal |
 
 ## Part 8: Knowledge silos (folder-based knowledge with write-back)
 
@@ -729,7 +729,7 @@ LLM workers support multi-turn tool-use via the standard function-calling protoc
 For async tools, implement `ToolProvider`:
 
 ```python
-from loom.worker.tools import ToolProvider
+from heddle.worker.tools import ToolProvider
 
 class MyTool(ToolProvider):
     def get_definition(self) -> dict:
@@ -753,7 +753,7 @@ class MyTool(ToolProvider):
 For synchronous tools, use `SyncToolProvider` (runs in a thread pool):
 
 ```python
-from loom.worker.tools import SyncToolProvider
+from heddle.worker.tools import SyncToolProvider
 
 class MyDBTool(SyncToolProvider):
     def get_definition(self) -> dict:
@@ -789,12 +789,12 @@ The `config` dict is passed as keyword arguments to the tool class constructor.
 
 ## Part 10: Vector embeddings
 
-Loom provides an `EmbeddingProvider` abstraction for generating vector embeddings. The built-in implementation uses Ollama's `/api/embed` endpoint.
+Heddle provides an `EmbeddingProvider` abstraction for generating vector embeddings. The built-in implementation uses Ollama's `/api/embed` endpoint.
 
 ### Using OllamaEmbeddingProvider
 
 ```python
-from loom.worker.embeddings import OllamaEmbeddingProvider
+from heddle.worker.embeddings import OllamaEmbeddingProvider
 
 provider = OllamaEmbeddingProvider(
     model="nomic-embed-text",
@@ -815,7 +815,7 @@ embeddings = await provider.embed_batch(["text1", "text2", "text3"])
 Implement the `EmbeddingProvider` ABC:
 
 ```python
-from loom.worker.embeddings import EmbeddingProvider
+from heddle.worker.embeddings import EmbeddingProvider
 
 class MyEmbeddingProvider(EmbeddingProvider):
     async def embed(self, text: str) -> list[float]:
@@ -835,12 +835,12 @@ class MyEmbeddingProvider(EmbeddingProvider):
 - **Test without infrastructure.** All worker logic can be unit-tested without NATS or Valkey — mock the `publish` method and call `handle_message()` directly. See `tests/test_worker.py` for examples.
 - **Use local tier for development.** Ollama with a small model (llama3.2:3b or command-r7b) gives fast iteration. Switch to standard/frontier tiers when you need better reasoning.
 - **Schema validation is your safety net.** It catches malformed LLM output before it propagates to downstream stages. Define schemas tightly.
-- **Monitor the dead-letter subject.** Tasks landing on `loom.tasks.dead_letter` indicate routing failures or rate limit hits. Use `nats sub loom.tasks.dead_letter` during development.
-- **LLM calls are auto-instrumented with OTel.** Loom automatically instruments all LLM calls with OpenTelemetry GenAI semantic conventions. Install the `otel` extra (`uv sync --extra otel`) to get distributed tracing across actors. See [Architecture — Distributed Tracing](ARCHITECTURE.md#distributed-tracing-tracing) for details.
+- **Monitor the dead-letter subject.** Tasks landing on `heddle.tasks.dead_letter` indicate routing failures or rate limit hits. Use `nats sub heddle.tasks.dead_letter` during development.
+- **LLM calls are auto-instrumented with OTel.** Heddle automatically instruments all LLM calls with OpenTelemetry GenAI semantic conventions. Install the `otel` extra (`uv sync --extra otel`) to get distributed tracing across actors. See [Architecture — Distributed Tracing](ARCHITECTURE.md#distributed-tracing-tracing) for details.
 
-## Part 11: DuckDB integration (`loom.contrib.duckdb`)
+## Part 11: DuckDB integration (`heddle.contrib.duckdb`)
 
-Loom includes optional DuckDB tools and backends for workflows that need embedded database storage, full-text search, or vector similarity search.
+Heddle includes optional DuckDB tools and backends for workflows that need embedded database storage, full-text search, or vector similarity search.
 
 Install the optional dependency:
 
@@ -856,7 +856,7 @@ Lets the LLM query a read-only DuckDB view during reasoning. The tool auto-intro
 knowledge_silos:
   - name: "catalog"
     type: "tool"
-    provider: "loom.contrib.duckdb.DuckDBViewTool"
+    provider: "heddle.contrib.duckdb.DuckDBViewTool"
     config:
       db_path: "/tmp/workspace/data.duckdb"
       view_name: "summaries"
@@ -872,7 +872,7 @@ Finds records similar to a natural language query using vector embeddings stored
 knowledge_silos:
   - name: "similar_items"
     type: "tool"
-    provider: "loom.contrib.duckdb.DuckDBVectorTool"
+    provider: "heddle.contrib.duckdb.DuckDBVectorTool"
     config:
       db_path: "/tmp/workspace/data.duckdb"
       table_name: "records"
@@ -900,7 +900,7 @@ backend_config:
 Subclass `DuckDBQueryBackend` to set your schema defaults:
 
 ```python
-from loom.contrib.duckdb import DuckDBQueryBackend
+from heddle.contrib.duckdb import DuckDBQueryBackend
 
 class MyQueryBackend(DuckDBQueryBackend):
     def __init__(self, db_path="/tmp/workspace/data.duckdb"):
@@ -924,9 +924,9 @@ class MyQueryBackend(DuckDBQueryBackend):
 
 The backend accepts payloads with `action` set to `search`, `filter`, `stats`, `get`, or `vector_search`, plus action-specific parameters.
 
-## Part 12: MCP gateway (expose LOOM as an MCP server)
+## Part 12: MCP gateway (expose HEDDLE as an MCP server)
 
-Any LOOM system can become a Model Context Protocol (MCP) server with a single YAML config — zero MCP-specific code needed. Workers, pipelines, and query backends are automatically discovered as MCP tools with typed input schemas.
+Any HEDDLE system can become a Model Context Protocol (MCP) server with a single YAML config — zero MCP-specific code needed. Workers, pipelines, and query backends are automatically discovered as MCP tools with typed input schemas.
 
 Install the optional dependency:
 
@@ -939,7 +939,7 @@ uv sync --extra mcp
 ```yaml
 # configs/mcp/my_server.yaml
 name: "my_server"
-description: "My LOOM system as an MCP server"
+description: "My HEDDLE system as an MCP server"
 nats_url: "nats://localhost:4222"
 
 tools:
@@ -955,7 +955,7 @@ tools:
       description: "Ingest and vectorize a document"
 
   queries:
-    - backend: "loom.contrib.duckdb.query_backend.DuckDBQueryBackend"
+    - backend: "heddle.contrib.duckdb.query_backend.DuckDBQueryBackend"
       actions: ["search", "filter", "stats", "get"]
       name_prefix: "docs"                # → docs_search, docs_filter, etc.
       backend_config:
@@ -980,10 +980,10 @@ resources:
 
 ```bash
 # stdio transport (default — for Claude Desktop, Cursor, etc.)
-loom mcp --config configs/mcp/my_server.yaml
+heddle mcp --config configs/mcp/my_server.yaml
 
 # streamable-http transport (for web clients)
-loom mcp --config configs/mcp/my_server.yaml --transport streamable-http --port 8000
+heddle mcp --config configs/mcp/my_server.yaml --transport streamable-http --port 8000
 ```
 
 ### Step 4: Workspace resources
@@ -993,7 +993,7 @@ If `resources.workspace_dir` is configured, workspace files are exposed as MCP r
 ### Programmatic usage
 
 ```python
-from loom.mcp import create_server, run_stdio, run_streamable_http
+from heddle.mcp import create_server, run_stdio, run_streamable_http
 
 server, gateway = create_server("configs/mcp/my_server.yaml")
 
@@ -1024,9 +1024,9 @@ consensus-building.
 ### Running a council from code
 
 ```python
-from loom.worker.backends import build_backends_from_env
-from loom.contrib.council.config import load_council_config
-from loom.contrib.council.runner import CouncilRunner
+from heddle.worker.backends import build_backends_from_env
+from heddle.contrib.council.config import load_council_config
+from heddle.contrib.council.runner import CouncilRunner
 
 config = load_council_config("configs/councils/example.yaml")
 runner = CouncilRunner(build_backends_from_env())
@@ -1058,7 +1058,7 @@ agents:
     worker_type: "analyst"
     tier: "standard"
   - name: "gpt_view"
-    bridge: "loom.contrib.chatbridge.openai.OpenAIChatBridge"
+    bridge: "heddle.contrib.chatbridge.openai.OpenAIChatBridge"
     bridge_config:
       model: "gpt-4o"
       api_key_env: "OPENAI_API_KEY"

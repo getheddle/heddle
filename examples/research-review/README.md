@@ -37,24 +37,24 @@ branches, the blind audit pattern.
 ```bash
 # Phase 1: test a single worker
 cp examples/research-review/phase-1/workers/claim_extractor.yaml configs/workers/
-loom validate configs/workers/claim_extractor.yaml
-loom workshop
+heddle validate configs/workers/claim_extractor.yaml
+heddle workshop
 # Open http://localhost:8080 → claim_extractor → Test
 
 # Phase 2: run the review pipeline
 cp examples/research-review/phase-2/workers/*.yaml configs/workers/
 cp examples/research-review/phase-2/orchestrators/*.yaml configs/orchestrators/
-loom validate configs/workers/methodology_reviewer.yaml
-loom validate configs/workers/review_summarizer.yaml
-loom validate configs/orchestrators/research_review.yaml
+heddle validate configs/workers/methodology_reviewer.yaml
+heddle validate configs/workers/review_summarizer.yaml
+heddle validate configs/orchestrators/research_review.yaml
 
 # Phase 3: add blind audit
 cp examples/research-review/phase-3/workers/*.yaml configs/workers/
 cp examples/research-review/phase-3/orchestrators/*.yaml configs/orchestrators/
-loom validate configs/workers/terminology_neutralizer.yaml
-loom validate configs/workers/blind_reviewer.yaml
-loom validate configs/workers/review_synthesizer.yaml
-loom validate configs/orchestrators/research_review_blind.yaml
+heddle validate configs/workers/terminology_neutralizer.yaml
+heddle validate configs/workers/blind_reviewer.yaml
+heddle validate configs/workers/review_synthesizer.yaml
+heddle validate configs/orchestrators/research_review_blind.yaml
 ```
 
 ## Sample Data

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from loom.contrib.chatbridge.anthropic import AnthropicChatBridge
+from heddle.contrib.chatbridge.anthropic import AnthropicChatBridge
 
 
 def _mock_response(content="Hello!", input_tokens=50, output_tokens=20):

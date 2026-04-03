@@ -1,12 +1,12 @@
-# Dockerfile for the Loom task router.
+# Dockerfile for the Heddle task router.
 #
 # The router is a deterministic (non-LLM) component that reads tasks from
-# loom.tasks.incoming and forwards them to the correct worker subject based
+# heddle.tasks.incoming and forwards them to the correct worker subject based
 # on worker_type and model_tier.  It runs as a long-lived process, blocking
 # on an asyncio Event after subscribing to NATS.
 #
-# Build:  docker build -f docker/Dockerfile.router -t loom-router .
-# Run:    docker run -e NATS_URL=nats://nats:4222 loom-router
+# Build:  docker build -f docker/Dockerfile.router -t heddle-router .
+# Run:    docker run -e NATS_URL=nats://nats:4222 heddle-router
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -21,6 +21,6 @@ ENV NATS_URL="nats://nats:4222"
 
 # Start the router with the default rules config.
 # Override NATS_URL via environment or pass --nats-url at runtime.
-CMD ["python", "-m", "loom.cli.main", "router", \
+CMD ["python", "-m", "heddle.cli.main", "router", \
      "--config", "configs/router_rules.yaml", \
      "--nats-url", "nats://nats:4222"]

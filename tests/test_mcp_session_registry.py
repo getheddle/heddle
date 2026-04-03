@@ -1,4 +1,4 @@
-"""Tests for loom.mcp.session_registry — file-based session markers."""
+"""Tests for heddle.mcp.session_registry — file-based session markers."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import time
 from unittest.mock import patch
 
-from loom.mcp.session_registry import (
+from heddle.mcp.session_registry import (
     get_active_sessions,
     register_session,
     unregister_session,
@@ -17,7 +17,7 @@ class TestSessionRegistry:
     """Tests for register/unregister/get_active_sessions."""
 
     def test_register_creates_marker(self, tmp_path):
-        with patch("loom.mcp.session_registry._SESSION_DIR", tmp_path):
+        with patch("heddle.mcp.session_registry._SESSION_DIR", tmp_path):
             register_session("test-1", analyst="alice")
 
         marker = tmp_path / "test-1.json"
@@ -31,20 +31,20 @@ class TestSessionRegistry:
         marker = tmp_path / "test-1.json"
         marker.write_text('{"session_id": "test-1"}')
 
-        with patch("loom.mcp.session_registry._SESSION_DIR", tmp_path):
+        with patch("heddle.mcp.session_registry._SESSION_DIR", tmp_path):
             unregister_session("test-1")
 
         assert not marker.exists()
 
     def test_unregister_missing_is_noop(self, tmp_path):
-        with patch("loom.mcp.session_registry._SESSION_DIR", tmp_path):
+        with patch("heddle.mcp.session_registry._SESSION_DIR", tmp_path):
             unregister_session("nonexistent")  # should not raise
 
     def test_get_active_sessions_returns_fresh(self, tmp_path):
         marker = tmp_path / "s1.json"
         marker.write_text(json.dumps({"session_id": "s1", "last_active": time.time()}))
 
-        with patch("loom.mcp.session_registry._SESSION_DIR", tmp_path):
+        with patch("heddle.mcp.session_registry._SESSION_DIR", tmp_path):
             active = get_active_sessions()
 
         assert len(active) == 1
@@ -54,20 +54,20 @@ class TestSessionRegistry:
         marker = tmp_path / "old.json"
         marker.write_text(json.dumps({"session_id": "old", "last_active": time.time() - 7200}))
 
-        with patch("loom.mcp.session_registry._SESSION_DIR", tmp_path):
+        with patch("heddle.mcp.session_registry._SESSION_DIR", tmp_path):
             active = get_active_sessions()
 
         assert len(active) == 0
 
     def test_get_active_sessions_empty_dir(self, tmp_path):
-        with patch("loom.mcp.session_registry._SESSION_DIR", tmp_path):
+        with patch("heddle.mcp.session_registry._SESSION_DIR", tmp_path):
             active = get_active_sessions()
 
         assert active == []
 
     def test_get_active_sessions_no_dir(self, tmp_path):
         missing = tmp_path / "nonexistent"
-        with patch("loom.mcp.session_registry._SESSION_DIR", missing):
+        with patch("heddle.mcp.session_registry._SESSION_DIR", missing):
             active = get_active_sessions()
 
         assert active == []
@@ -78,7 +78,7 @@ class TestSessionRegistry:
             json.dumps({"session_id": "g", "last_active": time.time()})
         )
 
-        with patch("loom.mcp.session_registry._SESSION_DIR", tmp_path):
+        with patch("heddle.mcp.session_registry._SESSION_DIR", tmp_path):
             active = get_active_sessions()
 
         assert len(active) == 1

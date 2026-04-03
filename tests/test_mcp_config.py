@@ -1,8 +1,8 @@
-"""Tests for loom.mcp.config — MCP gateway config loading and validation."""
+"""Tests for heddle.mcp.config — MCP gateway config loading and validation."""
 
 import pytest
 
-from loom.mcp.config import validate_mcp_config
+from heddle.mcp.config import validate_mcp_config
 
 
 class TestValidateMCPConfig:
@@ -231,8 +231,8 @@ class TestLoadMCPConfig:
         """Line 61: load_mcp_config raises ConfigValidationError for invalid configs."""
         import yaml
 
-        from loom.core.config import ConfigValidationError
-        from loom.mcp.config import load_mcp_config
+        from heddle.core.config import ConfigValidationError
+        from heddle.mcp.config import load_mcp_config
 
         bad_config = {"description": "no name here"}
         config_file = tmp_path / "bad.yaml"
@@ -243,7 +243,7 @@ class TestLoadMCPConfig:
 
     def test_raises_file_not_found_for_missing_file(self, tmp_path):
         """load_mcp_config raises FileNotFoundError for missing file."""
-        from loom.mcp.config import load_mcp_config
+        from heddle.mcp.config import load_mcp_config
 
         with pytest.raises(FileNotFoundError):
             load_mcp_config(str(tmp_path / "nonexistent.yaml"))
@@ -252,7 +252,7 @@ class TestLoadMCPConfig:
         """load_mcp_config returns the config dict for a valid file."""
         import yaml
 
-        from loom.mcp.config import load_mcp_config
+        from heddle.mcp.config import load_mcp_config
 
         config = {"name": "test-gateway"}
         config_file = tmp_path / "valid.yaml"
@@ -270,7 +270,7 @@ class TestLoadMCPConfig:
 class TestValidateWorkerEntriesNonDict:
     def test_worker_entry_not_dict(self):
         """Lines 129-130: non-dict worker entry produces error and continues."""
-        from loom.mcp.config import validate_mcp_config
+        from heddle.mcp.config import validate_mcp_config
 
         config = {"name": "test", "tools": {"workers": ["just-a-string"]}}
         errors = validate_mcp_config(config)
@@ -278,7 +278,7 @@ class TestValidateWorkerEntriesNonDict:
 
     def test_worker_entry_integer_is_not_dict(self):
         """Non-dict (int) entry reports error and continues to next entry."""
-        from loom.mcp.config import validate_mcp_config
+        from heddle.mcp.config import validate_mcp_config
 
         config = {
             "name": "test",
@@ -299,7 +299,7 @@ class TestValidateWorkerEntriesNonDict:
 class TestValidatePipelineEntriesEdgeCases:
     def test_pipeline_entry_not_dict(self):
         """Line 149: non-dict pipeline entry produces error."""
-        from loom.mcp.config import validate_mcp_config
+        from heddle.mcp.config import validate_mcp_config
 
         config = {"name": "test", "tools": {"pipelines": ["bad-entry"]}}
         errors = validate_mcp_config(config)
@@ -307,7 +307,7 @@ class TestValidatePipelineEntriesEdgeCases:
 
     def test_pipeline_config_wrong_type(self):
         """Lines 154-155: 'config' present but not a string."""
-        from loom.mcp.config import validate_mcp_config
+        from heddle.mcp.config import validate_mcp_config
 
         config = {
             "name": "test",
@@ -318,7 +318,7 @@ class TestValidatePipelineEntriesEdgeCases:
 
     def test_pipeline_name_wrong_type(self):
         """Line 163: 'name' present but not a string."""
-        from loom.mcp.config import validate_mcp_config
+        from heddle.mcp.config import validate_mcp_config
 
         config = {
             "name": "test",
@@ -329,7 +329,7 @@ class TestValidatePipelineEntriesEdgeCases:
 
     def test_pipeline_description_wrong_type(self):
         """Line 165: 'description' present but not a string."""
-        from loom.mcp.config import validate_mcp_config
+        from heddle.mcp.config import validate_mcp_config
 
         config = {
             "name": "test",
@@ -340,7 +340,7 @@ class TestValidatePipelineEntriesEdgeCases:
 
     def test_pipelines_not_list(self):
         """Line 149: pipelines value not a list returns early."""
-        from loom.mcp.config import validate_mcp_config
+        from heddle.mcp.config import validate_mcp_config
 
         config = {"name": "test", "tools": {"pipelines": "bad"}}
         errors = validate_mcp_config(config)
@@ -355,7 +355,7 @@ class TestValidatePipelineEntriesEdgeCases:
 class TestValidateQueryEntriesEdgeCases:
     def test_query_entry_not_dict(self):
         """Lines 204-205: non-dict query entry produces error."""
-        from loom.mcp.config import validate_mcp_config
+        from heddle.mcp.config import validate_mcp_config
 
         config = {"name": "test", "tools": {"queries": ["not-a-dict"]}}
         errors = validate_mcp_config(config)
@@ -363,7 +363,7 @@ class TestValidateQueryEntriesEdgeCases:
 
     def test_query_backend_wrong_type(self):
         """Lines 204-205 (backend branch): backend present but not a string."""
-        from loom.mcp.config import validate_mcp_config
+        from heddle.mcp.config import validate_mcp_config
 
         config = {
             "name": "test",
@@ -382,7 +382,7 @@ class TestValidateQueryEntriesEdgeCases:
 
     def test_query_name_prefix_wrong_type(self):
         """Line 209 (name_prefix branch): name_prefix present but not a string."""
-        from loom.mcp.config import validate_mcp_config
+        from heddle.mcp.config import validate_mcp_config
 
         config = {
             "name": "test",
@@ -401,7 +401,7 @@ class TestValidateQueryEntriesEdgeCases:
 
     def test_query_backend_config_wrong_type(self):
         """Line 217: backend_config present but not a dict."""
-        from loom.mcp.config import validate_mcp_config
+        from heddle.mcp.config import validate_mcp_config
 
         config = {
             "name": "test",
@@ -421,7 +421,7 @@ class TestValidateQueryEntriesEdgeCases:
 
     def test_queries_not_list(self):
         """Line 199: queries value not a list returns early."""
-        from loom.mcp.config import validate_mcp_config
+        from heddle.mcp.config import validate_mcp_config
 
         config = {"name": "test", "tools": {"queries": "bad"}}
         errors = validate_mcp_config(config)

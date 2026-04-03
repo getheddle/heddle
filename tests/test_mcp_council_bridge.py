@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
-from loom.contrib.council.runner import CouncilRunner
-from loom.mcp.council_bridge import CouncilBridge, CouncilBridgeError
+from heddle.contrib.council.runner import CouncilRunner
+from heddle.mcp.council_bridge import CouncilBridge, CouncilBridgeError
 
 
 def _write_council_config(dir_path: str, name: str = "test"):

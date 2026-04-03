@@ -39,8 +39,8 @@ pipeline branches, sighted vs. blind analysis.
 ```bash
 # Phase 1: test the classifier
 cp examples/document-intake/phase-1/workers/comment_classifier.yaml configs/workers/
-loom validate configs/workers/comment_classifier.yaml
-loom workshop
+heddle validate configs/workers/comment_classifier.yaml
+heddle workshop
 # Open http://localhost:8080 → comment_classifier → Test
 
 # Phase 2: run the intake pipeline
@@ -71,7 +71,7 @@ vague complaints).
 `processing/csv_reader.py` contains `CsvReaderBackend` — a custom
 `SyncProcessingBackend` implementation (~40 lines of Python) that reads
 CSV files. It demonstrates how to write non-LLM processing steps for
-Loom pipelines.
+Heddle pipelines.
 
 ## Directory Structure
 

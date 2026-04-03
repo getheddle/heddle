@@ -12,7 +12,7 @@
 # Tier:       standard (review quality benefits from stronger reasoning)
 #
 # Run with:
-#   loom worker --config configs/workers/reviewer.yaml --tier standard
+#   heddle worker --config configs/workers/reviewer.yaml --tier standard
 # =============================================================================
 
 name: "reviewer"

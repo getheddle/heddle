@@ -7,17 +7,17 @@
 # a Python backend class that parses and normalizes the raw export data.
 #
 # Component:  Processor worker (worker_kind: "processor")
-# Source:     src/loom/worker/processor.py (ProcessorWorker)
-# Backend:    src/loom/contrib/rag/backends.py (IngestorBackend)
-# Parser:     src/loom/contrib/rag/ingestion/telegram_ingestor.py (TelegramIngestor)
-# Loaded by:  loom.core.config.load_config()
-# Validated:  loom.core.contracts.py (I/O schema enforcement)
+# Source:     src/heddle/worker/processor.py (ProcessorWorker)
+# Backend:    src/heddle/contrib/rag/backends.py (IngestorBackend)
+# Parser:     src/heddle/contrib/rag/ingestion/telegram_ingestor.py (TelegramIngestor)
+# Loaded by:  heddle.core.config.load_config()
+# Validated:  heddle.core.contracts.py (I/O schema enforcement)
 #
 # Run with:
-#   loom processor --config configs/workers/rag_ingestor.yaml
-#   loom processor --config configs/workers/rag_ingestor.yaml --nats-url nats://localhost:4222
+#   heddle processor --config configs/workers/rag_ingestor.yaml
+#   heddle processor --config configs/workers/rag_ingestor.yaml --nats-url nats://localhost:4222
 #
-# NATS subject:  loom.tasks.rag_ingestor.local
+# NATS subject:  heddle.tasks.rag_ingestor.local
 # Queue group:   Workers auto-join queue groups for load balancing.
 #
 # Data flow (RAG pipeline):
@@ -50,13 +50,13 @@ worker_kind: "processor"
 
 # processing_backend (str, required for processor workers)
 # Fully qualified Python class path. The class must extend
-# loom.worker.processor.SyncProcessingBackend and implement process(payload).
-# Available RAG backends in loom.contrib.rag.backends:
+# heddle.worker.processor.SyncProcessingBackend and implement process(payload).
+# Available RAG backends in heddle.contrib.rag.backends:
 #   - IngestorBackend   — Telegram JSON export parsing
 #   - MuxBackend        — Multi-channel stream multiplexing
 #   - ChunkerBackend    — Sentence-level text chunking
 #   - VectorStoreBackend — DuckDB vector storage and search
-processing_backend: "loom.contrib.rag.backends.IngestorBackend"
+processing_backend: "heddle.contrib.rag.backends.IngestorBackend"
 
 # backend_config (dict, optional)
 # Keyword arguments passed to the backend constructor.
@@ -76,7 +76,7 @@ input_schema:
 
 # output_schema (dict, required)
 # Validated after the backend's process() method returns.
-# posts: list of NormalizedPost dicts (see loom.contrib.rag.schemas.post)
+# posts: list of NormalizedPost dicts (see heddle.contrib.rag.schemas.post)
 # channel_id/channel_name: extracted from the Telegram export metadata
 # post_count: total number of parsed posts (for pipeline progress tracking)
 output_schema:
@@ -96,7 +96,7 @@ output_schema:
 
 # default_model_tier (str, required)
 # Processor workers don't use an LLM, but the tier determines the NATS
-# subject for routing: loom.tasks.rag_ingestor.{tier}
+# subject for routing: heddle.tasks.rag_ingestor.{tier}
 # "local" is conventional for processor workers.
 default_model_tier: "local"
 

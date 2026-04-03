@@ -7,17 +7,17 @@
 # language awareness (handles ZWNJ, RTL markers, mixed-script boundaries).
 #
 # Component:  Processor worker (worker_kind: "processor")
-# Source:     src/loom/worker/processor.py (ProcessorWorker)
-# Backend:    src/loom/contrib/rag/backends.py (ChunkerBackend)
-# Engine:     src/loom/contrib/rag/chunker/sentence_chunker.py (ChunkConfig)
-# Loaded by:  loom.core.config.load_config()
-# Validated:  loom.core.contracts.py (I/O schema enforcement)
+# Source:     src/heddle/worker/processor.py (ProcessorWorker)
+# Backend:    src/heddle/contrib/rag/backends.py (ChunkerBackend)
+# Engine:     src/heddle/contrib/rag/chunker/sentence_chunker.py (ChunkConfig)
+# Loaded by:  heddle.core.config.load_config()
+# Validated:  heddle.core.contracts.py (I/O schema enforcement)
 #
 # Run with:
-#   loom processor --config configs/workers/rag_chunker.yaml
-#   loom processor --config configs/workers/rag_chunker.yaml --nats-url nats://localhost:4222
+#   heddle processor --config configs/workers/rag_chunker.yaml
+#   heddle processor --config configs/workers/rag_chunker.yaml --nats-url nats://localhost:4222
 #
-# NATS subject:  loom.tasks.rag_chunker.local
+# NATS subject:  heddle.tasks.rag_chunker.local
 #
 # Data flow (RAG pipeline):
 #   rag_ingestor --> rag_mux --> [rag_chunker] --> rag_vectorstore
@@ -63,7 +63,7 @@ worker_kind: "processor"
 
 # processing_backend (str, required for processor workers)
 # ChunkerBackend wraps the sentence_chunker module for pipeline integration.
-processing_backend: "loom.contrib.rag.backends.ChunkerBackend"
+processing_backend: "heddle.contrib.rag.backends.ChunkerBackend"
 
 # backend_config (dict, optional)
 # Default chunking parameters. These can be overridden per-task in the payload.
@@ -92,7 +92,7 @@ input_schema:
       default: 600
 
 # output_schema (dict, required)
-# chunks: list of TextChunk dicts (see loom.contrib.rag.schemas.chunk).
+# chunks: list of TextChunk dicts (see heddle.contrib.rag.schemas.chunk).
 # Each chunk has: text, source_post_id, chunk_index, char_count.
 # chunk_count: total chunks produced (for pipeline progress tracking).
 output_schema:

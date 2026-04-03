@@ -1,35 +1,35 @@
-# Deployment for the Loom dynamic orchestrator.
+# Deployment for the Heddle dynamic orchestrator.
 #
 # The orchestrator uses an LLM to decompose goals into subtasks, dispatches
 # them to workers via the router, and synthesizes the results. It requires
 # NATS for messaging and Valkey for checkpoint state.
 #
 # The container CMD (set in Dockerfile.orchestrator) runs:
-#   loom orchestrator --config configs/orchestrators/default.yaml --nats-url nats://nats:4222
+#   heddle orchestrator --config configs/orchestrators/default.yaml --nats-url nats://nats:4222
 #
 # Note: OrchestratorActor is currently a stub. The container will start and
-# subscribe to loom.goals.incoming, but the decompose/dispatch/synthesize
+# subscribe to heddle.goals.incoming, but the decompose/dispatch/synthesize
 # loop is not yet implemented.
 #
-# Build image: docker build -f Dockerfile.orchestrator -t loom-orchestrator .
+# Build image: docker build -f Dockerfile.orchestrator -t heddle-orchestrator .
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: orchestrator
-  namespace: loom
+  namespace: heddle
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: loom-orchestrator
+      app: heddle-orchestrator
   template:
     metadata:
       labels:
-        app: loom-orchestrator
+        app: heddle-orchestrator
     spec:
       containers:
         - name: orchestrator
-          image: loom-orchestrator:latest
+          image: heddle-orchestrator:latest
           imagePullPolicy: Never    # For Minikube local builds
           env:
             - name: NATS_URL
@@ -39,7 +39,7 @@ spec:
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: loom-secrets
+                  name: heddle-secrets
                   key: anthropic-api-key
           resources:
             requests:

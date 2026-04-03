@@ -1,4 +1,4 @@
-"""Tests for the loom.tracing module (OTel integration)."""
+"""Tests for the heddle.tracing module (OTel integration)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from loom.tracing.otel import (
+from heddle.tracing.otel import (
     _NoOpSpan,
     _NoOpTracer,
     extract_trace_context,
@@ -68,7 +68,7 @@ class TestNoOpTracer:
 
 class TestGetTracer:
     def test_returns_noop_when_no_otel(self):
-        with patch("loom.tracing.otel._HAS_OTEL", False):
+        with patch("heddle.tracing.otel._HAS_OTEL", False):
             tracer = get_tracer("test")
             assert isinstance(tracer, _NoOpTracer)
 
@@ -76,8 +76,8 @@ class TestGetTracer:
         mock_trace = MagicMock()
         mock_trace.get_tracer.return_value = MagicMock()
         with (
-            patch("loom.tracing.otel._HAS_OTEL", True),
-            patch("loom.tracing.otel._trace_mod", mock_trace),
+            patch("heddle.tracing.otel._HAS_OTEL", True),
+            patch("heddle.tracing.otel._trace_mod", mock_trace),
         ):
             tracer = get_tracer("test")
             mock_trace.get_tracer.assert_called_once_with("test")
@@ -86,7 +86,7 @@ class TestGetTracer:
 
 class TestInjectTraceContext:
     def test_noop_when_no_otel(self):
-        with patch("loom.tracing.otel._HAS_OTEL", False):
+        with patch("heddle.tracing.otel._HAS_OTEL", False):
             carrier = {"task_id": "123"}
             inject_trace_context(carrier)
             assert "_trace_context" not in carrier
@@ -95,8 +95,8 @@ class TestInjectTraceContext:
         mock_propagate = MagicMock()
         mock_propagate.inject.side_effect = lambda h: h.update({"traceparent": "00-abc-def-01"})
         with (
-            patch("loom.tracing.otel._HAS_OTEL", True),
-            patch("loom.tracing.otel._propagate_mod", mock_propagate),
+            patch("heddle.tracing.otel._HAS_OTEL", True),
+            patch("heddle.tracing.otel._propagate_mod", mock_propagate),
         ):
             carrier = {"task_id": "123"}
             inject_trace_context(carrier)
@@ -106,8 +106,8 @@ class TestInjectTraceContext:
         mock_propagate = MagicMock()
         mock_propagate.inject.side_effect = lambda h: None  # no headers added
         with (
-            patch("loom.tracing.otel._HAS_OTEL", True),
-            patch("loom.tracing.otel._propagate_mod", mock_propagate),
+            patch("heddle.tracing.otel._HAS_OTEL", True),
+            patch("heddle.tracing.otel._propagate_mod", mock_propagate),
         ):
             carrier = {"task_id": "123"}
             inject_trace_context(carrier)
@@ -116,17 +116,17 @@ class TestInjectTraceContext:
 
 class TestExtractTraceContext:
     def test_noop_when_no_otel(self):
-        with patch("loom.tracing.otel._HAS_OTEL", False):
+        with patch("heddle.tracing.otel._HAS_OTEL", False):
             ctx = extract_trace_context({"_trace_context": {"traceparent": "x"}})
             assert ctx is None
 
     def test_none_when_no_key(self):
-        with patch("loom.tracing.otel._HAS_OTEL", True):
+        with patch("heddle.tracing.otel._HAS_OTEL", True):
             ctx = extract_trace_context({"task_id": "123"})
             assert ctx is None
 
     def test_none_when_invalid_type(self):
-        with patch("loom.tracing.otel._HAS_OTEL", True):
+        with patch("heddle.tracing.otel._HAS_OTEL", True):
             ctx = extract_trace_context({"_trace_context": "not-a-dict"})
             assert ctx is None
 
@@ -134,8 +134,8 @@ class TestExtractTraceContext:
         mock_propagate = MagicMock()
         mock_propagate.extract.return_value = "mock_context"
         with (
-            patch("loom.tracing.otel._HAS_OTEL", True),
-            patch("loom.tracing.otel._propagate_mod", mock_propagate),
+            patch("heddle.tracing.otel._HAS_OTEL", True),
+            patch("heddle.tracing.otel._propagate_mod", mock_propagate),
         ):
             headers = {"traceparent": "00-abc-def-01"}
             ctx = extract_trace_context({"_trace_context": headers})
@@ -145,12 +145,12 @@ class TestExtractTraceContext:
 
 class TestInitTracing:
     def test_returns_false_when_no_otel(self):
-        with patch("loom.tracing.otel._HAS_OTEL", False):
+        with patch("heddle.tracing.otel._HAS_OTEL", False):
             assert init_tracing() is False
 
     def test_returns_false_when_sdk_missing(self):
         with (
-            patch("loom.tracing.otel._HAS_OTEL", True),
+            patch("heddle.tracing.otel._HAS_OTEL", True),
             patch.dict(
                 "sys.modules",
                 {
@@ -178,8 +178,8 @@ class TestInitTracing:
         mock_trace = MagicMock()
 
         with (
-            patch("loom.tracing.otel._HAS_OTEL", True),
-            patch("loom.tracing.otel._trace_mod", mock_trace),
+            patch("heddle.tracing.otel._HAS_OTEL", True),
+            patch("heddle.tracing.otel._trace_mod", mock_trace),
             patch.dict(
                 "sys.modules",
                 {
@@ -213,8 +213,8 @@ class TestInitTracing:
         mock_trace = MagicMock()
 
         with (
-            patch("loom.tracing.otel._HAS_OTEL", True),
-            patch("loom.tracing.otel._trace_mod", mock_trace),
+            patch("heddle.tracing.otel._HAS_OTEL", True),
+            patch("heddle.tracing.otel._trace_mod", mock_trace),
             patch.dict(
                 "sys.modules",
                 {
@@ -242,7 +242,7 @@ class TestTracingIntegrationWithActor:
 
     def test_actor_process_one_with_noop_tracing(self):
         """The actor module should import tracing without error."""
-        from loom.core.actor import BaseActor
+        from heddle.core.actor import BaseActor
 
         assert hasattr(BaseActor, "_process_one")
 
@@ -262,7 +262,7 @@ class TestGenAISemanticConventions:
     @pytest.mark.asyncio
     async def test_genai_attributes_on_span(self):
         """execute_with_tools should set gen_ai.* attributes on the llm.call span."""
-        from loom.worker.runner import execute_with_tools
+        from heddle.worker.runner import execute_with_tools
 
         mock_backend = AsyncMock()
         mock_backend.complete.return_value = {
@@ -306,7 +306,7 @@ class TestGenAISemanticConventions:
 
                 return _cm()
 
-        with patch("loom.worker.runner._tracer", RecordingTracer()):
+        with patch("heddle.worker.runner._tracer", RecordingTracer()):
             await execute_with_tools(
                 backend=mock_backend,
                 system_prompt="sys",
@@ -332,7 +332,7 @@ class TestGenAISemanticConventions:
     @pytest.mark.asyncio
     async def test_genai_optional_temperature_omitted(self):
         """When gen_ai_request_temperature is None, the attribute should not be set."""
-        from loom.worker.runner import execute_with_tools
+        from heddle.worker.runner import execute_with_tools
 
         mock_backend = AsyncMock()
         mock_backend.complete.return_value = {
@@ -374,7 +374,7 @@ class TestGenAISemanticConventions:
 
                 return _cm()
 
-        with patch("loom.worker.runner._tracer", RecordingTracer()):
+        with patch("heddle.worker.runner._tracer", RecordingTracer()):
             await execute_with_tools(
                 backend=mock_backend,
                 system_prompt="sys",
@@ -387,9 +387,9 @@ class TestGenAISemanticConventions:
         assert "gen_ai.request.max_tokens" not in recorded_attrs
 
     @pytest.mark.asyncio
-    async def test_loom_trace_content_env_var(self):
-        """LOOM_TRACE_CONTENT=1 should add prompt/completion span events."""
-        from loom.worker.runner import execute_with_tools
+    async def test_heddle_trace_content_env_var(self):
+        """HEDDLE_TRACE_CONTENT=1 should add prompt/completion span events."""
+        from heddle.worker.runner import execute_with_tools
 
         mock_backend = AsyncMock()
         mock_backend.complete.return_value = {
@@ -432,8 +432,8 @@ class TestGenAISemanticConventions:
                 return _cm()
 
         with (
-            patch("loom.worker.runner._tracer", RecordingTracer()),
-            patch.dict(os.environ, {"LOOM_TRACE_CONTENT": "1"}),
+            patch("heddle.worker.runner._tracer", RecordingTracer()),
+            patch.dict(os.environ, {"HEDDLE_TRACE_CONTENT": "1"}),
         ):
             await execute_with_tools(
                 backend=mock_backend,
@@ -456,9 +456,9 @@ class TestGenAISemanticConventions:
         assert completion_event[1]["gen_ai.completion"] == '{"result": "ok"}'
 
     @pytest.mark.asyncio
-    async def test_loom_trace_content_disabled_by_default(self):
-        """Without LOOM_TRACE_CONTENT, no content events should be added."""
-        from loom.worker.runner import execute_with_tools
+    async def test_heddle_trace_content_disabled_by_default(self):
+        """Without HEDDLE_TRACE_CONTENT, no content events should be added."""
+        from heddle.worker.runner import execute_with_tools
 
         mock_backend = AsyncMock()
         mock_backend.complete.return_value = {
@@ -501,8 +501,8 @@ class TestGenAISemanticConventions:
                 return _cm()
 
         with (
-            patch("loom.worker.runner._tracer", RecordingTracer()),
-            patch.dict(os.environ, {"LOOM_TRACE_CONTENT": ""}, clear=False),
+            patch("heddle.worker.runner._tracer", RecordingTracer()),
+            patch.dict(os.environ, {"HEDDLE_TRACE_CONTENT": ""}, clear=False),
         ):
             await execute_with_tools(
                 backend=mock_backend,
@@ -519,7 +519,7 @@ class TestGenAISemanticConventions:
     @pytest.mark.asyncio
     async def test_genai_attributes_work_with_noop_tracer(self):
         """The NoOpTracer/NoOpSpan should silently accept GenAI attributes."""
-        from loom.worker.runner import execute_with_tools
+        from heddle.worker.runner import execute_with_tools
 
         mock_backend = AsyncMock()
         mock_backend.complete.return_value = {
@@ -538,7 +538,7 @@ class TestGenAISemanticConventions:
 
         # Use actual NoOpTracer — should not raise
         noop_tracer = _NoOpTracer()
-        with patch("loom.worker.runner._tracer", noop_tracer):
+        with patch("heddle.worker.runner._tracer", noop_tracer):
             result = await execute_with_tools(
                 backend=mock_backend,
                 system_prompt="sys",

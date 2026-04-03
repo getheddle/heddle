@@ -1,0 +1,646 @@
+"""
+Workshop web application — FastAPI + HTMX + Jinja2.
+
+Entry point: ``create_app()`` returns a configured FastAPI application.
+Start via CLI: ``heddle workshop --port 8080``
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import tempfile
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+import structlog
+from fastapi import FastAPI, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
+from heddle.bus.memory import InMemoryBus
+from heddle.router.dead_letter import DeadLetterConsumer
+from heddle.worker.backends import build_backends_from_env
+from heddle.workshop.app_manager import AppManager
+from heddle.workshop.config_impact import get_impact
+from heddle.workshop.config_manager import ConfigManager
+from heddle.workshop.db import WorkshopDB
+from heddle.workshop.eval_runner import EvalRunner
+from heddle.workshop.pipeline_editor import PipelineEditor
+from heddle.workshop.rag_manager import RAGManager
+from heddle.workshop.test_runner import WorkerTestRunner
+
+logger = structlog.get_logger()
+
+# Paths relative to this file
+_THIS_DIR = Path(__file__).parent
+_TEMPLATES_DIR = _THIS_DIR / "templates"
+_STATIC_DIR = _THIS_DIR / "static"
+
+
+def _detect_available_backends() -> list[dict[str, str]]:
+    """Detect available LLM backends from environment variables.
+
+    Returns a list of dicts with 'name' and 'label' keys for display as
+    badges on the test bench page.
+    """
+    available = []
+    if os.getenv("ANTHROPIC_API_KEY"):
+        available.append({"name": "anthropic", "label": "Anthropic (Claude)"})
+    if os.getenv("OLLAMA_URL"):
+        available.append({"name": "ollama", "label": "Ollama (local)"})
+    if os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_BASE_URL"):
+        available.append({"name": "openai", "label": "OpenAI-compatible"})
+    return available
+
+
+def _build_extra_config_dirs(app_mgr: AppManager) -> list[Path]:
+    """Build the list of config dirs from all deployed apps."""
+    dirs = []
+    for manifest in app_mgr.list_apps():
+        configs_dir = app_mgr.get_app_configs_dir(manifest.name)
+        if configs_dir.exists():
+            dirs.append(configs_dir)
+    return dirs
+
+
+def create_app(  # noqa: PLR0915
+    configs_dir: str = "configs/",
+    db_path: str = "~/.heddle/workshop.duckdb",
+    nats_url: str | None = None,  # noqa: ARG001
+    apps_dir: str = "~/.heddle/apps",
+    rag_db_path: str | None = None,
+    rag_store_class: str | None = None,
+    rag_channel_registry: str | None = None,
+) -> FastAPI:
+    """Create the Workshop FastAPI application.
+
+    Args:
+        configs_dir: Root directory containing ``workers/`` and ``orchestrators/``.
+        db_path: DuckDB database path (``~`` is expanded).
+        nats_url: Optional NATS URL for live metrics (reserved for future use).
+        apps_dir: Root directory for deployed app bundles.
+        rag_db_path: Optional vector store path for the RAG dashboard.
+        rag_store_class: Optional dotted path to a VectorStore subclass.
+        rag_channel_registry: Optional path to a channel registry YAML file.
+    """
+    # mDNS service discovery (optional — only if zeroconf is installed)
+    _mdns_advertiser = None
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):  # noqa: ARG001
+        nonlocal _mdns_advertiser
+        try:
+            from heddle.discovery.mdns import HeddleServiceAdvertiser
+
+            _mdns_advertiser = HeddleServiceAdvertiser()
+            await _mdns_advertiser.start()
+            _mdns_advertiser.register_workshop(port=8080)
+            logger.info("workshop.mdns_enabled")
+        except ImportError:
+            logger.info("workshop.mdns_disabled", hint="Install heddle[mdns] for LAN discovery")
+        yield
+        if _mdns_advertiser is not None:
+            await _mdns_advertiser.stop()
+
+    app = FastAPI(title="Heddle Workshop", docs_url=None, redoc_url=None, lifespan=lifespan)
+
+    # Static files
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+    # Templates
+    templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+
+    # Initialize components
+    db = WorkshopDB(db_path)
+    backends = build_backends_from_env()
+    test_runner = WorkerTestRunner(backends)
+    eval_runner = EvalRunner(test_runner, db)
+    app_mgr = AppManager(apps_dir=apps_dir)
+    config_mgr = ConfigManager(configs_dir, db, extra_config_dirs=_build_extra_config_dirs(app_mgr))
+
+    # Dead-letter consumer — always available for manual entry storage;
+    # NATS subscription is handled externally if needed.
+    dead_letter_consumer = DeadLetterConsumer(bus=InMemoryBus())
+    app.state.dead_letter_consumer = dead_letter_consumer  # type: ignore[attr-defined]
+    app.state.db = db  # type: ignore[attr-defined]
+
+    # RAG manager — optional vector store + channel registry for RAG dashboard
+    rag_store = None
+    if rag_db_path:
+        try:
+            if rag_store_class:
+                import importlib
+
+                mod_path, cls_name = rag_store_class.rsplit(".", 1)
+                store_cls = getattr(importlib.import_module(mod_path), cls_name)
+            else:
+                from heddle.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+
+                store_cls = DuckDBVectorStore
+            rag_store = store_cls(db_path=rag_db_path).initialize()
+        except Exception as exc:
+            logger.warning("workshop.rag_store_init_failed", error=str(exc))
+
+    rag_mgr = RAGManager(
+        store=rag_store,
+        channel_registry_path=rag_channel_registry,
+    )
+
+    logger.info(
+        "workshop.initialized",
+        configs_dir=configs_dir,
+        db_path=db_path,
+        apps_dir=apps_dir,
+        backends=list(backends.keys()),
+        deployed_apps=len(app_mgr.list_apps()),
+        rag_store=rag_db_path or "none",
+        rag_channels=rag_mgr.channel_count(),
+    )
+
+    # ------------------------------------------------------------------
+    # Routes
+    # ------------------------------------------------------------------
+
+    @app.get("/", response_class=RedirectResponse)
+    async def root():
+        return RedirectResponse(url="/workers")
+
+    @app.get("/health")
+    async def health():
+        return {"status": "ok", "backends": list(backends.keys())}
+
+    # --- Workers ---
+
+    @app.get("/workers", response_class=HTMLResponse)
+    async def workers_list(request: Request):
+        workers = config_mgr.list_workers()
+        return templates.TemplateResponse(
+            request,
+            "workers/list.html",
+            {
+                "workers": workers,
+            },
+        )
+
+    @app.get("/workers/{name}", response_class=HTMLResponse)
+    async def worker_detail(request: Request, name: str):
+        try:
+            config = config_mgr.get_worker(name)
+            yaml_content = config_mgr.get_worker_yaml(name)
+        except FileNotFoundError:
+            return HTMLResponse("Worker not found", status_code=404)
+        versions = config_mgr.get_worker_version_history(name)
+        return templates.TemplateResponse(
+            request,
+            "workers/detail.html",
+            {
+                "config": config,
+                "yaml_content": yaml_content,
+                "name": name,
+                "versions": versions,
+            },
+        )
+
+    @app.post("/workers/{name}/validate", response_class=HTMLResponse)
+    async def worker_validate(request: Request, name: str):  # noqa: ARG001
+        """HTMX endpoint: validate YAML content and return inline errors."""
+        form = await request.form()
+        import yaml
+
+        errors = []
+        try:
+            config = yaml.safe_load(form["yaml_content"])
+            if config is None:
+                errors.append("YAML content is empty")
+            elif not isinstance(config, dict):
+                errors.append("YAML must be a mapping (key-value pairs)")
+            else:
+                # Run config validation without saving
+                from heddle.core.config import validate_worker_config
+
+                validation_errors = validate_worker_config(config)
+                errors.extend(validation_errors)
+        except yaml.YAMLError as e:
+            errors.append(f"Invalid YAML syntax: {e}")
+
+        return templates.TemplateResponse(
+            request,
+            "partials/validation_errors.html",
+            {"errors": errors},
+        )
+
+    @app.get("/workers/{name}/impact", response_class=JSONResponse)
+    async def worker_impact(name: str):
+        """Return config impact analysis for a worker (JSON API)."""
+        return JSONResponse(get_impact(name, config_mgr))
+
+    @app.get("/workers/{name}/impact-panel", response_class=HTMLResponse)
+    async def worker_impact_panel(request: Request, name: str):
+        """HTMX endpoint: render impact analysis as an HTML partial."""
+        impact = get_impact(name, config_mgr)
+        return templates.TemplateResponse(
+            request,
+            "partials/impact_panel.html",
+            {"impact": impact},
+        )
+
+    @app.post("/workers/{name}", response_class=HTMLResponse)
+    async def worker_save(request: Request, name: str):
+        form = await request.form()
+        import yaml
+
+        try:
+            config = yaml.safe_load(form["yaml_content"])
+        except Exception as e:
+            return HTMLResponse(f"Invalid YAML: {e}", status_code=400)
+        errors = config_mgr.save_worker(name, config, description=form.get("description"))
+        if errors:
+            return HTMLResponse(f"Validation errors: {'; '.join(errors)}", status_code=400)
+        return RedirectResponse(url=f"/workers/{name}", status_code=303)
+
+    @app.post("/workers/{name}/clone", response_class=RedirectResponse)
+    async def worker_clone(request: Request, name: str):
+        form = await request.form()
+        new_name = form["new_name"]
+        errors = config_mgr.clone_worker(name, new_name)
+        if errors:
+            return HTMLResponse(f"Clone failed: {'; '.join(errors)}", status_code=400)
+        return RedirectResponse(url=f"/workers/{new_name}", status_code=303)
+
+    # --- Test Bench ---
+
+    @app.get("/workers/{name}/test", response_class=HTMLResponse)
+    async def worker_test(request: Request, name: str):
+        try:
+            config = config_mgr.get_worker(name)
+        except FileNotFoundError:
+            return HTMLResponse("Worker not found", status_code=404)
+        return templates.TemplateResponse(
+            request,
+            "workers/test.html",
+            {
+                "config": config,
+                "name": name,
+                "available_tiers": list(backends.keys()),
+                "available_backends": _detect_available_backends(),
+            },
+        )
+
+    @app.post("/workers/{name}/test/run", response_class=HTMLResponse)
+    async def worker_test_run(request: Request, name: str):
+        form = await request.form()
+        try:
+            config = config_mgr.get_worker(name)
+            payload = json.loads(form["payload"])
+            tier = form.get("tier") or None
+        except FileNotFoundError:
+            return HTMLResponse("Worker not found", status_code=404)
+        except json.JSONDecodeError as e:
+            return templates.TemplateResponse(
+                request,
+                "partials/test_result.html",
+                {
+                    "error": f"Invalid JSON payload: {e}",
+                },
+            )
+
+        result = await test_runner.run(config, payload, tier=tier)
+        return templates.TemplateResponse(
+            request,
+            "partials/test_result.html",
+            {
+                "result": result,
+            },
+        )
+
+    # --- Eval ---
+
+    @app.get("/workers/{name}/eval", response_class=HTMLResponse)
+    async def worker_eval(request: Request, name: str):
+        try:
+            config = config_mgr.get_worker(name)
+        except FileNotFoundError:
+            return HTMLResponse("Worker not found", status_code=404)
+        runs = db.get_eval_runs(name)
+        return templates.TemplateResponse(
+            request,
+            "workers/eval.html",
+            {
+                "config": config,
+                "name": name,
+                "runs": runs,
+                "available_tiers": list(backends.keys()),
+            },
+        )
+
+    @app.post("/workers/{name}/eval/run", response_class=HTMLResponse)
+    async def worker_eval_run(request: Request, name: str):
+        form = await request.form()
+        try:
+            config = config_mgr.get_worker(name)
+            import yaml
+
+            suite = yaml.safe_load(form["test_suite"])
+            if not isinstance(suite, list):
+                raise ValueError("Test suite must be a YAML list")
+            tier = form.get("tier") or None
+            scoring = form.get("scoring", "field_match")
+        except Exception as e:
+            return HTMLResponse(f"Error: {e}", status_code=400)
+
+        # For LLM judge, pick a backend (prefer standard, fall back to first available)
+        judge_backend = None
+        if scoring == "llm_judge":
+            judge_backend = backends.get("standard") or next(iter(backends.values()), None)
+            if not judge_backend:
+                return HTMLResponse("No LLM backend available for judge scoring", status_code=400)
+
+        run_id = await eval_runner.run_suite(
+            config, suite, tier=tier, scoring=scoring, judge_backend=judge_backend
+        )
+        return RedirectResponse(url=f"/workers/{name}/eval/{run_id}", status_code=303)
+
+    @app.get("/workers/{name}/eval/{run_id}", response_class=HTMLResponse)
+    async def worker_eval_detail(request: Request, name: str, run_id: str):
+        runs = db.get_eval_runs(name)
+        run = next((r for r in runs if r["id"] == run_id), None)
+        if not run:
+            return HTMLResponse("Eval run not found", status_code=404)
+        results = db.get_eval_results(run_id)
+        baseline = db.get_baseline(name)
+        baseline_comparison = None
+        if baseline and baseline["run_id"] != run_id:
+            baseline_comparison = db.compare_against_baseline(name, run_id)
+        return templates.TemplateResponse(
+            request,
+            "workers/eval_detail.html",
+            {
+                "name": name,
+                "run": run,
+                "results": results,
+                "baseline": baseline,
+                "baseline_comparison": baseline_comparison,
+            },
+        )
+
+    @app.post("/workers/{name}/eval/{run_id}/promote-baseline", response_class=RedirectResponse)
+    async def worker_promote_baseline(request: Request, name: str, run_id: str):
+        form = await request.form()
+        description = form.get("description", "")
+        db.promote_baseline(name, run_id, description=description or None)
+        return RedirectResponse(url=f"/workers/{name}/eval/{run_id}", status_code=303)
+
+    @app.post("/workers/{name}/eval/remove-baseline", response_class=RedirectResponse)
+    async def worker_remove_baseline(name: str):
+        db.remove_baseline(name)
+        return RedirectResponse(url=f"/workers/{name}/eval", status_code=303)
+
+    # --- Pipelines ---
+
+    @app.get("/pipelines", response_class=HTMLResponse)
+    async def pipelines_list(request: Request):
+        pipelines = config_mgr.list_pipelines()
+        return templates.TemplateResponse(
+            request,
+            "pipelines/list.html",
+            {
+                "pipelines": pipelines,
+            },
+        )
+
+    @app.get("/pipelines/{name}", response_class=HTMLResponse)
+    async def pipeline_detail(request: Request, name: str):
+        try:
+            config = config_mgr.get_pipeline(name)
+        except FileNotFoundError:
+            return HTMLResponse("Pipeline not found", status_code=404)
+        graph = PipelineEditor.get_dependency_graph(config)
+        workers = config_mgr.list_workers()
+        return templates.TemplateResponse(
+            request,
+            "pipelines/editor.html",
+            {
+                "config": config,
+                "name": name,
+                "graph": graph,
+                "workers": workers,
+            },
+        )
+
+    @app.post("/pipelines/{name}/stage", response_class=HTMLResponse)
+    async def pipeline_stage_edit(request: Request, name: str):
+        form = await request.form()
+        action = form["action"]
+        try:
+            config = config_mgr.get_pipeline(name)
+
+            if action == "insert":
+                import yaml
+
+                stage_def = yaml.safe_load(form["stage_yaml"])
+                after = form.get("after_stage") or None
+                config = PipelineEditor.insert_stage(config, stage_def, after)
+            elif action == "remove":
+                config = PipelineEditor.remove_stage(config, form["stage_name"])
+            elif action == "swap":
+                config = PipelineEditor.swap_worker(
+                    config,
+                    form["stage_name"],
+                    form["new_worker_type"],
+                    form.get("new_tier") or None,
+                )
+            elif action == "branch":
+                import yaml
+
+                stage_def = yaml.safe_load(form["stage_yaml"])
+                config = PipelineEditor.add_parallel_branch(config, stage_def)
+
+            errors = config_mgr.save_pipeline(name, config)
+            if errors:
+                return HTMLResponse(f"Validation errors: {'; '.join(errors)}", status_code=400)
+
+        except (ValueError, FileNotFoundError) as e:
+            return HTMLResponse(f"Error: {e}", status_code=400)
+
+        return RedirectResponse(url=f"/pipelines/{name}", status_code=303)
+
+    @app.get("/pipelines/{name}/graph", response_class=JSONResponse)
+    async def pipeline_graph(name: str):
+        try:
+            config = config_mgr.get_pipeline(name)
+        except FileNotFoundError:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        return PipelineEditor.get_dependency_graph(config)
+
+    # --- Apps ---
+
+    @app.get("/apps", response_class=HTMLResponse)
+    async def apps_list(request: Request):
+        apps = app_mgr.list_apps()
+        error = request.query_params.get("error")
+        return templates.TemplateResponse(
+            request,
+            "apps/list.html",
+            {"apps": apps, "error": error},
+        )
+
+    @app.get("/apps/{name}", response_class=HTMLResponse)
+    async def app_detail(request: Request, name: str):
+        try:
+            manifest = app_mgr.get_app(name)
+        except (FileNotFoundError, ValueError):
+            return HTMLResponse("App not found", status_code=404)
+        return templates.TemplateResponse(
+            request,
+            "apps/detail.html",
+            {"manifest": manifest},
+        )
+
+    @app.post("/apps/deploy")
+    async def app_deploy(request: Request):
+        form = await request.form()
+        zip_file: UploadFile = form["zip_file"]
+
+        if not zip_file.filename or not zip_file.filename.endswith(".zip"):
+            return RedirectResponse(url="/apps?error=File+must+be+a+.zip+archive", status_code=303)
+
+        # Write uploaded file to a temp location for processing
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            content = await zip_file.read()
+            tmp.write(content)
+            tmp_path = Path(tmp.name)
+
+        try:
+            from heddle.workshop.app_manager import AppDeployError
+
+            manifest = app_mgr.deploy_app(tmp_path)
+            # Refresh ConfigManager's extra config dirs
+            config_mgr.extra_config_dirs = _build_extra_config_dirs(app_mgr)
+            # Notify running actors to reload
+            await app_mgr.notify_reload()
+            return RedirectResponse(url=f"/apps/{manifest.name}", status_code=303)
+        except AppDeployError as e:
+            return RedirectResponse(url=f"/apps?error={e}", status_code=303)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+    @app.post("/apps/{name}/remove", response_class=RedirectResponse)
+    async def app_remove(name: str):
+        try:
+            app_mgr.remove_app(name)
+            config_mgr.extra_config_dirs = _build_extra_config_dirs(app_mgr)
+            await app_mgr.notify_reload()
+        except FileNotFoundError:
+            pass
+        return RedirectResponse(url="/apps", status_code=303)
+
+    # --- RAG ---
+
+    @app.get("/rag", response_class=HTMLResponse)
+    async def rag_dashboard(request: Request):
+        stats = rag_mgr.get_store_stats()
+        faction_groups = rag_mgr.get_channels_by_faction()
+        return templates.TemplateResponse(
+            request,
+            "rag/dashboard.html",
+            {
+                "stats": stats,
+                "channel_count": rag_mgr.channel_count(),
+                "verified_count": rag_mgr.verified_channel_count(),
+                "faction_groups": faction_groups,
+            },
+        )
+
+    @app.get("/rag/channels", response_class=HTMLResponse)
+    async def rag_channels(request: Request):
+        return templates.TemplateResponse(
+            request,
+            "rag/channels.html",
+            {"channels": rag_mgr.channels},
+        )
+
+    @app.get("/rag/search", response_class=HTMLResponse)
+    async def rag_search(request: Request):
+        return templates.TemplateResponse(
+            request,
+            "rag/search.html",
+            {},
+        )
+
+    @app.post("/rag/search/run", response_class=HTMLResponse)
+    async def rag_search_run(request: Request):
+        form = await request.form()
+        query = form.get("query", "").strip()
+        if not query:
+            return templates.TemplateResponse(
+                request,
+                "partials/rag_search_result.html",
+                {"results": [], "error": "Query is required."},
+            )
+
+        limit = int(form.get("limit", 10))
+        min_score = float(form.get("min_score", 0.0))
+
+        channel_ids_raw = form.get("channel_ids", "").strip()
+        channel_ids = None
+        if channel_ids_raw:
+            try:
+                channel_ids = [int(x.strip()) for x in channel_ids_raw.split(",") if x.strip()]
+            except ValueError:
+                return templates.TemplateResponse(
+                    request,
+                    "partials/rag_search_result.html",
+                    {"results": [], "error": "Invalid channel IDs format."},
+                )
+
+        results = rag_mgr.search(query, limit=limit, min_score=min_score, channel_ids=channel_ids)
+        return templates.TemplateResponse(
+            request,
+            "partials/rag_search_result.html",
+            {"results": results, "error": None},
+        )
+
+    @app.get("/rag/store/stats", response_class=HTMLResponse)
+    async def rag_store_stats(request: Request):
+        stats = rag_mgr.get_store_stats()
+        return templates.TemplateResponse(
+            request,
+            "partials/rag_stats.html",
+            {"stats": stats},
+        )
+
+    # --- Dead Letters ---
+
+    @app.get("/dead-letters", response_class=HTMLResponse)
+    async def dead_letters_list(request: Request):
+        entries = dead_letter_consumer.list_entries(limit=100)
+        total = dead_letter_consumer.count()
+        replay_log = dead_letter_consumer.replay_log(limit=50)
+        replay_count = dead_letter_consumer.replay_count()
+        return templates.TemplateResponse(
+            request,
+            "dead_letters.html",
+            {
+                "entries": entries,
+                "total": total,
+                "replay_log": replay_log,
+                "replay_count": replay_count,
+            },
+        )
+
+    @app.post("/dead-letters/{index}/replay", response_class=RedirectResponse)
+    async def dead_letter_replay(request: Request, index: int):  # noqa: ARG001
+        form = await request.form()
+        entry_id = form.get("entry_id", "")
+        bus = dead_letter_consumer._bus
+        await dead_letter_consumer.replay(str(entry_id), bus)
+        return RedirectResponse(url="/dead-letters", status_code=303)
+
+    @app.post("/dead-letters/clear", response_class=RedirectResponse)
+    async def dead_letters_clear():
+        dead_letter_consumer.clear()
+        return RedirectResponse(url="/dead-letters", status_code=303)
+
+    return app

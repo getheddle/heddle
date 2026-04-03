@@ -18,10 +18,10 @@
 #   - summarize takes classifications + extractions + total count, returns report
 #
 # Run in Workshop:
-#   loom workshop → Pipeline List → document_intake → test
+#   heddle workshop → Pipeline List → document_intake → test
 #
 # Submit a goal:
-#   loom submit "Process comments" \
+#   heddle submit "Process comments" \
 #       --context source_path="examples/document-intake/sample-data/public_comments.csv" \
 #       --context text_column="text"
 #

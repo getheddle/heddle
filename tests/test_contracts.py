@@ -1,6 +1,6 @@
 """Test I/O contract validation."""
 
-from loom.core.contracts import validate_input, validate_output
+from heddle.core.contracts import validate_input, validate_output
 
 
 def test_missing_required_field():

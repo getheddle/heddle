@@ -6,8 +6,8 @@ from typing import Any
 import pytest
 import yaml
 
-from loom.bus.memory import InMemoryBus
-from loom.core.actor import BaseActor
+from heddle.bus.memory import InMemoryBus
+from heddle.core.actor import BaseActor
 
 # ---------------------------------------------------------------------------
 # Test actor with reload tracking
@@ -51,18 +51,18 @@ class TestBaseActorReload:
 
     @pytest.mark.asyncio
     async def test_control_listener_receives_reload(self):
-        """Publishing to loom.control.reload triggers on_reload()."""
+        """Publishing to heddle.control.reload triggers on_reload()."""
         bus = InMemoryBus()
         await bus.connect()
 
         actor = ReloadTrackingActor("test-actor", bus=bus)
 
         # Start actor in background
-        task = asyncio.create_task(actor.run("loom.test.subject"))
+        task = asyncio.create_task(actor.run("heddle.test.subject"))
         await asyncio.sleep(0.05)  # let it subscribe
 
         # Publish reload message
-        await bus.publish("loom.control.reload", {"action": "reload"})
+        await bus.publish("heddle.control.reload", {"action": "reload"})
         await asyncio.sleep(0.05)  # let it process
 
         assert actor.reload_count == 1
@@ -86,10 +86,10 @@ class TestBaseActorReload:
 
         actor = ReloadTrackingActor("test-actor", bus=bus)
 
-        task = asyncio.create_task(actor.run("loom.test.subject"))
+        task = asyncio.create_task(actor.run("heddle.test.subject"))
         await asyncio.sleep(0.05)
 
-        await bus.publish("loom.control.reload", {"action": "status"})
+        await bus.publish("heddle.control.reload", {"action": "status"})
         await asyncio.sleep(0.05)
 
         assert actor.reload_count == 0
@@ -109,7 +109,7 @@ class TestTaskWorkerReload:
     @pytest.mark.asyncio
     async def test_worker_reloads_config(self, tmp_path):
         """TaskWorker.on_reload() re-reads config from disk."""
-        from loom.worker.base import TaskWorker
+        from heddle.worker.base import TaskWorker
 
         # Create a worker config
         config_path = tmp_path / "worker.yaml"
@@ -156,7 +156,7 @@ class TestPipelineOrchestratorReload:
     @pytest.mark.asyncio
     async def test_pipeline_reloads_config(self, tmp_path):
         """PipelineOrchestrator.on_reload() re-reads config from disk."""
-        from loom.orchestrator.pipeline import PipelineOrchestrator
+        from heddle.orchestrator.pipeline import PipelineOrchestrator
 
         config_path = tmp_path / "pipeline.yaml"
         config_path.write_text(

@@ -2,15 +2,15 @@
 
 import pytest
 
-from loom.contrib.council.protocol import (
+from heddle.contrib.council.protocol import (
     DelphiProtocol,
     DiscussionProtocol,
     RoundRobinProtocol,
     StructuredDebateProtocol,
     get_protocol,
 )
-from loom.contrib.council.schemas import AgentConfig, TranscriptEntry
-from loom.contrib.council.transcript import TranscriptStore
+from heddle.contrib.council.schemas import AgentConfig, TranscriptEntry
+from heddle.contrib.council.transcript import TranscriptStore
 
 
 def _agents(n=3):

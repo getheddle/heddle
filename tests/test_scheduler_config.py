@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from loom.scheduler.config import _validate_schedule_entry, validate_scheduler_config
+from heddle.scheduler.config import _validate_schedule_entry, validate_scheduler_config
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -224,7 +224,7 @@ class TestValidateScheduleEntry:
             patch.dict("sys.modules", {"croniter": None}),
             # Force ImportError on `from croniter import croniter`
             patch(
-                "loom.scheduler.config.croniter",
+                "heddle.scheduler.config.croniter",
                 side_effect=ImportError,
                 create=True,
             ),

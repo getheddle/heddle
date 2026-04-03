@@ -1,4 +1,4 @@
-"""Unit tests for loom.contrib.rag.backends — Loom SyncProcessingBackend wrappers."""
+"""Unit tests for heddle.contrib.rag.backends — Heddle SyncProcessingBackend wrappers."""
 
 import json
 import tempfile
@@ -24,7 +24,7 @@ def _make_telegram_export(messages, channel_name="test", channel_id=99):
 
 def _make_post_dict(channel_id: int, msg_id: int, hour: int = 0) -> dict:
     """Create a NormalizedPost dict for testing."""
-    from loom.contrib.rag.schemas.post import NormalizedPost
+    from heddle.contrib.rag.schemas.post import NormalizedPost
 
     post = NormalizedPost(
         global_id=f"{channel_id}:{msg_id}",
@@ -39,7 +39,7 @@ def _make_post_dict(channel_id: int, msg_id: int, hour: int = 0) -> dict:
 
 class TestIngestorBackend:
     def test_basic_ingestion(self):
-        from loom.contrib.rag.backends import IngestorBackend
+        from heddle.contrib.rag.backends import IngestorBackend
 
         path = _make_telegram_export(
             [
@@ -67,7 +67,7 @@ class TestIngestorBackend:
         assert len(result["output"]["posts"]) == 2
 
     def test_default_source_path(self):
-        from loom.contrib.rag.backends import IngestorBackend
+        from heddle.contrib.rag.backends import IngestorBackend
 
         path = _make_telegram_export(
             [
@@ -85,7 +85,7 @@ class TestIngestorBackend:
         assert result["output"]["post_count"] == 1
 
     def test_missing_source_raises(self):
-        from loom.contrib.rag.backends import IngestorBackend
+        from heddle.contrib.rag.backends import IngestorBackend
 
         backend = IngestorBackend()
         with pytest.raises(ValueError, match="source_path is required"):
@@ -94,7 +94,7 @@ class TestIngestorBackend:
 
 class TestMuxBackend:
     def test_merge_channels(self):
-        from loom.contrib.rag.backends import MuxBackend
+        from heddle.contrib.rag.backends import MuxBackend
 
         ch1 = [_make_post_dict(1, 1, 0), _make_post_dict(1, 2, 2)]
         ch2 = [_make_post_dict(2, 1, 1), _make_post_dict(2, 2, 3)]
@@ -111,7 +111,7 @@ class TestMuxBackend:
         assert result["output"]["window_count"] >= 1
 
     def test_empty_channels_skipped(self):
-        from loom.contrib.rag.backends import MuxBackend
+        from heddle.contrib.rag.backends import MuxBackend
 
         ch1 = [_make_post_dict(1, 1, 0)]
         backend = MuxBackend()
@@ -126,7 +126,7 @@ class TestMuxBackend:
 
 class TestChunkerBackend:
     def test_basic_chunking(self):
-        from loom.contrib.rag.backends import ChunkerBackend
+        from heddle.contrib.rag.backends import ChunkerBackend
 
         posts = [_make_post_dict(1, 1)]
         backend = ChunkerBackend()
@@ -135,7 +135,7 @@ class TestChunkerBackend:
         assert len(result["output"]["chunks"]) == result["output"]["chunk_count"]
 
     def test_custom_chunk_size(self):
-        from loom.contrib.rag.backends import ChunkerBackend
+        from heddle.contrib.rag.backends import ChunkerBackend
 
         posts = [_make_post_dict(1, 1)]
         backend = ChunkerBackend(target_chars=10, max_chars=30)
@@ -144,7 +144,7 @@ class TestChunkerBackend:
         assert result["output"]["chunk_count"] >= 1
 
     def test_empty_posts(self):
-        from loom.contrib.rag.backends import ChunkerBackend
+        from heddle.contrib.rag.backends import ChunkerBackend
 
         backend = ChunkerBackend()
         result = backend.process_sync({"posts": []}, {})
@@ -153,7 +153,7 @@ class TestChunkerBackend:
 
 class TestVectorStoreBackend:
     def test_stats_action(self, tmp_path):
-        from loom.contrib.rag.backends import VectorStoreBackend
+        from heddle.contrib.rag.backends import VectorStoreBackend
 
         db_path = str(tmp_path / "test.duckdb")
         backend = VectorStoreBackend(db_path=db_path)
@@ -161,7 +161,7 @@ class TestVectorStoreBackend:
         assert result["output"]["total_chunks"] == 0
 
     def test_unknown_action_raises(self, tmp_path):
-        from loom.contrib.rag.backends import VectorStoreBackend
+        from heddle.contrib.rag.backends import VectorStoreBackend
 
         db_path = str(tmp_path / "test.duckdb")
         backend = VectorStoreBackend(db_path=db_path)
@@ -173,7 +173,7 @@ class TestVectorStoreDirectly:
     """Test DuckDBVectorStore directly (not through backend wrapper)."""
 
     def test_initialize_and_close(self, tmp_path):
-        from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+        from heddle.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
 
         store = DuckDBVectorStore(db_path=str(tmp_path / "test.duckdb"))
         store.initialize()
@@ -181,8 +181,8 @@ class TestVectorStoreDirectly:
         store.close()
 
     def test_add_and_get_embedded_chunks(self, tmp_path):
-        from loom.contrib.rag.schemas.embedding import EmbeddedChunk
-        from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+        from heddle.contrib.rag.schemas.embedding import EmbeddedChunk
+        from heddle.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
 
         store = DuckDBVectorStore(db_path=str(tmp_path / "test.duckdb"))
         store.initialize()
@@ -209,8 +209,8 @@ class TestVectorStoreDirectly:
         store.close()
 
     def test_delete_chunk(self, tmp_path):
-        from loom.contrib.rag.schemas.embedding import EmbeddedChunk
-        from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+        from heddle.contrib.rag.schemas.embedding import EmbeddedChunk
+        from heddle.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
 
         store = DuckDBVectorStore(db_path=str(tmp_path / "test.duckdb"))
         store.initialize()
@@ -231,8 +231,8 @@ class TestVectorStoreDirectly:
         store.close()
 
     def test_delete_by_source(self, tmp_path):
-        from loom.contrib.rag.schemas.embedding import EmbeddedChunk
-        from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+        from heddle.contrib.rag.schemas.embedding import EmbeddedChunk
+        from heddle.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
 
         store = DuckDBVectorStore(db_path=str(tmp_path / "test.duckdb"))
         store.initialize()
@@ -255,8 +255,8 @@ class TestVectorStoreDirectly:
         store.close()
 
     def test_stats(self, tmp_path):
-        from loom.contrib.rag.schemas.embedding import EmbeddedChunk
-        from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+        from heddle.contrib.rag.schemas.embedding import EmbeddedChunk
+        from heddle.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
 
         store = DuckDBVectorStore(db_path=str(tmp_path / "test.duckdb"))
         store.initialize()

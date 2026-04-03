@@ -13,14 +13,14 @@ import tempfile
 
 import yaml
 
-from loom.bus.memory import InMemoryBus
-from loom.contrib.council.orchestrator import CouncilOrchestrator
-from loom.core.messages import (
+from heddle.bus.memory import InMemoryBus
+from heddle.contrib.council.orchestrator import CouncilOrchestrator
+from heddle.core.messages import (
     OrchestratorGoal,
     TaskResult,
     TaskStatus,
 )
-from loom.worker.backends import LLMBackend
+from heddle.worker.backends import LLMBackend
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -77,12 +77,12 @@ class MockFacilitatorBackend(LLMBackend):
 
 
 async def _simulate_worker(bus: InMemoryBus, respond_to_n: int = 10) -> None:
-    """Subscribe to loom.tasks.incoming and respond with mock results.
+    """Subscribe to heddle.tasks.incoming and respond with mock results.
 
     Simulates the router+worker path: reads TaskMessage from incoming,
     publishes TaskResult to the appropriate result subject.
     """
-    sub = await bus.subscribe("loom.tasks.incoming")
+    sub = await bus.subscribe("heddle.tasks.incoming")
     count = 0
     async for data in sub:
         parent_id = data.get("parent_task_id", "default")
@@ -101,7 +101,7 @@ async def _simulate_worker(bus: InMemoryBus, respond_to_n: int = 10) -> None:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{parent_id}",
+            f"heddle.results.{parent_id}",
             result.model_dump(mode="json"),
         )
 
@@ -148,7 +148,7 @@ class TestCouncilOrchestrator:
         goal_data = goal.model_dump(mode="json")
 
         # Subscribe to result subject before starting.
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         # 2 agents * 2 rounds = 4 worker responses needed.
         worker_task = asyncio.create_task(_simulate_worker(bus, respond_to_n=4))
@@ -187,7 +187,7 @@ class TestCouncilOrchestrator:
         )
 
         goal = OrchestratorGoal(instruction="Test convergence")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         # Provide enough responses for up to 5 rounds (but expect early stop).
         worker_task = asyncio.create_task(_simulate_worker(bus, respond_to_n=10))
@@ -222,7 +222,7 @@ class TestCouncilOrchestrator:
         )
 
         goal = OrchestratorGoal(instruction="Test timeout")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         # Don't start any workers — all dispatches will timeout.
         await orch.handle_message(goal.model_dump(mode="json"))
@@ -251,11 +251,11 @@ class TestCouncilOrchestrator:
         )
 
         goal = OrchestratorGoal(instruction="Test failure")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         # Simulate a worker that returns FAILED.
         async def _failing_worker():
-            sub = await bus.subscribe("loom.tasks.incoming")
+            sub = await bus.subscribe("heddle.tasks.incoming")
             count = 0
             async for data in sub:
                 parent_id = data.get("parent_task_id", "default")
@@ -271,7 +271,7 @@ class TestCouncilOrchestrator:
                     processing_time_ms=5,
                 )
                 await bus.publish(
-                    f"loom.results.{parent_id}",
+                    f"heddle.results.{parent_id}",
                     result.model_dump(mode="json"),
                 )
                 count += 1
@@ -288,7 +288,7 @@ class TestCouncilOrchestrator:
         await bus.close()
 
     async def test_final_result_on_correct_subject(self):
-        """The final result is published to loom.results.{goal_id}."""
+        """The final result is published to heddle.results.{goal_id}."""
         bus = InMemoryBus()
         await bus.connect()
 
@@ -303,7 +303,7 @@ class TestCouncilOrchestrator:
         )
 
         goal = OrchestratorGoal(instruction="Test subject")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
         worker_task = asyncio.create_task(_simulate_worker(bus, respond_to_n=2))
 
         await orch.handle_message(goal.model_dump(mode="json"))

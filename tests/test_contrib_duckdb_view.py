@@ -5,7 +5,7 @@ import json
 import duckdb
 import pytest
 
-from loom.contrib.duckdb import DuckDBViewTool
+from heddle.contrib.duckdb import DuckDBViewTool
 
 
 @pytest.fixture
@@ -74,7 +74,7 @@ class TestDuckDBViewToolDefinition:
         assert defn["description"] == "Custom tool description"
 
     def test_is_tool_provider_subclass(self, db_with_view):
-        from loom.worker.tools import ToolProvider
+        from heddle.worker.tools import ToolProvider
 
         tool = DuckDBViewTool(db_path=db_with_view, view_name="item_summaries")
         assert isinstance(tool, ToolProvider)

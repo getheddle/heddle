@@ -17,9 +17,9 @@ from typing import Any
 import pytest
 import yaml
 
-from loom.bus.memory import InMemoryBus
-from loom.core.messages import ModelTier, TaskMessage
-from loom.router.router import DEAD_LETTER_SUBJECT, TaskRouter, TokenBucketRateLimiter
+from heddle.bus.memory import InMemoryBus
+from heddle.core.messages import ModelTier, TaskMessage
+from heddle.router.router import DEAD_LETTER_SUBJECT, TaskRouter, TokenBucketRateLimiter
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -148,7 +148,7 @@ class TestRoute:
         await bus.connect()
 
         # Subscribe to the expected destination
-        sub = await bus.subscribe("loom.tasks.summarizer.local")
+        sub = await bus.subscribe("heddle.tasks.summarizer.local")
         data = _make_task_data("summarizer", "local")
 
         await router.route(data)
@@ -183,7 +183,7 @@ class TestRoute:
             await bus.connect()
 
             dl_sub = await bus.subscribe(DEAD_LETTER_SUBJECT)
-            dest_sub = await bus.subscribe("loom.tasks.summarizer.local")
+            dest_sub = await bus.subscribe("heddle.tasks.summarizer.local")
 
             data1 = _make_task_data("summarizer", "local")
             data2 = _make_task_data("summarizer", "local")
@@ -213,7 +213,7 @@ class TestRoute:
             router = TaskRouter(rules_path, bus)
             await bus.connect()
 
-            sub = await bus.subscribe("loom.tasks.summarizer.frontier")
+            sub = await bus.subscribe("heddle.tasks.summarizer.frontier")
             data = _make_task_data("summarizer", "local")  # Task says local
 
             await router.route(data)
@@ -247,7 +247,7 @@ class TestRoute:
 class TestRunAndProcessMessages:
     @pytest.mark.asyncio
     async def test_run_connects_and_subscribes(self):
-        """run() connects the bus and subscribes to loom.tasks.incoming."""
+        """run() connects the bus and subscribes to heddle.tasks.incoming."""
         rules_path = _write_rules({"tier_overrides": {}, "rate_limits": {}})
         try:
             bus = InMemoryBus()
@@ -256,7 +256,7 @@ class TestRunAndProcessMessages:
 
             assert bus._connected
             assert router._sub is not None
-            assert router._sub.subject == "loom.tasks.incoming"
+            assert router._sub.subject == "heddle.tasks.incoming"
             await bus.close()
         finally:
             os.unlink(rules_path)
@@ -271,15 +271,15 @@ class TestRunAndProcessMessages:
             await router.run()
 
             # Subscribe to the destination
-            dest_sub = await bus.subscribe("loom.tasks.summarizer.local")
-            dest_sub2 = await bus.subscribe("loom.tasks.classifier.standard")
+            dest_sub = await bus.subscribe("heddle.tasks.summarizer.local")
+            dest_sub2 = await bus.subscribe("heddle.tasks.classifier.standard")
 
             # Start processing in background
             process_task = asyncio.create_task(router.process_messages())
 
             # Publish tasks
-            await bus.publish("loom.tasks.incoming", _make_task_data("summarizer", "local"))
-            await bus.publish("loom.tasks.incoming", _make_task_data("classifier", "standard"))
+            await bus.publish("heddle.tasks.incoming", _make_task_data("summarizer", "local"))
+            await bus.publish("heddle.tasks.incoming", _make_task_data("classifier", "standard"))
 
             # Collect results
             msg1 = await asyncio.wait_for(dest_sub.__anext__(), timeout=2.0)

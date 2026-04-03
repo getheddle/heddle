@@ -6,7 +6,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from loom.contrib.council.config import (
+from heddle.contrib.council.config import (
     CouncilConfig,
     load_council_config,
     validate_council_config,

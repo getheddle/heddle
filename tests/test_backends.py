@@ -1,4 +1,4 @@
-"""Tests for LLM backend adapters (loom.worker.backends).
+"""Tests for LLM backend adapters (heddle.worker.backends).
 
 Covers:
 - Message format converters: _anthropic_messages, _ollama_messages, _openai_messages
@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from loom.worker.backends import (
+from heddle.worker.backends import (
     AnthropicBackend,
     OllamaBackend,
     OpenAICompatibleBackend,

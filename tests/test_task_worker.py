@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from loom.core.messages import ModelTier, TaskMessage, TaskResult, TaskStatus
-from loom.worker.base import TaskWorker
+from heddle.core.messages import ModelTier, TaskMessage, TaskResult, TaskStatus
+from heddle.worker.base import TaskWorker
 
 # --- Mock implementation ---
 
@@ -84,7 +84,7 @@ async def test_task_worker_valid_input_output(tmp_path):
     subject = call_args[0][0]
     result_data = call_args[0][1]
 
-    assert subject == "loom.results.goal-123"
+    assert subject == "heddle.results.goal-123"
     result = TaskResult(**result_data)
     assert result.status == TaskStatus.COMPLETED
     assert result.output == {"echo": "hello"}
@@ -160,7 +160,7 @@ async def test_task_worker_empty_schema(tmp_path):
 
 @pytest.mark.asyncio
 async def test_task_worker_result_subject_default(tmp_path):
-    """Result published to loom.results.default when no parent_task_id."""
+    """Result published to heddle.results.default when no parent_task_id."""
     config_file = tmp_path / "config.yaml"
     config_file.write_text(_yaml_dump({"name": "test"}))
 
@@ -175,7 +175,7 @@ async def test_task_worker_result_subject_default(tmp_path):
     await worker.handle_message(task)
 
     subject = worker.publish.call_args[0][0]
-    assert subject == "loom.results.default"
+    assert subject == "heddle.results.default"
 
 
 # --- Helpers ---

@@ -1,11 +1,11 @@
 # Workshop Tour
 
-The Workshop is Loom's web UI for building, testing, and evaluating workers.
+The Workshop is Heddle's web UI for building, testing, and evaluating workers.
 It runs locally — no NATS or cloud services needed. Start it with:
 
 ```bash
-loom workshop
-# or: loom workshop --port 8080
+heddle workshop
+# or: heddle workshop --port 8080
 ```
 
 Open `http://localhost:8080` in your browser. Here's what each screen does.
@@ -142,11 +142,11 @@ dimensions, disk usage, and a list of ingested channels.
 - Browse channels with trust and bias metadata
 - Run semantic searches directly from the browser
 
-**When to use it:** After ingesting data with `loom rag ingest`, to explore
+**When to use it:** After ingesting data with `heddle rag ingest`, to explore
 what's in the store and run searches.
 
 > The RAG dashboard appears when you start Workshop with RAG configured
-> (either via `loom rag serve` or `loom workshop` after `loom setup` has
+> (either via `heddle rag serve` or `heddle workshop` after `heddle setup` has
 > set RAG paths).
 
 ---
@@ -162,7 +162,7 @@ that include worker configs, pipeline configs, and data files.
 - View the app manifest (what workers and pipelines it contains)
 - Remove deployed apps
 
-**When to use it:** When you receive a pre-packaged Loom application from
+**When to use it:** When you receive a pre-packaged Heddle application from
 someone else and want to deploy it locally.
 
 ---
@@ -170,6 +170,6 @@ someone else and want to deploy it locally.
 ## What's Next
 
 - **[Workers Reference](workers-reference.md)** — I/O schemas for all six shipped workers
-- **[Getting Started](GETTING_STARTED.md)** — install and configure Loom
+- **[Getting Started](GETTING_STARTED.md)** — install and configure Heddle
 - **[Building Workflows](building-workflows.md)** — create custom workers and pipelines
 - **[Workshop Architecture](workshop.md)** — internal design for contributors

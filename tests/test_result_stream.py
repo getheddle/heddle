@@ -22,9 +22,9 @@ from typing import Any
 
 import pytest
 
-from loom.bus.memory import InMemoryBus
-from loom.core.messages import TaskMessage, TaskResult, TaskStatus
-from loom.orchestrator.stream import ResultStream
+from heddle.bus.memory import InMemoryBus
+from heddle.core.messages import TaskMessage, TaskResult, TaskStatus
+from heddle.orchestrator.stream import ResultStream
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -76,7 +76,7 @@ class TestCollectAll:
 
         tasks = [_make_task() for _ in range(3)]
         expected_ids = {t.task_id for t in tasks}
-        subject = "loom.results.test-goal"
+        subject = "heddle.results.test-goal"
 
         _bg = asyncio.create_task(
             _bg_publish(bus, subject, [_make_result(t.task_id) for t in tasks]),
@@ -104,7 +104,7 @@ class TestCollectAll:
         await bus.connect()
 
         task = _make_task()
-        subject = "loom.results.single"
+        subject = "heddle.results.single"
 
         _bg = asyncio.create_task(
             _bg_publish(bus, subject, [_make_result(task.task_id)]),
@@ -131,7 +131,7 @@ class TestCollectAll:
 
         stream = ResultStream(
             bus=bus,
-            subject="loom.results.empty",
+            subject="heddle.results.empty",
             expected_task_ids=set(),
             timeout=5.0,
         )
@@ -155,7 +155,7 @@ class TestTimeout:
 
         tasks = [_make_task() for _ in range(3)]
         expected_ids = {t.task_id for t in tasks}
-        subject = "loom.results.timeout"
+        subject = "heddle.results.timeout"
 
         # Only publish 1 of 3 results.
         _bg = asyncio.create_task(
@@ -185,7 +185,7 @@ class TestTimeout:
         task = _make_task()
         stream = ResultStream(
             bus=bus,
-            subject="loom.results.zero",
+            subject="heddle.results.zero",
             expected_task_ids={task.task_id},
             timeout=0.0,
         )
@@ -209,7 +209,7 @@ class TestFiltering:
 
         expected_task = _make_task()
         unexpected_task = _make_task()
-        subject = "loom.results.filter"
+        subject = "heddle.results.filter"
 
         # Publish unexpected first, then expected.
         _bg = asyncio.create_task(
@@ -242,7 +242,7 @@ class TestFiltering:
         await bus.connect()
 
         task = _make_task()
-        subject = "loom.results.dedup"
+        subject = "heddle.results.dedup"
 
         # Publish the same result twice.
         _bg = asyncio.create_task(
@@ -274,7 +274,7 @@ class TestFiltering:
         await bus.connect()
 
         task = _make_task()
-        subject = "loom.results.malformed"
+        subject = "heddle.results.malformed"
 
         async def publish():
             await asyncio.sleep(0.01)
@@ -311,7 +311,7 @@ class TestCallbacks:
         await bus.connect()
 
         tasks = [_make_task() for _ in range(3)]
-        subject = "loom.results.callback"
+        subject = "heddle.results.callback"
         callback_log: list[tuple[str, int, int]] = []
 
         async def on_result(result, collected, expected):
@@ -344,7 +344,7 @@ class TestCallbacks:
         await bus.connect()
 
         tasks = [_make_task() for _ in range(5)]
-        subject = "loom.results.early"
+        subject = "heddle.results.early"
 
         async def stop_after_two(result, collected, expected):
             return collected >= 2
@@ -375,7 +375,7 @@ class TestCallbacks:
         await bus.connect()
 
         task = _make_task()
-        subject = "loom.results.sync-cb"
+        subject = "heddle.results.sync-cb"
         called = []
 
         def sync_callback(result, collected, expected):
@@ -404,7 +404,7 @@ class TestCallbacks:
         await bus.connect()
 
         tasks = [_make_task() for _ in range(2)]
-        subject = "loom.results.cb-error"
+        subject = "heddle.results.cb-error"
 
         async def failing_callback(result, collected, expected):
             if collected == 1:
@@ -441,7 +441,7 @@ class TestStreamingIteration:
         await bus.connect()
 
         tasks = [_make_task() for _ in range(3)]
-        subject = "loom.results.stream"
+        subject = "heddle.results.stream"
 
         _bg = asyncio.create_task(
             _bg_publish(bus, subject, [_make_result(t.task_id) for t in tasks]),
@@ -466,7 +466,7 @@ class TestStreamingIteration:
 
         stream = ResultStream(
             bus=bus,
-            subject="loom.results.once",
+            subject="heddle.results.once",
             expected_task_ids=set(),
             timeout=1.0,
         )
@@ -491,7 +491,7 @@ class TestProperties:
 
         stream = ResultStream(
             bus=bus,
-            subject="loom.results.props",
+            subject="heddle.results.props",
             expected_task_ids={"a", "b", "c"},
             timeout=5.0,
         )
@@ -510,7 +510,7 @@ class TestProperties:
         await bus.connect()
 
         tasks = [_make_task() for _ in range(3)]
-        subject = "loom.results.pending"
+        subject = "heddle.results.pending"
 
         # Only publish 2 of 3.
         _bg = asyncio.create_task(
@@ -549,7 +549,7 @@ class TestFailedResults:
         await bus.connect()
 
         task = _make_task()
-        subject = "loom.results.failed"
+        subject = "heddle.results.failed"
 
         async def publish():
             await asyncio.sleep(0.01)

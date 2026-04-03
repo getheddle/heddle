@@ -7,17 +7,17 @@
 # from multiple Telegram channels for cross-channel analysis.
 #
 # Component:  Processor worker (worker_kind: "processor")
-# Source:     src/loom/worker/processor.py (ProcessorWorker)
-# Backend:    src/loom/contrib/rag/backends.py (MuxBackend)
-# Engine:     src/loom/contrib/rag/mux/stream_mux.py (StreamMux)
-# Loaded by:  loom.core.config.load_config()
-# Validated:  loom.core.contracts.py (I/O schema enforcement)
+# Source:     src/heddle/worker/processor.py (ProcessorWorker)
+# Backend:    src/heddle/contrib/rag/backends.py (MuxBackend)
+# Engine:     src/heddle/contrib/rag/mux/stream_mux.py (StreamMux)
+# Loaded by:  heddle.core.config.load_config()
+# Validated:  heddle.core.contracts.py (I/O schema enforcement)
 #
 # Run with:
-#   loom processor --config configs/workers/rag_mux.yaml
-#   loom processor --config configs/workers/rag_mux.yaml --nats-url nats://localhost:4222
+#   heddle processor --config configs/workers/rag_mux.yaml
+#   heddle processor --config configs/workers/rag_mux.yaml --nats-url nats://localhost:4222
 #
-# NATS subject:  loom.tasks.rag_mux.local
+# NATS subject:  heddle.tasks.rag_mux.local
 #
 # Data flow (RAG pipeline):
 #   rag_ingestor --> [rag_mux] --> rag_chunker --> rag_vectorstore
@@ -53,7 +53,7 @@ worker_kind: "processor"
 
 # processing_backend (str, required for processor workers)
 # MuxBackend wraps StreamMux to merge and window multi-channel post streams.
-processing_backend: "loom.contrib.rag.backends.MuxBackend"
+processing_backend: "heddle.contrib.rag.backends.MuxBackend"
 
 # backend_config (dict, optional)
 # MuxBackend takes no constructor args. Windowing parameters are provided

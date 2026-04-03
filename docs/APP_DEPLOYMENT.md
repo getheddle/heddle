@@ -1,12 +1,12 @@
 # App Deployment Guide
 
-**Loom — Deploying Application Bundles**
+**Heddle — Deploying Application Bundles**
 
 ---
 
 ## Overview
 
-A Loom **app** is a ZIP archive containing worker configs, pipeline configs,
+A Heddle **app** is a ZIP archive containing worker configs, pipeline configs,
 and an optional Python package. Apps are deployed through the Workshop web UI
 or programmatically via the `AppManager` class.
 
@@ -22,10 +22,10 @@ Every app ZIP must contain a `manifest.yaml` at the root:
 ```yaml
 name: "myapp"                         # Required. lowercase, hyphens, underscores
 version: "1.0.0"                      # Required. Semantic version
-description: "My Loom application"    # Required. Human-readable
-loom_version: ">=0.4.0"              # Minimum loom version
+description: "My Heddle application"    # Required. Human-readable
+heddle_version: ">=0.4.0"              # Minimum heddle version
 
-required_extras:                      # Loom extras this app needs
+required_extras:                      # Heddle extras this app needs
   - duckdb
   - mcp
 
@@ -83,7 +83,7 @@ zip -r dist/myapp-1.0.0.zip \
 
 ## Deploying via Workshop
 
-1. Start the Workshop: `loom workshop --port 8080`
+1. Start the Workshop: `heddle workshop --port 8080`
 2. Navigate to **Apps** in the navigation bar
 3. Upload your `.zip` file using the deploy form
 4. The app's workers and pipelines appear in the Workers and Pipelines lists
@@ -91,7 +91,7 @@ zip -r dist/myapp-1.0.0.zip \
 ### Hot Reload
 
 After deployment, the Workshop publishes a reload message to
-`loom.control.reload`. Running actors re-read their configs from disk
+`heddle.control.reload`. Running actors re-read their configs from disk
 without restart. This works for:
 
 - Workers (TaskWorker, LLMWorker, ProcessorWorker)
@@ -107,7 +107,7 @@ will log a warning after deployment with install instructions:
 
 ```text
 This app includes Python package 'docman'.
-Install it manually: pip install -e ~/.loom/apps/docman/src/
+Install it manually: pip install -e ~/.heddle/apps/docman/src/
 ```
 
 The Workshop cannot auto-install packages because it may not have write
@@ -118,10 +118,10 @@ starting workers that depend on it.
 
 ## App Directory Structure
 
-Deployed apps are extracted to `~/.loom/apps/{app_name}/`:
+Deployed apps are extracted to `~/.heddle/apps/{app_name}/`:
 
 ```text
-~/.loom/apps/
+~/.heddle/apps/
   baft/
     manifest.yaml
     configs/

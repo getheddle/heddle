@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from loom.contrib.chatbridge.manual import ManualChatBridge
+from heddle.contrib.chatbridge.manual import ManualChatBridge
 
 
 class TestManualCallbackMode:

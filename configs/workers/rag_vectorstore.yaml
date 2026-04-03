@@ -7,23 +7,23 @@
 # and stats (index statistics).
 #
 # Component:  Processor worker (worker_kind: "processor")
-# Source:     src/loom/worker/processor.py (ProcessorWorker)
-# Backend:    src/loom/contrib/rag/backends.py (VectorStoreBackend)
-# Engine:     src/loom/contrib/rag/vectorstore/duckdb_store.py (DuckDBVectorStore)
-# Embeddings: src/loom/worker/embeddings.py (OllamaEmbeddingProvider)
-# Loaded by:  loom.core.config.load_config()
-# Validated:  loom.core.contracts.py (I/O schema enforcement)
+# Source:     src/heddle/worker/processor.py (ProcessorWorker)
+# Backend:    src/heddle/contrib/rag/backends.py (VectorStoreBackend)
+# Engine:     src/heddle/contrib/rag/vectorstore/duckdb_store.py (DuckDBVectorStore)
+# Embeddings: src/heddle/worker/embeddings.py (OllamaEmbeddingProvider)
+# Loaded by:  heddle.core.config.load_config()
+# Validated:  heddle.core.contracts.py (I/O schema enforcement)
 #
 # Run with:
-#   loom processor --config configs/workers/rag_vectorstore.yaml
-#   loom processor --config configs/workers/rag_vectorstore.yaml --nats-url nats://localhost:4222
+#   heddle processor --config configs/workers/rag_vectorstore.yaml
+#   heddle processor --config configs/workers/rag_vectorstore.yaml --nats-url nats://localhost:4222
 #
 # Prerequisites:
 #   - Ollama running at ollama_url with the embedding_model pulled:
 #     ollama pull nomic-embed-text
 #   - DuckDB file path must be writable.
 #
-# NATS subject:  loom.tasks.rag_vectorstore.local
+# NATS subject:  heddle.tasks.rag_vectorstore.local
 #
 # Data flow (RAG pipeline):
 #   rag_ingestor --> rag_mux --> rag_chunker --> [rag_vectorstore]
@@ -60,7 +60,7 @@ worker_kind: "processor"
 
 # processing_backend (str, required for processor workers)
 # VectorStoreBackend wraps DuckDBVectorStore + OllamaEmbeddingProvider.
-processing_backend: "loom.contrib.rag.backends.VectorStoreBackend"
+processing_backend: "heddle.contrib.rag.backends.VectorStoreBackend"
 
 # backend_config (dict, required for VectorStoreBackend)
 # These kwargs are passed to the backend constructor.

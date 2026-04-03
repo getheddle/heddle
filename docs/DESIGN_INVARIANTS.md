@@ -1,11 +1,11 @@
-# Loom Design Invariants — Technical Reference
+# Heddle Design Invariants — Technical Reference
 
 **Purpose:** This document describes the non-obvious design decisions, deliberate
-constraints, and architectural invariants in the Loom framework. It exists
+constraints, and architectural invariants in the Heddle framework. It exists
 because well-intentioned contributors — human or LLM — routinely propose
 "improvements" that would break these invariants.
 
-Read this before proposing structural changes to Loom or any application built
+Read this before proposing structural changes to Heddle or any application built
 on it. Every section explains *what* the invariant is, *why* it exists, and
 *how it fails* if violated.
 
@@ -268,9 +268,9 @@ slowest one finishes. The latency is the same; only the observability differs.
 
 ## Part II — Application Design Patterns
 
-These are architectural patterns that Loom applications should follow when
+These are architectural patterns that Heddle applications should follow when
 building pipelines with epistemic constraints, blind audits, or information
-barriers. They are not Loom framework code — they are design principles that
+barriers. They are not Heddle framework code — they are design principles that
 emerge from how the framework is meant to be used.
 
 ### 17. Knowledge silo isolation is an epistemic quarantine, not a convenience grouping
@@ -437,7 +437,7 @@ can't get any other way.
 
 ### 27. YAML configs are the right medium for what they describe
 
-Loom application configs are typically 80% natural-language system prompts and
+Heddle application configs are typically 80% natural-language system prompts and
 20% structural configuration (schemas, mappings, silo assignments). A Python
 DSL would help with the structural 20% but would make the prompt 80% harder
 to read and edit.
@@ -530,21 +530,21 @@ must not know who wrote which position.
 **How it fails:** Leaking full transcripts to all agents defeats the
 purpose of structured debate and introduces anchoring bias.
 
-### 18. ChatBridge session state lives in the bridge, not in Loom
+### 18. ChatBridge session state lives in the bridge, not in Heddle
 
 ChatBridge adapters maintain per-session conversation history
 internally (or in the external provider's API). The `ChatBridgeBackend`
-wrapper is a standard `ProcessingBackend` — stateless from Loom's
+wrapper is a standard `ProcessingBackend` — stateless from Heddle's
 perspective. The session state is keyed by `session_id` and managed
 by the bridge implementation.
 
-**Why:** This keeps the Loom worker layer clean while supporting
+**Why:** This keeps the Heddle worker layer clean while supporting
 multi-turn conversations with external LLMs. The bridge is the adapter
-boundary — Loom doesn't need to know whether the backing LLM is
+boundary — Heddle doesn't need to know whether the backing LLM is
 Claude, GPT-4, Ollama, or a human.
 
 **How it fails:** Storing bridge session state in the worker or
-orchestrator would couple Loom's lifecycle management to external
+orchestrator would couple Heddle's lifecycle management to external
 provider session semantics.
 
 ### 19. Convergence checks must be side-effect-free

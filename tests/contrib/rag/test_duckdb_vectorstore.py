@@ -10,9 +10,9 @@ from unittest.mock import patch
 
 import pytest
 
-from loom.contrib.rag.schemas.chunk import ChunkStrategy, TextChunk
-from loom.contrib.rag.schemas.embedding import EmbeddedChunk, SimilarityResult
-from loom.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
+from heddle.contrib.rag.schemas.chunk import ChunkStrategy, TextChunk
+from heddle.contrib.rag.schemas.embedding import EmbeddedChunk, SimilarityResult
+from heddle.contrib.rag.vectorstore.duckdb_store import DuckDBVectorStore
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -113,7 +113,7 @@ class TestInsert:
         assert store.add_embedded_chunks([]) == 0
 
     @patch(
-        "loom.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
+        "heddle.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
         side_effect=_fake_embeddings,
     )
     def test_add_chunks(self, mock_embed, store):
@@ -126,7 +126,7 @@ class TestInsert:
         assert store.add_chunks([]) == 0
 
     @patch(
-        "loom.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
+        "heddle.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
         side_effect=RuntimeError("Ollama down"),
     )
     def test_add_chunks_embedding_failure(self, mock_embed, store):
@@ -190,7 +190,7 @@ class TestGetDelete:
 
 class TestSearch:
     @patch(
-        "loom.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
+        "heddle.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
     )
     def test_search_returns_results(self, mock_embed, store):
         # Insert chunks with known embeddings
@@ -216,7 +216,7 @@ class TestSearch:
         assert isinstance(results[0], SimilarityResult)
 
     @patch(
-        "loom.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
+        "heddle.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
         return_value=[],
     )
     def test_search_no_embeddings(self, mock_embed, store):
@@ -224,7 +224,7 @@ class TestSearch:
         assert results == []
 
     @patch(
-        "loom.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
+        "heddle.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
     )
     def test_search_min_score_filter(self, mock_embed, store):
         store.add_embedded_chunks(
@@ -237,7 +237,7 @@ class TestSearch:
         assert len(results) == 0
 
     @patch(
-        "loom.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
+        "heddle.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore._embed_texts",
     )
     def test_search_channel_filter(self, mock_embed, store):
         store.add_embedded_chunks(

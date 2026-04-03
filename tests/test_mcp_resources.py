@@ -1,8 +1,8 @@
-"""Tests for loom.mcp.resources — workspace resource exposure."""
+"""Tests for heddle.mcp.resources — workspace resource exposure."""
 
 import pytest
 
-from loom.mcp.resources import WorkspaceResources
+from heddle.mcp.resources import WorkspaceResources
 
 
 @pytest.fixture

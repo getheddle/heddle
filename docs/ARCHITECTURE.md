@@ -1,12 +1,12 @@
 # Architecture
 
-**Loom — Lightweight Orchestrated Operational Mesh**
+**Heddle — Lightweight Orchestrated Operational Mesh**
 
 ---
 
 ## Overview
 
-Loom is an actor-based framework where narrowly-scoped stateless workers are
+Heddle is an actor-based framework where narrowly-scoped stateless workers are
 coordinated by an orchestrator through a NATS message bus. The router handles
 deterministic task dispatch with rate limiting. Workers call LLM backends or
 run processing backends, validate I/O against JSON Schema contracts, and
@@ -27,7 +27,7 @@ publish results back to the orchestrator.
 ## Source Tree
 
 ```text
-src/loom/
+src/heddle/
 ├── core/
 │   ├── messages.py      # Pydantic schemas: TaskMessage, TaskResult, OrchestratorGoal, CheckpointState
 │   ├── actor.py         # Base actor class (NATS subscribe/publish lifecycle)
@@ -71,10 +71,10 @@ src/loom/
 │
 ├── tui/
 │   ├── __init__.py       # Package init
-│   └── app.py            # LoomDashboard — Textual TUI, live NATS observer (loom.> wildcard)
+│   └── app.py            # HeddleDashboard — Textual TUI, live NATS observer (heddle.> wildcard)
 │
 ├── discovery/
-│   └── mdns.py           # LoomServiceAdvertiser — mDNS/Bonjour LAN service advertisement
+│   └── mdns.py           # HeddleServiceAdvertiser — mDNS/Bonjour LAN service advertisement
 │
 ├── mcp/
 │   ├── config.py           # MCP gateway YAML config loading + validation
@@ -152,11 +152,11 @@ tests/                    # Unit + integration tests
 
 ## How the Pieces Connect
 
-1. **You submit a goal** via CLI or publish to `loom.goals.incoming`
+1. **You submit a goal** via CLI or publish to `heddle.goals.incoming`
    (optionally, **the scheduler** fires goals or tasks on cron/interval timers)
 2. **The orchestrator** decomposes it into subtasks (via LLM-driven GoalDecomposer), each targeting a `worker_type`
-3. **The router** picks up tasks from `loom.tasks.incoming`, resolves the model tier, enforces rate limits, and publishes to `loom.tasks.{worker_type}.{tier}` (unroutable tasks go to `loom.tasks.dead_letter`)
-4. **Workers** (competing consumers via NATS queue groups) pick up tasks, call the appropriate LLM backend, validate the output, and publish results to `loom.results.{goal_id}`
+3. **The router** picks up tasks from `heddle.tasks.incoming`, resolves the model tier, enforces rate limits, and publishes to `heddle.tasks.{worker_type}.{tier}` (unroutable tasks go to `heddle.tasks.dead_letter`)
+4. **Workers** (competing consumers via NATS queue groups) pick up tasks, call the appropriate LLM backend, validate the output, and publish results to `heddle.results.{goal_id}`
 5. **The orchestrator** collects results, decides if more subtasks are needed, and eventually produces a final answer
 
 Workers are stateless — they reset after every task. The orchestrator is longer-lived
@@ -169,12 +169,12 @@ into a structured summary.
 
 | Subject | Purpose |
 |---------|---------|
-| `loom.goals.incoming` | Top-level goals for orchestrators |
-| `loom.tasks.incoming` | Router picks up tasks here |
-| `loom.tasks.{worker_type}.{tier}` | Routed tasks; workers subscribe with queue groups |
-| `loom.tasks.dead_letter` | Unroutable or rate-limited tasks |
-| `loom.results.{goal_id}` | Results flow back to orchestrators |
-| `loom.scheduler.{name}` | Scheduler health-check subject |
+| `heddle.goals.incoming` | Top-level goals for orchestrators |
+| `heddle.tasks.incoming` | Router picks up tasks here |
+| `heddle.tasks.{worker_type}.{tier}` | Routed tasks; workers subscribe with queue groups |
+| `heddle.tasks.dead_letter` | Unroutable or rate-limited tasks |
+| `heddle.results.{goal_id}` | Results flow back to orchestrators |
+| `heddle.scheduler.{name}` | Scheduler health-check subject |
 
 ---
 
@@ -188,7 +188,7 @@ No state carries between tasks — this is enforced, not optional.
 
 **The router is deterministic.** It does not use an LLM. It routes by
 `worker_type` and `model_tier` using rules in `configs/router_rules.yaml`.
-Unroutable tasks go to `loom.tasks.dead_letter`.
+Unroutable tasks go to `heddle.tasks.dead_letter`.
 
 **Workers have strict I/O contracts.** Validated by `core/contracts.py`. Input
 and output schemas are defined per-worker in their YAML config. Boolean values
@@ -277,7 +277,7 @@ process multiple goals concurrently within a single instance.
 Time-driven actor that dispatches goals and tasks on schedules defined
 in YAML config. Supports cron expressions (via `croniter`) and fixed-interval
 timers. Each schedule entry publishes either an `OrchestratorGoal` to
-`loom.goals.incoming` or a `TaskMessage` to `loom.tasks.incoming`.
+`heddle.goals.incoming` or a `TaskMessage` to `heddle.tasks.incoming`.
 
 Config-only design: all schedules are defined at startup. No runtime
 control messages. The scheduler extends `BaseActor` with a background
@@ -303,8 +303,8 @@ Abstracted behind `MessageBus` ABC:
 
 ### MCP Gateway (`mcp/`)
 
-Config-driven Model Context Protocol server that exposes LOOM actors as MCP tools.
-Any LOOM system becomes an MCP server with a single YAML config — zero MCP-specific
+Config-driven Model Context Protocol server that exposes HEDDLE actors as MCP tools.
+Any HEDDLE system becomes an MCP server with a single YAML config — zero MCP-specific
 code needed.
 
 - **Config** (`config.py`): Load and validate MCP gateway YAML
@@ -366,14 +366,14 @@ LLM call spans follow the **OTel GenAI semantic conventions**
 - `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` — token counts
 - `gen_ai.request.temperature` / `gen_ai.request.max_tokens` — request params
 
-Set `LOOM_TRACE_CONTENT=1` to additionally record prompt and completion text as
+Set `HEDDLE_TRACE_CONTENT=1` to additionally record prompt and completion text as
 span events (`gen_ai.content.prompt`, `gen_ai.content.completion`). This may
 contain PII — use only in development or secure environments.
 
 Legacy `llm.*` attributes are preserved for backward compatibility.
 
 Use any OTel-compatible backend (Jaeger, Zipkin, Grafana Tempo) to visualize
-traces. Initialize with `init_tracing(service_name="loom")` at startup.
+traces. Initialize with `init_tracing(service_name="heddle")` at startup.
 
 ### TUI Dashboard (`tui/`)
 
@@ -381,7 +381,7 @@ Real-time terminal dashboard for observing the actor mesh. Connects to NATS
 and renders live updates in a Textual-based terminal UI.
 
 ```bash
-loom ui --nats-url nats://localhost:4222
+heddle ui --nats-url nats://localhost:4222
 ```
 
 Four panels:
@@ -389,9 +389,9 @@ Four panels:
 - **Goals** — active goals with status, subtask count, elapsed time
 - **Tasks** — dispatched tasks with worker type, tier, model, elapsed
 - **Pipeline** — pipeline stage execution with wall time
-- **Events** — scrolling log of all `loom.>` NATS messages
+- **Events** — scrolling log of all `heddle.>` NATS messages
 
-The dashboard is read-only — it subscribes to `loom.>` wildcard but never
+The dashboard is read-only — it subscribes to `heddle.>` wildcard but never
 publishes. Safe to run alongside production actors. Keybindings: `q` quit,
 `c` clear log, `r` refresh tables.
 
@@ -491,9 +491,9 @@ invalid values, the system raises `ConfigValidationError` before any actor start
 - **Router:** `tier_override` values must be valid tiers, `rate_limit` structure
   validated (rate, burst).
 - **Scheduler:** cron expressions and dispatch types validated by
-  `loom.scheduler.config`.
+  `heddle.scheduler.config`.
 - **MCP:** tool sources, backend import paths, and resource config validated by
-  `loom.mcp.config`.
+  `heddle.mcp.config`.
 
 All shipped configs in `configs/` are validated in CI via `test_config_shipped.py`.
 

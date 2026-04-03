@@ -1,6 +1,6 @@
 # Governance
 
-**Loom — Lightweight Orchestrated Operational Mesh**
+**Heddle — Lightweight Orchestrated Operational Mesh**
 **Effective:** 2026
 **Contact:** admin@irantransitionproject.org
 

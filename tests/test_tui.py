@@ -4,9 +4,9 @@ Tests the domain models, event handling logic, and widget composition
 without requiring a running NATS server.
 """
 
-from loom.tui.app import (
+from heddle.tui.app import (
     DashboardState,
-    LoomDashboard,
+    HeddleDashboard,
     NatsConnected,
     NatsDisconnected,
     NatsEvent,
@@ -83,15 +83,15 @@ class TestDashboardState:
 
 class TestStatusIcon:
     def test_known_statuses(self):
-        assert LoomDashboard._status_icon("completed") == "✅"
-        assert LoomDashboard._status_icon("COMPLETED") == "✅"
-        assert LoomDashboard._status_icon("failed") == "❌"
-        assert LoomDashboard._status_icon("FAILED") == "❌"
-        assert LoomDashboard._status_icon("dispatched") == "📤"
-        assert LoomDashboard._status_icon("received") == "📥"
+        assert HeddleDashboard._status_icon("completed") == "✅"
+        assert HeddleDashboard._status_icon("COMPLETED") == "✅"
+        assert HeddleDashboard._status_icon("failed") == "❌"
+        assert HeddleDashboard._status_icon("FAILED") == "❌"
+        assert HeddleDashboard._status_icon("dispatched") == "📤"
+        assert HeddleDashboard._status_icon("received") == "📥"
 
     def test_unknown_status_returns_raw(self):
-        assert LoomDashboard._status_icon("custom_status") == "custom_status"
+        assert HeddleDashboard._status_icon("custom_status") == "custom_status"
 
 
 # ---------------------------------------------------------------------------
@@ -101,24 +101,24 @@ class TestStatusIcon:
 
 class TestSummarizeEvent:
     def test_basic_event(self):
-        summary = LoomDashboard._summarize_event(
-            "loom.goals.incoming",
+        summary = HeddleDashboard._summarize_event(
+            "heddle.goals.incoming",
             {"goal_id": "g1", "instruction": "analyze this"},
         )
-        assert "loom.goals.incoming" in summary
+        assert "heddle.goals.incoming" in summary
         assert "goal_id=g1" in summary
         assert "instruction=analyze this" in summary
 
     def test_long_values_truncated(self):
-        summary = LoomDashboard._summarize_event(
-            "loom.tasks.incoming",
+        summary = HeddleDashboard._summarize_event(
+            "heddle.tasks.incoming",
             {"task_id": "t1", "instruction": "x" * 100},
         )
         assert "..." in summary
 
     def test_missing_keys_skipped(self):
-        summary = LoomDashboard._summarize_event("loom.test", {"custom_key": "val"})
-        assert "loom.test" in summary
+        summary = HeddleDashboard._summarize_event("heddle.test", {"custom_key": "val"})
+        assert "heddle.test" in summary
         assert "custom_key" not in summary
 
 
@@ -129,7 +129,7 @@ class TestSummarizeEvent:
 
 class TestEventHandlers:
     def _make_app(self):
-        return LoomDashboard(nats_url="nats://test:4222")
+        return HeddleDashboard(nats_url="nats://test:4222")
 
     def test_handle_goal_received(self):
         app = self._make_app()
@@ -156,7 +156,7 @@ class TestEventHandlers:
     def test_handle_task_routed(self):
         app = self._make_app()
         app.state.tasks["t1"] = TrackedTask(task_id="t1")
-        app._handle_task_routed("loom.tasks.summarizer.local", {"task_id": "t1"})
+        app._handle_task_routed("heddle.tasks.summarizer.local", {"task_id": "t1"})
         assert app.state.tasks["t1"].tier == "local"
         assert app.state.tasks["t1"].status == "routed"
 
@@ -170,7 +170,7 @@ class TestEventHandlers:
             "processing_time_ms": 1500,
             "model_used": "llama3",
         }
-        app._handle_result("loom.results.g1", data)
+        app._handle_result("heddle.results.g1", data)
         assert app.state.tasks["t1"].status == "COMPLETED"
         assert app.state.tasks["t1"].elapsed_ms == 1500
         assert app.state.tasks["t1"].model_used == "llama3"
@@ -184,7 +184,7 @@ class TestEventHandlers:
             "status": "COMPLETED",
             "processing_time_ms": 3000,
         }
-        app._handle_result("loom.results.g1", data)
+        app._handle_result("heddle.results.g1", data)
         assert app.state.goals["g1"].status == "COMPLETED"
         assert app.state.goals["g1"].elapsed_ms == 3000
 
@@ -207,8 +207,8 @@ class TestEventHandlers:
 
 class TestMessages:
     def test_nats_event(self):
-        event = NatsEvent("loom.test", {"key": "value"})
-        assert event.subject == "loom.test"
+        event = NatsEvent("heddle.test", {"key": "value"})
+        assert event.subject == "heddle.test"
         assert event.data == {"key": "value"}
 
     def test_nats_connected(self):
@@ -231,15 +231,15 @@ class TestMessages:
 
 class TestAppConstruction:
     def test_default_nats_url(self):
-        app = LoomDashboard()
+        app = HeddleDashboard()
         assert app.nats_url == "nats://localhost:4222"
 
     def test_custom_nats_url(self):
-        app = LoomDashboard(nats_url="nats://custom:4222")
+        app = HeddleDashboard(nats_url="nats://custom:4222")
         assert app.nats_url == "nats://custom:4222"
 
     def test_initial_state_empty(self):
-        app = LoomDashboard()
+        app = HeddleDashboard()
         assert len(app.state.goals) == 0
         assert len(app.state.tasks) == 0
         assert app.state.message_count == 0

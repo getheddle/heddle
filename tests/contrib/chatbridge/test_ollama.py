@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from loom.contrib.chatbridge.ollama import OllamaChatBridge
+from heddle.contrib.chatbridge.ollama import OllamaChatBridge
 
 
 def _mock_response(content="Local model says hi", prompt_eval=30, eval_count=10):

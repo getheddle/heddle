@@ -1,6 +1,6 @@
 # Contrib Modules
 
-The `loom.contrib` package contains optional integrations that extend Loom's
+The `loom.contrib` package contains optional integrations that extend Heddle's
 capabilities. Each module requires its own optional dependency extra.
 
 | Module | Extra | Purpose |
@@ -20,15 +20,15 @@ See [RAG How-To](../rag-howto.md) for the RAG pipeline guide.
 Run structured team discussions where multiple LLM agents debate
 iteratively with pluggable protocols and convergence detection.
 
-::: loom.contrib.council.runner
+::: heddle.contrib.council.runner
     options:
       members: [CouncilRunner]
 
-::: loom.contrib.council.config
+::: heddle.contrib.council.config
     options:
       members: [CouncilConfig, load_council_config]
 
-::: loom.contrib.council.schemas
+::: heddle.contrib.council.schemas
     options:
       members: [AgentConfig, CouncilResult, ConvergenceResult, TranscriptEntry]
 
@@ -37,27 +37,27 @@ iteratively with pluggable protocols and convergence detection.
 Session-aware adapters for Claude, OpenAI, Ollama, and human-in-the-loop
 participation. Each adapter maintains per-session conversation history.
 
-::: loom.contrib.chatbridge.base
+::: heddle.contrib.chatbridge.base
     options:
       members: [ChatBridge, ChatResponse, SessionInfo]
 
-::: loom.contrib.chatbridge.anthropic
+::: heddle.contrib.chatbridge.anthropic
     options:
       members: [AnthropicChatBridge]
 
-::: loom.contrib.chatbridge.openai
+::: heddle.contrib.chatbridge.openai
     options:
       members: [OpenAIChatBridge]
 
-::: loom.contrib.chatbridge.ollama
+::: heddle.contrib.chatbridge.ollama
     options:
       members: [OllamaChatBridge]
 
-::: loom.contrib.chatbridge.manual
+::: heddle.contrib.chatbridge.manual
     options:
       members: [ManualChatBridge]
 
-::: loom.contrib.chatbridge.worker
+::: heddle.contrib.chatbridge.worker
     options:
       members: [ChatBridgeBackend]
 
@@ -66,37 +66,37 @@ participation. Each adapter maintains per-session conversation history.
 Production checkpoint store using Redis/Valkey. Replaces the default
 in-memory store for persistent orchestrator checkpoints.
 
-::: loom.contrib.redis.store
+::: heddle.contrib.redis.store
 
 ## DuckDB Query Backend
 
 Action-dispatch query backend for DuckDB. Supports full-text search,
 filtering, statistics, single-row get, and vector similarity search.
 
-::: loom.contrib.duckdb.query_backend
+::: heddle.contrib.duckdb.query_backend
 
 ## DuckDB View Tool
 
 Read-only DuckDB view exposed as an LLM-callable tool. Workers can query
 structured data during processing.
 
-::: loom.contrib.duckdb.view_tool
+::: heddle.contrib.duckdb.view_tool
 
 ## DuckDB Vector Tool
 
 Semantic similarity search via DuckDB embeddings, exposed as an LLM tool.
 
-::: loom.contrib.duckdb.vector_tool
+::: heddle.contrib.duckdb.vector_tool
 
 ## LanceDB Vector Store
 
 ANN vector storage and search via LanceDB. Faster than DuckDB for large
 datasets. Implements the `VectorStore` ABC.
 
-::: loom.contrib.lancedb.store
+::: heddle.contrib.lancedb.store
 
 ## LanceDB Vector Tool
 
 Semantic similarity search via LanceDB, exposed as an LLM tool.
 
-::: loom.contrib.lancedb.tool
+::: heddle.contrib.lancedb.tool

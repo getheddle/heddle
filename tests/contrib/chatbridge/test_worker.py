@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from loom.contrib.chatbridge.base import ChatResponse
-from loom.contrib.chatbridge.worker import ChatBridgeBackend, ChatBridgeBackendError
+from heddle.contrib.chatbridge.base import ChatResponse
+from heddle.contrib.chatbridge.worker import ChatBridgeBackend, ChatBridgeBackendError
 
 
 class TestChatBridgeBackend:
@@ -26,14 +26,14 @@ class TestChatBridgeBackend:
         )
 
         with patch(
-            "loom.contrib.chatbridge.worker.ChatBridgeBackend._create_bridge"
+            "heddle.contrib.chatbridge.worker.ChatBridgeBackend._create_bridge"
         ) as mock_create:
             mock_bridge = AsyncMock()
             mock_bridge.send_turn.return_value = mock_response
             mock_create.return_value = mock_bridge
 
             backend = ChatBridgeBackend(
-                bridge_class="loom.contrib.chatbridge.ollama.OllamaChatBridge"
+                bridge_class="heddle.contrib.chatbridge.ollama.OllamaChatBridge"
             )
 
         result = await backend.process(
@@ -53,14 +53,14 @@ class TestChatBridgeBackend:
         )
 
         with patch(
-            "loom.contrib.chatbridge.worker.ChatBridgeBackend._create_bridge"
+            "heddle.contrib.chatbridge.worker.ChatBridgeBackend._create_bridge"
         ) as mock_create:
             mock_bridge = AsyncMock()
             mock_bridge.send_turn.return_value = mock_response
             mock_create.return_value = mock_bridge
 
             backend = ChatBridgeBackend(
-                bridge_class="loom.contrib.chatbridge.ollama.OllamaChatBridge"
+                bridge_class="heddle.contrib.chatbridge.ollama.OllamaChatBridge"
             )
 
         await backend.process(
@@ -76,14 +76,14 @@ class TestChatBridgeBackend:
 
     async def test_process_bridge_error(self):
         with patch(
-            "loom.contrib.chatbridge.worker.ChatBridgeBackend._create_bridge"
+            "heddle.contrib.chatbridge.worker.ChatBridgeBackend._create_bridge"
         ) as mock_create:
             mock_bridge = AsyncMock()
             mock_bridge.send_turn.side_effect = RuntimeError("API error")
             mock_create.return_value = mock_bridge
 
             backend = ChatBridgeBackend(
-                bridge_class="loom.contrib.chatbridge.ollama.OllamaChatBridge"
+                bridge_class="heddle.contrib.chatbridge.ollama.OllamaChatBridge"
             )
 
         with pytest.raises(ChatBridgeBackendError, match="API error"):

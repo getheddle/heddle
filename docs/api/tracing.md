@@ -1,3 +1,3 @@
 # Tracing & Observability
 
-::: loom.tracing.otel
+::: heddle.tracing.otel

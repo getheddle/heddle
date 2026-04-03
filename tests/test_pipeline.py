@@ -4,13 +4,13 @@ import asyncio
 
 import pytest
 
-from loom.bus.memory import InMemoryBus
-from loom.core.messages import (
+from heddle.bus.memory import InMemoryBus
+from heddle.core.messages import (
     OrchestratorGoal,
     TaskResult,
     TaskStatus,
 )
-from loom.orchestrator.pipeline import (
+from heddle.orchestrator.pipeline import (
     PipelineMappingError,
     PipelineOrchestrator,
     PipelineStageError,
@@ -430,8 +430,8 @@ class TestParallelExecution:
         )
 
         # Subscribe to intercept dispatched tasks and results.
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         # Run the pipeline in a background task.
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
@@ -457,7 +457,7 @@ class TestParallelExecution:
                 processing_time_ms=10,
             )
             await bus.publish(
-                f"loom.results.{goal.goal_id}",
+                f"heddle.results.{goal.goal_id}",
                 result.model_dump(mode="json"),
             )
 
@@ -474,7 +474,7 @@ class TestParallelExecution:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             c_result.model_dump(mode="json"),
         )
 
@@ -516,8 +516,8 @@ class TestParallelExecution:
             context={"x": "1", "y": "2"},
         )
 
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
@@ -536,7 +536,7 @@ class TestParallelExecution:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             a_result.model_dump(mode="json"),
         )
 
@@ -548,7 +548,7 @@ class TestParallelExecution:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             b_result.model_dump(mode="json"),
         )
 
@@ -586,8 +586,8 @@ class TestParallelExecution:
             context={"x": "input"},
         )
 
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
@@ -604,7 +604,7 @@ class TestParallelExecution:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             first_result.model_dump(mode="json"),
         )
 
@@ -621,7 +621,7 @@ class TestParallelExecution:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             second_result.model_dump(mode="json"),
         )
 
@@ -682,8 +682,8 @@ class TestInterStageValidation:
             context={"file_ref": "doc.pdf"},
         )
 
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
@@ -697,7 +697,7 @@ class TestInterStageValidation:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             first_result.model_dump(mode="json"),
         )
 
@@ -739,8 +739,8 @@ class TestInterStageValidation:
             context={"file_ref": "doc.pdf"},
         )
 
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
@@ -754,7 +754,7 @@ class TestInterStageValidation:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             result.model_dump(mode="json"),
         )
 
@@ -808,15 +808,15 @@ class TestInterStageValidation:
             context={"file_ref": "doc.pdf"},
         )
 
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
         # Extract stage.
         data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             TaskResult(
                 task_id=data["task_id"],
                 worker_type="extractor",
@@ -829,7 +829,7 @@ class TestInterStageValidation:
         # Classify stage.
         data2 = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             TaskResult(
                 task_id=data2["task_id"],
                 worker_type="classifier",
@@ -864,14 +864,14 @@ class TestInterStageValidation:
 
         goal = OrchestratorGoal(instruction="test no schema", context={"x": "val"})
 
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
         data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             TaskResult(
                 task_id=data["task_id"],
                 worker_type="w1",
@@ -911,7 +911,7 @@ class TestInterStageValidation:
         # Pass integer instead of string.
         goal = OrchestratorGoal(instruction="test type mismatch", context={"x": 42})
 
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
@@ -986,7 +986,7 @@ class TestTypedPipelineErrors:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test", context={"y": "val"})
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
         await asyncio.wait_for(pipeline_task, timeout=3)
@@ -1018,7 +1018,7 @@ class TestTypedPipelineErrors:
 
         # Pass integer instead of string.
         goal = OrchestratorGoal(instruction="test", context={"x": 42})
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
         await asyncio.wait_for(pipeline_task, timeout=3)
@@ -1045,7 +1045,7 @@ class TestTypedPipelineErrors:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test", context={"x": "val"})
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         # Don't send any result — let it time out.
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
@@ -1072,8 +1072,8 @@ class TestTypedPipelineErrors:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test", context={"x": "val"})
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
@@ -1086,7 +1086,7 @@ class TestTypedPipelineErrors:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             fail_result.model_dump(mode="json"),
         )
 
@@ -1121,8 +1121,8 @@ class TestTypedPipelineErrors:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test", context={"x": "val"})
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
@@ -1136,7 +1136,7 @@ class TestTypedPipelineErrors:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             ok_result.model_dump(mode="json"),
         )
 
@@ -1168,8 +1168,8 @@ class TestStageRetry:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test retry", context={"x": "val"})
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
@@ -1183,7 +1183,7 @@ class TestStageRetry:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             fail_result.model_dump(mode="json"),
         )
 
@@ -1197,7 +1197,7 @@ class TestStageRetry:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             ok_result.model_dump(mode="json"),
         )
 
@@ -1225,8 +1225,8 @@ class TestStageRetry:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test", context={"x": "val"})
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
@@ -1241,7 +1241,7 @@ class TestStageRetry:
                 processing_time_ms=10,
             )
             await bus.publish(
-                f"loom.results.{goal.goal_id}",
+                f"heddle.results.{goal.goal_id}",
                 fail_result.model_dump(mode="json"),
             )
 
@@ -1275,7 +1275,7 @@ class TestStageRetry:
 
         # Pass integer — validation fails before dispatch.
         goal = OrchestratorGoal(instruction="test", context={"x": 42})
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
         await asyncio.wait_for(pipeline_task, timeout=3)
@@ -1304,7 +1304,7 @@ class TestStageRetry:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test", context={"y": "val"})
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
         await asyncio.wait_for(pipeline_task, timeout=3)
@@ -1332,8 +1332,8 @@ class TestStageRetry:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test", context={"x": "val"})
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
@@ -1351,7 +1351,7 @@ class TestStageRetry:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             ok_result.model_dump(mode="json"),
         )
 
@@ -1382,8 +1382,8 @@ class TestRequestIdPropagation:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test", context={"x": "val"})
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
@@ -1400,7 +1400,7 @@ class TestRequestIdPropagation:
             processing_time_ms=10,
         )
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             result.model_dump(mode="json"),
         )
         await asyncio.wait_for(pipeline_task, timeout=3)
@@ -1426,8 +1426,8 @@ class TestRequestIdPropagation:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test", context={"x": "1", "y": "2"})
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
@@ -1450,7 +1450,7 @@ class TestRequestIdPropagation:
                 processing_time_ms=10,
             )
             await bus.publish(
-                f"loom.results.{goal.goal_id}",
+                f"heddle.results.{goal.goal_id}",
                 result.model_dump(mode="json"),
             )
         await asyncio.wait_for(pipeline_task, timeout=3)
@@ -1477,14 +1477,14 @@ class TestPipelineTimeline:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test timeline", context={"file_ref": "doc.pdf"})
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
         data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             TaskResult(
                 task_id=data["task_id"],
                 worker_type="extractor",
@@ -1532,15 +1532,15 @@ class TestPipelineTimeline:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test", context={"x": "val"})
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
         # Stage A
         data_a = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             TaskResult(
                 task_id=data_a["task_id"],
                 worker_type="w1",
@@ -1553,7 +1553,7 @@ class TestPipelineTimeline:
         # Stage B
         data_b = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             TaskResult(
                 task_id=data_b["task_id"],
                 worker_type="w2",
@@ -1594,14 +1594,14 @@ class TestPipelineTimeline:
         await bus.connect()
 
         goal = OrchestratorGoal(instruction="test", context={"x": "val"})
-        task_sub = await bus.subscribe("loom.tasks.incoming")
-        result_sub = await bus.subscribe(f"loom.results.{goal.goal_id}")
+        task_sub = await bus.subscribe("heddle.tasks.incoming")
+        result_sub = await bus.subscribe(f"heddle.results.{goal.goal_id}")
 
         pipeline_task = asyncio.create_task(orch.handle_message(goal.model_dump(mode="json")))
 
         data = await asyncio.wait_for(task_sub.__anext__(), timeout=2)
         await bus.publish(
-            f"loom.results.{goal.goal_id}",
+            f"heddle.results.{goal.goal_id}",
             TaskResult(
                 task_id=data["task_id"],
                 worker_type="w1",
