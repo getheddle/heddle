@@ -1,0 +1,177 @@
+# ──────────────────────────────────────────────────────────────────────
+# Subprocess Worker Template
+# ──────────────────────────────────────────────────────────────────────
+#
+# Wrap any CLI tool as a Heddle worker.  Four io_mode values cover
+# the common patterns — pick the one that matches your tool.
+#
+# io_mode: json_stdio    — JSON in via stdin, JSON out from stdout
+#                          THE polyglot path: Node, Go, Rust, Python scripts
+# io_mode: stdin_stdout  — pipe one field to stdin, capture stdout
+# io_mode: args_stdout   — payload fields become CLI args, capture stdout
+# io_mode: file_file     — write temp file, run tool, read output file
+#
+# All subprocess calls use shell=False.  No shell interpretation.
+# ──────────────────────────────────────────────────────────────────────
+
+# ── Example 1: json_stdio (recommended for polyglot workers) ────────
+#
+# The script reads JSON from stdin and writes JSON to stdout.
+# This is the simplest way to make a Node/Go/Rust/Python script
+# participate in the Heddle actor mesh without knowing about NATS.
+
+name: "my_json_worker"
+description: "Process input via a JSON stdin/stdout script"
+
+worker_kind: "processor"
+processing_backend: "heddle.contrib.subprocess.SubprocessBackend"
+
+backend_config:
+  command: ["node", "scripts/my_worker.js"]
+  io_mode: "json_stdio"
+  subprocess_timeout: 15
+
+  # Which payload fields to send (default: "all")
+  input_mapping:
+    fields: "all"
+    # OR send only specific fields:
+    # fields: ["text", "target_language"]
+
+  # How to interpret stdout JSON (default: root = direct merge)
+  output_mapping:
+    target: "root"
+    # OR nest under a key:
+    # target: "result"
+    # OR extract a specific key from the JSON response:
+    # extract_key: "data"
+
+  # Optional: label for TaskResult.model_used (default: command[0])
+  model_used: "my-worker-v1"
+
+input_schema:
+  type: object
+  required: [text]
+  properties:
+    text:
+      type: string
+      description: "Input text to process"
+
+output_schema:
+  type: object
+  required: [result]
+  properties:
+    result:
+      type: string
+
+default_model_tier: "local"
+reset_after_task: true
+timeout_seconds: 30
+
+
+# ── Example 2: stdin_stdout ─────────────────────────────────────────
+#
+# name: "word_counter"
+# worker_kind: "processor"
+# processing_backend: "heddle.contrib.subprocess.SubprocessBackend"
+# backend_config:
+#   command: ["wc", "-w"]
+#   io_mode: "stdin_stdout"
+#   input_mapping:
+#     stdin_field: "text"          # which payload field pipes to stdin
+#   output_mapping:
+#     stdout_field: "word_count"   # where stdout lands in the output
+#     parse: "int"                 # raw | strip | int | float | lines | json
+# input_schema:
+#   type: object
+#   required: [text]
+#   properties:
+#     text: { type: string }
+# output_schema:
+#   type: object
+#   required: [word_count]
+#   properties:
+#     word_count: { type: integer }
+# default_model_tier: "local"
+# reset_after_task: true
+# timeout_seconds: 10
+
+
+# ── Example 3: args_stdout ──────────────────────────────────────────
+#
+# name: "jq_processor"
+# worker_kind: "processor"
+# processing_backend: "heddle.contrib.subprocess.SubprocessBackend"
+# backend_config:
+#   command: ["jq"]
+#   io_mode: "args_stdout"
+#   input_mapping:
+#     positional:
+#       - field: "filter_expression"
+#     flags:
+#       - flag: "--raw-output"
+#         field: "raw_output"
+#         is_boolean: true          # adds flag without value when truthy
+#   output_mapping:
+#     stdout_field: "result"
+#     parse: "json"
+# input_schema:
+#   type: object
+#   required: [filter_expression]
+#   properties:
+#     filter_expression: { type: string }
+#     raw_output: { type: boolean }
+# output_schema:
+#   type: object
+#   required: [result]
+#   properties:
+#     result: {}
+# default_model_tier: "local"
+# reset_after_task: true
+# timeout_seconds: 10
+
+
+# ── Example 4: file_file ────────────────────────────────────────────
+#
+# name: "pandoc_converter"
+# worker_kind: "processor"
+# processing_backend: "heddle.contrib.subprocess.SubprocessBackend"
+# backend_config:
+#   command: ["pandoc"]
+#   io_mode: "file_file"
+#   subprocess_timeout: 30
+#   input_mapping:
+#     content_field: "markdown_text"
+#     input_extension: ".md"
+#     output_extension: ".html"
+#     args_template: ["-f", "markdown", "-t", "html", "-o", "{output}", "{input}"]
+#   output_mapping:
+#     output_field: "html_content"
+#     read_mode: "text"            # text | binary (base64-encoded)
+# input_schema:
+#   type: object
+#   required: [markdown_text]
+#   properties:
+#     markdown_text: { type: string }
+# output_schema:
+#   type: object
+#   required: [html_content]
+#   properties:
+#     html_content: { type: string }
+# default_model_tier: "local"
+# reset_after_task: true
+# timeout_seconds: 60
+
+
+# ── Optional config fields (all modes) ──────────────────────────────
+#
+# backend_config:
+#   # Environment variables (merged with os.environ)
+#   env:
+#     NODE_ENV: "production"
+#     INPUT_LANG: "${payload.source_language}"   # interpolated at runtime
+#
+#   # Working directory for the subprocess
+#   working_dir: "/opt/tools"
+#
+#   # Security: restrict which executables are allowed
+#   allowed_commands: ["node", "python3", "jq", "pandoc"]

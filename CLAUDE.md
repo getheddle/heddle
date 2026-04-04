@@ -160,6 +160,10 @@ src/heddle/
       protocol.py         # DiscussionProtocol ABC + RoundRobin, StructuredDebate, Delphi
       convergence.py      # ConvergenceDetector — none, position_stability, llm_judge
       runner.py           # CouncilRunner — NATS-free execution (like WorkerTestRunner)
+    subprocess/
+      backend.py          # SubprocessBackend — wrap CLI tools as Heddle workers
+                          #   Four io_modes: json_stdio, stdin_stdout, args_stdout, file_file
+                          #   Error hierarchy: SubprocessBackendError, Timeout, Exit, OutputParse
     chatbridge/           # External chat/LLM session adapters
       base.py             # ChatBridge ABC, ChatResponse, SessionInfo
       anthropic.py        # AnthropicChatBridge — Claude API with session history
@@ -204,6 +208,7 @@ configs/
     rag_vectorstore_lance.yaml  # action + chunks/query → store/search results (processor, local, LanceDB)
     rag_trend_analyzer.yaml   # posts + window_id → trend analysis (LLM, standard)
     _template.yaml        #   template for new workers
+    _subprocess_template.yaml  # template for subprocess workers (4 io_mode examples)
   orchestrators/
     default.yaml          # General-purpose orchestrator (LLM-driven goal decomposition)
     rag_pipeline.yaml     # RAG pipeline: ingest → chunk → vectorize
@@ -282,6 +287,7 @@ tests/                    # 82 test files, 1844 unit tests + 1 integration test 
   contrib/docproc/        # Document extraction backend tests (MarkItDown, SmartExtractor, contracts)
   contrib/rag/            # 8 RAG test files (abstractions, backends, chunker, ingestion, mux, schemas, telegram_live, tools)
   contrib/lancedb/        # LanceDB store tests
+  contrib/subprocess/     # SubprocessBackend tests (command validation, 4 io_modes, error handling)
 ```
 
 ## Key design rules
