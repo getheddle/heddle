@@ -150,18 +150,18 @@ The `TranscriptStore` maintains the full discussion history with:
 ### Audience participation
 
 External participants can inject messages into a running council
-discussion.  Agents see these as a separate `[AUDIENCE REACTIONS]`
+discussion. Agents see these as a separate `[AUDIENCE REACTIONS]`
 block and may choose to engage or ignore them.
 
 **Key components:**
 
 - **`TranscriptEntry.entry_type`** — `"turn"` (default, panelist) or
-  `"interjection"` (audience).  Backward compatible: existing code
+  `"interjection"` (audience). Backward compatible: existing code
   that omits `entry_type` gets `"turn"`.
 - **`TranscriptStore.inject_interjection(agent_name, content, role)`** —
-  add an audience contribution to the current round.  Thread-safe.
+  add an audience contribution to the current round. Thread-safe.
 - **`CouncilRunner.inject(agent_name, content, role)`** — inject a
-  spectator interjection while `run()` is executing.  Safe to call
+  spectator interjection while `run()` is executing. Safe to call
   from another thread or coroutine.
 - **MCP `council.intervene` action** — set `as_spectator: true` to
   tag the message as an interjection instead of a panelist turn.
