@@ -63,6 +63,26 @@ class CouncilRunner:
     ) -> None:
         self.backends = backends
         self._default_config = config
+        self._active_transcript: TranscriptStore | None = None
+
+    def inject(
+        self,
+        agent_name: str,
+        content: str,
+        role: str = "audience",
+    ) -> None:
+        """Inject a spectator interjection into the active discussion.
+
+        Safe to call from another thread or coroutine while :meth:`run`
+        is executing.  The interjection will appear in the next agent's
+        context as an audience reaction.
+
+        Raises :class:`RuntimeError` if no discussion is active.
+        """
+        if self._active_transcript is None:
+            msg = "No active council discussion — call run() first"
+            raise RuntimeError(msg)
+        self._active_transcript.inject_interjection(agent_name, content, role)
 
     async def run(
         self,
@@ -93,6 +113,7 @@ class CouncilRunner:
 
         protocol = get_protocol(cfg.protocol)
         transcript = TranscriptStore()
+        self._active_transcript = transcript
         convergence_backend = self.backends.get(cfg.convergence.backend_tier.value)
         detector = ConvergenceDetector(cfg.convergence, backend=convergence_backend)
 
@@ -170,6 +191,8 @@ class CouncilRunner:
             converged=converged,
             elapsed_ms=elapsed_ms,
         )
+
+        self._active_transcript = None
 
         return CouncilResult(
             topic=topic,

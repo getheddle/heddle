@@ -221,9 +221,17 @@ class CouncilBridge:
         }
 
     async def _intervene(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Inject a human message into an active council."""
+        r"""Inject a message into an active council.
+
+        Set ``as_spectator: true`` to tag it as an audience interjection
+        rather than a panelist turn.  Agents see interjections in a
+        separate \"audience reactions\" block and may choose to engage
+        or ignore them.
+        """
         council_id = arguments.get("council_id", "")
         message = arguments.get("message", "")
+        speaker = arguments.get("speaker", "human")
+        as_spectator = arguments.get("as_spectator", False)
 
         active = self._active.get(council_id)
         if active is None:
@@ -232,14 +240,28 @@ class CouncilBridge:
         if active.result is not None:
             return {"error": "Council has already completed"}
 
-        # Add a human entry to the current round.
+        if as_spectator:
+            # Use the transcript's interjection method.
+            active.transcript.inject_interjection(
+                agent_name=speaker,
+                content=message,
+                role="audience",
+            )
+            return {
+                "council_id": council_id,
+                "status": "interjection_added",
+                "speaker": speaker,
+                "message_length": len(message),
+            }
+
+        # Legacy behavior: add as a panelist turn.
         if not active.transcript.rounds:
             active.transcript.start_round(0)
 
         active.transcript.add_entry(
             TranscriptEntry(
                 round_num=active.transcript.rounds[-1].round_num,
-                agent_name="human",
+                agent_name=speaker,
                 role="Human intervention",
                 content=message,
             )

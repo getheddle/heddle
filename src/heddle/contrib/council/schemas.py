@@ -74,12 +74,18 @@ class ConvergenceConfig(BaseModel):
 
 
 class TranscriptEntry(BaseModel):
-    """A single agent contribution within a discussion round."""
+    """A single contribution within a discussion round.
+
+    ``entry_type`` distinguishes panelist turns from audience
+    interjections.  Agents may choose to engage with interjections
+    or ignore them — the protocol presents them separately.
+    """
 
     round_num: int
     agent_name: str
     role: str = ""
     content: str
+    entry_type: str = "turn"  # "turn" | "interjection"
     token_count: int = 0
     model_used: str | None = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))

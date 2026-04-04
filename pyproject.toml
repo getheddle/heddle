@@ -1,7 +1,7 @@
 [project]
 name = "heddle-ai"
 version = "0.9.1"
-description = "Lightweight Orchestrated Operational Mesh — Actor-based multi-LLM agent framework"
+description = "Config-driven multi-LLM workflow framework — define workers in YAML, chain them into pipelines, evaluate and scale"
 readme = "README.md"
 license = {text = "MPL-2.0"}
 requires-python = ">=3.11"
@@ -224,6 +224,12 @@ ignore = [
 ]
 "src/heddle/workshop/app.py" = [
     "ANN",    # FastAPI route handlers — types inferred from dependencies
+]
+"examples/**/*.py" = [
+    "T20",    # print() OK in examples (user-facing output)
+    "D",      # Docstrings relaxed in examples
+    "ANN",    # Type annotations relaxed in examples
+    "TC001",  # TYPE_CHECKING imports not required in examples
 ]
 
 [tool.ruff.lint.pydocstyle]

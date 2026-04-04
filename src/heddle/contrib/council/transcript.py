@@ -48,6 +48,28 @@ class TranscriptStore:
             raise RuntimeError(msg)
         self._rounds[-1].entries.append(entry)
 
+    def inject_interjection(
+        self,
+        agent_name: str,
+        content: str,
+        role: str = "audience",
+    ) -> None:
+        """Inject a spectator interjection into the current round.
+
+        Thread-safe for use from external callers while the council is
+        running.  If no round has started yet, starts round 0.
+        """
+        if not self._rounds:
+            self.start_round(0)
+        entry = TranscriptEntry(
+            round_num=self._rounds[-1].round_num,
+            agent_name=agent_name,
+            role=role,
+            content=content,
+            entry_type="interjection",
+        )
+        self._rounds[-1].entries.append(entry)
+
     def set_convergence_score(self, round_num: int, score: float) -> None:
         """Attach a convergence score to a completed round."""
         for r in self._rounds:
@@ -96,6 +118,32 @@ class TranscriptStore:
             if up_to_round is not None and r.round_num > up_to_round:
                 break
             entries.extend(e for e in r.entries if see_all or e.agent_name in sees)
+        return entries
+
+    def get_visible_turns(
+        self,
+        agent: AgentConfig,
+        up_to_round: int | None = None,
+    ) -> list[TranscriptEntry]:
+        """Like :meth:`get_visible_transcript` but only panelist turns."""
+        return [
+            e for e in self.get_visible_transcript(agent, up_to_round) if e.entry_type == "turn"
+        ]
+
+    def get_interjections(
+        self,
+        since_round: int | None = None,
+    ) -> list[TranscriptEntry]:
+        """Return audience interjections, optionally from a specific round onward.
+
+        Interjections are always visible to all panelists — they are
+        public audience contributions.
+        """
+        entries: list[TranscriptEntry] = []
+        for r in self._rounds:
+            if since_round is not None and r.round_num < since_round:
+                continue
+            entries.extend(e for e in r.entries if e.entry_type == "interjection")
         return entries
 
     def get_latest_positions(self) -> dict[str, str]:

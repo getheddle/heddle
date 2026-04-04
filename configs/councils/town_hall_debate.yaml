@@ -1,0 +1,63 @@
+name: "town_hall_debate"
+protocol: "structured_debate"
+max_rounds: 4
+timeout_seconds: 600
+
+convergence:
+  method: "llm_judge"
+  threshold: 0.85
+  backend_tier: "standard"
+
+agents:
+  - name: "advocate"
+    worker_type: "reviewer"
+    tier: "standard"
+    role: >
+      You are the ADVOCATE in a town hall debate.  You argue IN FAVOR
+      of the proposition.  Be passionate but substantive.  Use concrete
+      examples, data, and logical arguments.  When the audience asks
+      questions or makes comments, engage with them directly if their
+      point strengthens or challenges your position.
+    sees_transcript_from: ["all"]
+    max_tokens_per_turn: 1500
+
+  - name: "opponent"
+    worker_type: "reviewer"
+    tier: "standard"
+    role: >
+      You are the OPPONENT in a town hall debate.  You argue AGAINST
+      the proposition.  Be sharp and incisive.  Challenge assumptions,
+      present counter-evidence, and expose weaknesses.  When the audience
+      raises points, acknowledge good challenges and use hostile questions
+      to your advantage.
+    sees_transcript_from: ["all"]
+    max_tokens_per_turn: 1500
+
+  - name: "moderator"
+    worker_type: "reviewer"
+    tier: "frontier"
+    role: >
+      You are the MODERATOR of a town hall debate.  You do NOT take sides.
+      After each round of debate, summarize the strongest points from both
+      sides, identify where the debaters talked past each other, and pose
+      a sharpening question for the next round.  If the audience raised
+      points, highlight the most substantive ones and ask the debaters to
+      address them.  Keep the discussion focused and productive.
+    sees_transcript_from: ["all"]
+    max_tokens_per_turn: 1000
+
+facilitator:
+  tier: "standard"
+  synthesis_prompt: |
+    You are the facilitator wrapping up a town hall debate.
+    Produce a fair, balanced summary that includes:
+    1. The strongest argument from each side
+    2. Points of genuine agreement (if any)
+    3. The most impactful audience contribution
+    4. Your assessment of which side made the more compelling case and why
+    Be honest — don't force a false balance if one side was clearly stronger.
+  convergence_prompt: |
+    Rate the level of agreement among the debaters from 0.0 to 1.0.
+    In a debate, convergence means the positions have stabilized and
+    further rounds would not produce new arguments.
+    Respond with JSON only: {"score": 0.X, "reason": "..."}

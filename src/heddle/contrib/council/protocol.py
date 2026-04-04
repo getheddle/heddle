@@ -68,8 +68,12 @@ class RoundRobinProtocol(DiscussionProtocol):
     ) -> dict[str, Any]:
         # Get entries visible to this agent, up to previous round.
         prior_round = round_num - 1 if round_num > 1 else None
-        visible = transcript.get_visible_transcript(agent, up_to_round=prior_round)
+        visible = transcript.get_visible_turns(agent, up_to_round=prior_round)
         round_context = transcript.format_for_payload(visible, max_chars=transcript._max_chars)
+
+        # Collect audience interjections from the prior round.
+        interjections = transcript.get_interjections(since_round=prior_round)
+        audience_block = _format_interjections(interjections)
 
         if round_num == 1:
             instructions = (
@@ -83,13 +87,16 @@ class RoundRobinProtocol(DiscussionProtocol):
                 f"participants.  Note agreements and remaining disagreements."
             )
 
-        return {
+        ctx: dict[str, Any] = {
             "topic": topic,
             "round_num": round_num,
             "role": agent.role,
             "round_context": round_context,
             "instructions": instructions,
         }
+        if audience_block:
+            ctx["audience_reactions"] = audience_block
+        return ctx
 
 
 class StructuredDebateProtocol(DiscussionProtocol):
@@ -115,10 +122,15 @@ class StructuredDebateProtocol(DiscussionProtocol):
         round_num: int,
         topic: str,
     ) -> dict[str, Any]:
-        visible = transcript.get_visible_transcript(
+        visible = transcript.get_visible_turns(
             agent, up_to_round=round_num - 1 if round_num > 1 else None
         )
         round_context = transcript.format_for_payload(visible, max_chars=transcript._max_chars)
+
+        interjections = transcript.get_interjections(
+            since_round=round_num - 1 if round_num > 1 else None
+        )
+        audience_block = _format_interjections(interjections)
 
         if round_num == 1:
             instructions = (
@@ -127,8 +139,6 @@ class StructuredDebateProtocol(DiscussionProtocol):
                 "the foundation others will respond to."
             )
         else:
-            # Check if this is likely the final round by examining
-            # whether convergence is close or max_rounds is near.
             instructions = (
                 f"REBUTTAL (Round {round_num}): Review the discussion so "
                 f"far.  Directly address specific points raised by other "
@@ -136,13 +146,16 @@ class StructuredDebateProtocol(DiscussionProtocol):
                 f"you disagree, and propose synthesis where possible."
             )
 
-        return {
+        ctx: dict[str, Any] = {
             "topic": topic,
             "round_num": round_num,
             "role": agent.role,
             "round_context": round_context,
             "instructions": instructions,
         }
+        if audience_block:
+            ctx["audience_reactions"] = audience_block
+        return ctx
 
 
 class DelphiProtocol(DiscussionProtocol):
@@ -168,10 +181,16 @@ class DelphiProtocol(DiscussionProtocol):
         topic: str,
     ) -> dict[str, Any]:
         # Build anonymized transcript.
-        visible = transcript.get_visible_transcript(
+        visible = transcript.get_visible_turns(
             agent, up_to_round=round_num - 1 if round_num > 1 else None
         )
         anon_context = self._anonymize_transcript(visible, agent.name)
+
+        # Audience interjections (not anonymized — they are public).
+        interjections = transcript.get_interjections(
+            since_round=round_num - 1 if round_num > 1 else None
+        )
+        audience_block = _format_interjections(interjections)
 
         # Include convergence feedback from prior round.
         convergence_feedback = ""
@@ -200,13 +219,16 @@ class DelphiProtocol(DiscussionProtocol):
                 f"{convergence_feedback}"
             )
 
-        return {
+        ctx: dict[str, Any] = {
             "topic": topic,
             "round_num": round_num,
             "role": agent.role,
             "round_context": anon_context,
             "instructions": instructions,
         }
+        if audience_block:
+            ctx["audience_reactions"] = audience_block
+        return ctx
 
     @staticmethod
     def _anonymize_transcript(
@@ -231,6 +253,33 @@ class DelphiProtocol(DiscussionProtocol):
             blocks.append(f"[Round {e.round_num}] {label}:\n{e.content}")
 
         return "\n\n".join(blocks)
+
+
+# -- Interjection formatting -----------------------------------------
+
+
+def _format_interjections(entries: list) -> str:
+    """Format audience interjections as a clearly delineated block.
+
+    The framing explicitly tells agents they may engage or ignore
+    audience input — this is what makes it different from a panelist turn.
+    """
+    if not entries:
+        return ""
+
+    lines = []
+    for e in entries:
+        label = e.agent_name
+        if e.role and e.role != "audience":
+            label += f" ({e.role})"
+        lines.append(f"- {label}: {e.content}")
+
+    return (
+        "[AUDIENCE REACTIONS]\n"
+        + "\n".join(lines)
+        + "\n\nYou may address audience points if relevant, or continue "
+        "the main discussion."
+    )
 
 
 # -- Protocol registry -------------------------------------------------
