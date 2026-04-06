@@ -7,7 +7,7 @@
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 <!-- Keep in sync with pyproject.toml version -->
-[![Heddle v0.9.0](https://img.shields.io/badge/loom-v0.9.0-blueviolet.svg)](https://github.com/getheddle/heddle)
+[![Heddle v0.9.0](https://img.shields.io/badge/heddle-v0.9.0-blueviolet.svg)](https://github.com/getheddle/heddle)
 [![Status: Active Development](https://img.shields.io/badge/status-active_development-brightgreen.svg)]()
 
 **Turn what you know into testable AI steps. Chain them into workflows.
