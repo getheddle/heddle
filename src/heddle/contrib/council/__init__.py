@@ -23,12 +23,34 @@ from heddle.contrib.council.schemas import (
     RoundEntry,
     TranscriptEntry,
 )
+from heddle.contrib.council.scorer import (
+    AgentScore,
+    JudgePanelScorer,
+    JudgeVerdict,
+    Scorer,
+    ScoringResult,
+)
+from heddle.contrib.council.tournament import (
+    Matchup,
+    MatchupResult,
+    TournamentResult,
+    TournamentRunner,
+)
 
 __all__ = [
     "AgentConfig",
+    "AgentScore",
     "AgentTurn",
     "ConvergenceResult",
     "CouncilResult",
+    "JudgePanelScorer",
+    "JudgeVerdict",
+    "Matchup",
+    "MatchupResult",
     "RoundEntry",
+    "Scorer",
+    "ScoringResult",
+    "TournamentResult",
+    "TournamentRunner",
     "TranscriptEntry",
 ]

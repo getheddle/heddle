@@ -1,0 +1,49 @@
+name: "debate_arena"
+protocol: "structured_debate"
+max_rounds: 3
+timeout_seconds: 600
+
+# No convergence — every round runs.  Debaters are assigned opposite
+# sides, so "agreement" is not a meaningful stopping signal.  The judge
+# panel evaluates the full transcript post-hoc.
+convergence:
+  method: "none"
+
+agents:
+  - name: "pro"
+    worker_type: "reviewer"
+    tier: "standard"
+    role: >
+      You are arguing IN FAVOR of the proposition.  Be substantive,
+      not just rhetorical: cite concrete evidence, anticipate the
+      strongest objections, and rebut your opponent's specific claims.
+      Keep each turn under 1000 tokens.  Do not concede the topic.
+    sees_transcript_from: ["all"]
+    max_tokens_per_turn: 1000
+
+  - name: "con"
+    worker_type: "reviewer"
+    tier: "standard"
+    role: >
+      You are arguing AGAINST the proposition.  Be substantive, not
+      just rhetorical: cite concrete evidence, anticipate the strongest
+      objections, and rebut your opponent's specific claims.  Keep
+      each turn under 1000 tokens.  Do not concede the topic.
+    sees_transcript_from: ["all"]
+    max_tokens_per_turn: 1000
+
+# The facilitator produces a balanced post-debate summary.  It does
+# NOT declare a winner — that is the judge panel's job (see
+# heddle.contrib.council.JudgePanelScorer).
+facilitator:
+  tier: "standard"
+  synthesis_prompt: |
+    You are the facilitator wrapping up a structured debate.
+    Produce a balanced summary in 5-8 sentences:
+    1. The strongest argument from each side
+    2. Where the debaters genuinely engaged vs talked past each other
+    3. Open questions a follow-up debate could sharpen
+    Do NOT declare a winner — a separate judge panel will do that.
+  convergence_prompt: |
+    Rate the level of agreement among the debaters from 0.0 to 1.0.
+    Respond with JSON only: {"score": 0.X, "reason": "..."}
