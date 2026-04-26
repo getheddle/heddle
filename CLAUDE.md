@@ -669,6 +669,7 @@ Heddle supports multiple users (e.g., two analysts on Claude Desktop) working si
 1. **Workshop MetricsCollector** — optional NATS subscriber for live worker metrics in Workshop dashboard
 2. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
 3. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
+4. **Local-runtime registry** — replace the hardcoded LM Studio / Ollama branches in `worker/backends.py:_select_local_backend`, `cli/setup.py`, `cli/preflight.py`, `cli/rag.py`, `workshop/app.py`, and `mcp/session_bridge.py` with a data-driven `LocalRuntime` registry.  Anchor design + migration map are in the docstring of `_select_local_backend`.  Trigger: adding a third runtime (Exo on `:52415/v1`, vLLM, llama.cpp server, MLX-server, …).
 
 ## What NOT to do
 

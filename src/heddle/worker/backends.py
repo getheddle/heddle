@@ -547,6 +547,71 @@ def _select_local_backend() -> LLMBackend | None:
       Ollama when ``OLLAMA_URL`` is set, else nothing.
 
     Returns the configured backend or ``None`` if none can be resolved.
+
+    TODO(local-runtime-registry): replace this hardcoded resolver with
+    a data-driven registry of local LLM runtimes.
+
+    Why: every new local-tier runtime currently requires touching
+    ~7 files in lockstep — this resolver, ``HeddleConfig`` + ``_ENV_MAP``
+    in ``cli/config.py``, the ``cli/setup.py`` wizard, ``cli/preflight.py``,
+    ``workshop/app.py``'s backend-badges, ``mcp/session_bridge.py``'s
+    health checks, and ``cli/rag.py``'s embedding resolver — plus tests
+    and docs.  This has now happened twice (Ollama → +LM Studio); a
+    third runtime (Exo, vLLM, MLX-server, llama.cpp server, …) is the
+    right time to refactor.
+
+    Proposed shape (do NOT implement until needed):
+
+        @dataclass(frozen=True)
+        class LocalRuntime:
+            key: str                  # "ollama", "lmstudio", "exo", ...
+            label: str                # "LM Studio (local)"
+            backend_cls: type[LLMBackend]
+            url_env: str              # "LM_STUDIO_URL"
+            model_env: str            # "LM_STUDIO_MODEL"
+            default_url: str          # "http://localhost:1234/v1"
+            default_model: str        # "default"
+            embedding_provider: str   # "openai-compatible" | "ollama"
+            # Probe returning (reachable, list_of_model_ids).  Used by
+            # the setup wizard and Workshop badges.
+            probe: Callable[[str], tuple[bool, list[str]]]
+
+        LOCAL_RUNTIMES: tuple[LocalRuntime, ...] = (
+            LocalRuntime("lmstudio", ...),  # OpenAICompatibleBackend subclass
+            LocalRuntime("ollama",   ...),  # OllamaBackend
+        )
+
+    Migration touchpoints (each becomes a tight loop over the registry):
+      - this resolver — 5 lines: iterate, honour HEDDLE_LOCAL_BACKEND,
+        fall through to the first runtime whose ``url_env`` is set.
+      - ``cli/config.py``: ``HeddleConfig`` fields + ``_ENV_MAP``
+        become generated from the registry (or kept hand-written but
+        validated against it).
+      - ``cli/setup.py``: replace the per-runtime wizard sections with
+        a single loop over ``LOCAL_RUNTIMES``.
+      - ``cli/preflight.py:check_env_vars`` for ``tier == "local"``.
+      - ``workshop/app.py:_detect_available_backends``.
+      - ``cli/rag.py:_resolve_embedding_settings`` reads
+        ``embedding_provider`` from the chosen runtime instead of
+        branching on ``local_backend``.
+      - ``mcp/session_bridge.py``: parallel ``_check_*`` methods become
+        one loop.
+
+    Adding a new HTTP/OpenAI-compatible runtime (Exo on port 52415,
+    vLLM, llama.cpp ``server`` mode, LiteLLM proxy, TGI, …) then
+    becomes a single ``LocalRuntime`` entry plus a thin
+    ``OpenAICompatibleBackend`` subclass — no other file changes.
+
+    Future runtimes that the registry alone does NOT cover (and would
+    need ABC extensions on :class:`LLMBackend`):
+      - Non-HTTP / in-process Python (MLX, transformers, mlc-llm):
+        need lifecycle hooks (``load`` / ``unload``) on the backend,
+        plus a sync-in-async bridge.  Out of scope for the registry.
+      - Streaming-first runtimes: need a ``complete_stream()`` method
+        returning an async iterator.  Out of scope for the registry.
+      - Tool-use formats that diverge from Anthropic / OpenAI / Ollama
+        schemas: add another ``_xxx_messages()`` helper in this file
+        and a per-runtime translator hook on the backend.
     """
     lm_studio_url = os.getenv("LM_STUDIO_URL")
     ollama_url = os.getenv("OLLAMA_URL")

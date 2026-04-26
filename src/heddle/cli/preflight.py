@@ -58,6 +58,10 @@ def check_env_vars(tier: str) -> list[str]:
     """
     warnings: list[str] = []
 
+    # TODO(local-runtime-registry): replace this hardcoded LM Studio /
+    # Ollama check with a loop over the planned ``LocalRuntime`` registry
+    # in ``heddle.worker.backends`` so adding a new local-tier runtime
+    # (Exo, vLLM, …) does not require editing this function.
     if tier == "local":
         if not os.getenv("LM_STUDIO_URL") and not os.getenv("OLLAMA_URL"):
             warnings.append(

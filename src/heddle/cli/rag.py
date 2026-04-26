@@ -45,6 +45,12 @@ def _resolve_embedding_settings(config: HeddleConfig) -> dict[str, Any]:
     3. LM Studio URL when configured (newer default).
     4. Ollama URL when configured.
     5. Fall back to Ollama defaults.
+
+    TODO(local-runtime-registry): once the ``LocalRuntime`` registry
+    lands in ``heddle.worker.backends``, replace this branching with a
+    lookup that reads ``embedding_provider`` and the URL straight from
+    the chosen runtime entry.  No more separate
+    ``HEDDLE_EMBEDDING_BACKEND`` knob needed for the common case.
     """
     backend = (config.embedding_backend or "").strip().lower() or None
 

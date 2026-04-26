@@ -103,6 +103,12 @@ class SessionBridge:
         except (OSError, TimeoutError):
             return False, f"NATS unreachable at {host}:{port}"
 
+    # TODO(local-runtime-registry): the parallel ``_check_ollama`` /
+    # ``_check_lm_studio`` methods below should collapse into a single
+    # loop over the planned ``LocalRuntime`` registry in
+    # ``heddle.worker.backends``.  Each runtime entry would carry its
+    # own probe; this class would just iterate and call probe(url).
+
     def _check_ollama(self) -> tuple[bool, str]:  # pragma: no cover — mocked in tests
         try:
             import httpx

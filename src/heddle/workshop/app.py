@@ -44,6 +44,11 @@ def _detect_available_backends() -> list[dict[str, str]]:
 
     Returns a list of dicts with 'name' and 'label' keys for display as
     badges on the test bench page.
+
+    TODO(local-runtime-registry): the local-runtime branches below
+    (LM Studio + Ollama) should iterate the planned ``LocalRuntime``
+    registry once it lands.  See
+    ``heddle.worker.backends._select_local_backend`` for the design.
     """
     available = []
     if os.getenv("ANTHROPIC_API_KEY"):

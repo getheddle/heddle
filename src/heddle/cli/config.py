@@ -20,7 +20,16 @@ DEFAULT_CONFIG_PATH = "~/.heddle/config.yaml"
 
 @dataclass
 class HeddleConfig:
-    """Parsed representation of ~/.heddle/config.yaml."""
+    """Parsed representation of ~/.heddle/config.yaml.
+
+    TODO(local-runtime-registry): the per-runtime ``*_url`` / ``*_model``
+    fields below (and the matching entries in ``_ENV_MAP``) should be
+    generated from the planned ``LocalRuntime`` registry rather than
+    hand-maintained in lockstep with ``cli/setup.py``,
+    ``cli/preflight.py``, ``workshop/app.py``, ``cli/rag.py``, and
+    ``mcp/session_bridge.py``.  See
+    ``heddle.worker.backends._select_local_backend`` for the design.
+    """
 
     # LLM backends
     ollama_url: str | None = None

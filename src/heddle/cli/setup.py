@@ -133,6 +133,13 @@ def setup(config_path: str, non_interactive: bool) -> None:  # noqa: PLR0912, PL
         click.echo()
 
     # ── Section 1: LLM Backend ──────────────────────────────────────────
+    # TODO(local-runtime-registry): the per-runtime LM Studio + Ollama
+    # detection blocks below should iterate the planned ``LocalRuntime``
+    # registry (see ``heddle.worker.backends._select_local_backend`` for
+    # the design).  Each runtime carries its own probe; the wizard
+    # would then loop, prompt for missing URLs uniformly, and ask the
+    # "which serves the local tier" question once N >= 2 runtimes are
+    # configured — instead of growing a new section per runtime.
     click.echo(click.style("  [1/4] LLM Backend (local)", fg="yellow", bold=True))
     click.echo()
 
