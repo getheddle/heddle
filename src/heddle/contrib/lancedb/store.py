@@ -8,7 +8,9 @@ Supports:
   - Metadata filtering (e.g. by channel_id)
   - Basic CRUD (get, delete by chunk_id)
 
-Uses Heddle's OllamaEmbeddingProvider for query embedding generation.
+Uses Heddle's :class:`OllamaEmbeddingProvider` (default) or
+:class:`OpenAICompatibleEmbeddingProvider` (e.g. for LM Studio) for
+query embedding generation.
 
 LanceDB provides ANN indexing for faster search over large datasets compared
 to exact cosine similarity in DuckDB.
@@ -54,10 +56,21 @@ class LanceDBVectorStore(VectorStore):
         db_path: str = "/tmp/rag-vectors.lance",
         embedding_model: str = "nomic-embed-text",
         ollama_url: str = "http://localhost:11434",
+        embedding_backend: str = "ollama",
+        embedding_url: str | None = None,
     ) -> None:
+        """Initialize the store.
+
+        See :class:`heddle.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore`
+        for parameter semantics.  ``embedding_backend`` selects between
+        :class:`OllamaEmbeddingProvider` and
+        :class:`OpenAICompatibleEmbeddingProvider` (LM Studio etc.).
+        """
         self.db_path = Path(db_path)
         self.embedding_model = embedding_model
         self.ollama_url = ollama_url
+        self.embedding_backend = embedding_backend
+        self.embedding_url = embedding_url
         self._db: Any = None
         self._table: Any = None
         self._embedding_dim: int | None = None
@@ -88,7 +101,15 @@ class LanceDBVectorStore(VectorStore):
     # ------------------------------------------------------------------
 
     def _get_embedder(self) -> Any:  # pragma: no cover
-        """Lazy-load the Ollama embedding provider."""
+        """Lazy-load the embedding provider configured for this store."""
+        if self.embedding_backend == "openai-compatible":
+            from heddle.worker.embeddings import OpenAICompatibleEmbeddingProvider
+
+            return OpenAICompatibleEmbeddingProvider(
+                model=self.embedding_model,
+                base_url=self.embedding_url,
+            )
+
         from heddle.worker.embeddings import OllamaEmbeddingProvider
 
         return OllamaEmbeddingProvider(

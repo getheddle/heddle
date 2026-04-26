@@ -34,6 +34,55 @@ def _resolve_store_class(config: HeddleConfig) -> str:
     return "heddle.contrib.rag.vectorstore.duckdb_store.DuckDBVectorStore"
 
 
+def _resolve_embedding_settings(config: HeddleConfig) -> dict[str, Any]:
+    """Pick the embedding backend + URL + model for the RAG pipeline.
+
+    Selection rules (highest wins):
+
+    1. Explicit ``embedding_backend`` in config / ``HEDDLE_EMBEDDING_BACKEND``
+       env var (``"ollama"`` or ``"openai-compatible"``).
+    2. ``local_backend`` preference (``HEDDLE_LOCAL_BACKEND``) when set.
+    3. LM Studio URL when configured (newer default).
+    4. Ollama URL when configured.
+    5. Fall back to Ollama defaults.
+    """
+    backend = (config.embedding_backend or "").strip().lower() or None
+
+    if backend is None:
+        local_pref = (config.local_backend or "").strip().lower() or None
+        if local_pref == "lmstudio" and config.lm_studio_url:
+            backend = "openai-compatible"
+        elif local_pref == "ollama" and config.ollama_url:
+            backend = "ollama"
+        elif config.lm_studio_url:
+            backend = "openai-compatible"
+        else:
+            backend = "ollama"
+
+    if backend == "openai-compatible":
+        url = config.lm_studio_url or "http://localhost:1234/v1"
+        # When the user hasn't customised the model away from Ollama's
+        # default, switch to a sensible LM Studio embedding model.
+        model = (
+            config.embedding_model
+            if config.embedding_model and config.embedding_model != "nomic-embed-text"
+            else "text-embedding-nomic-embed-text-v1.5"
+        )
+        return {
+            "embedding_backend": "openai-compatible",
+            "embedding_url": url,
+            "embedding_model": model,
+            "ollama_url": config.ollama_url or "http://localhost:11434",
+        }
+
+    return {
+        "embedding_backend": "ollama",
+        "embedding_url": None,
+        "embedding_model": config.embedding_model,
+        "ollama_url": config.ollama_url or "http://localhost:11434",
+    }
+
+
 def _open_store(config: HeddleConfig) -> Any:
     """Instantiate and initialize a VectorStore from config."""
     import importlib
@@ -44,11 +93,8 @@ def _open_store(config: HeddleConfig) -> Any:
     cls = getattr(mod, class_name)
 
     db_path = str(Path(config.rag_db_path).expanduser())
-    store = cls(
-        db_path=db_path,
-        embedding_model=config.embedding_model,
-        ollama_url=config.ollama_url or "http://localhost:11434",
-    )
+    settings = _resolve_embedding_settings(config)
+    store = cls(db_path=db_path, **settings)
     return store.initialize()
 
 
@@ -62,6 +108,17 @@ def _open_store(config: HeddleConfig) -> Any:
 @click.option("--db-path", default=None, help="Override vector store path.")
 @click.option("--store", default=None, type=click.Choice(["duckdb", "lancedb"]))
 @click.option("--ollama-url", default=None, help="Override Ollama URL.")
+@click.option(
+    "--lm-studio-url",
+    default=None,
+    help="Override LM Studio URL (e.g. http://localhost:1234/v1).",
+)
+@click.option(
+    "--embedding-backend",
+    default=None,
+    type=click.Choice(["ollama", "openai-compatible"]),
+    help="Force a specific embedding backend (otherwise auto-selected).",
+)
 @click.option("--embedding-model", default=None, help="Override embedding model.")
 @click.pass_context
 def rag(
@@ -70,6 +127,8 @@ def rag(
     db_path: str | None,
     store: str | None,
     ollama_url: str | None,
+    lm_studio_url: str | None,
+    embedding_backend: str | None,
     embedding_model: str | None,
 ) -> None:
     """RAG pipeline — ingest, search, and serve. No NATS needed."""
@@ -80,6 +139,10 @@ def rag(
         overrides["rag_vector_store"] = store
     if ollama_url:
         overrides["ollama_url"] = ollama_url
+    if lm_studio_url:
+        overrides["lm_studio_url"] = lm_studio_url
+    if embedding_backend:
+        overrides["embedding_backend"] = embedding_backend
     if embedding_model:
         overrides["embedding_model"] = embedding_model
     ctx.ensure_object(dict)

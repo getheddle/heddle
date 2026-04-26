@@ -21,7 +21,7 @@ Measure whether they work. Scale when ready.**
 
 ```bash
 pip install heddle-ai[workshop]                         # install from PyPI
-heddle setup                                            # configure (auto-detects Ollama)
+heddle setup                                            # configure (auto-detects LM Studio + Ollama)
 heddle workshop                                         # open web UI at localhost:8080
 ```
 
@@ -60,8 +60,8 @@ and measure whether changes help or hurt.
   Document ──► Extract ──► Classify ──► Summarize ──► Report
                  │            │            │
                  │            │            └─ Claude Opus (complex reasoning)
-                 │            └─ Ollama local (fast, free)
-                 └─ Ollama local (fast, free)
+                 │            └─ LM Studio / Ollama local (fast, free)
+                 └─ LM Studio / Ollama local (fast, free)
 ```
 
 Steps run in parallel when they can, and are tested with the built-in
@@ -153,11 +153,11 @@ Scale any component by running more copies — NATS load-balances automatically.
 | **Config-Driven** | Define workers in YAML — no Python code needed for LLM steps |
 | **Knowledge Silos** | Per-worker access control; blind audit workers can't see what they're reviewing |
 | **Pipeline Orchestration** | Chain steps with automatic dependency detection and parallelism |
-| **Three Model Tiers** | Local (Ollama), Standard (Claude Sonnet), Frontier (Claude Opus) |
+| **Three Model Tiers** | Local (LM Studio or Ollama), Standard (Claude Sonnet), Frontier (Claude Opus) |
 | **Document Processing** | PDF/DOCX extraction via MarkItDown (fast) or Docling (deep OCR) |
 | **RAG Pipeline** | Telegram channel ingestion, chunking, vector search (DuckDB or LanceDB) |
 | **Multi-Agent Councils** | Multi-round deliberation with protocols (debate, Delphi), convergence detection, transcript management |
-| **ChatBridge Adapters** | Use Claude, GPT-4, Ollama, or humans as council participants with session history |
+| **ChatBridge Adapters** | Use Claude, GPT-4, LM Studio, Ollama, or humans as council participants with session history |
 | **MCP Gateway** | Expose any workflow as an MCP server with a single YAML config |
 | **Config Wizard** | `heddle setup` auto-detects backends; `heddle new` scaffolds workers/pipelines |
 | **Live Monitoring** | TUI dashboard, OpenTelemetry tracing, dead-letter inspection |
@@ -199,7 +199,7 @@ Go deeper:
 | Area | Status | Details |
 |------|--------|---------|
 | Core framework | Complete | Messages, contracts, config, workspace |
-| LLM backends | Complete | Anthropic, Ollama, OpenAI-compatible |
+| LLM backends | Complete | Anthropic, LM Studio, Ollama, OpenAI-compatible |
 | Workers & processors | Complete | Tool-use, knowledge silos, embeddings |
 | Orchestration | Complete | Goal decomposition, pipelines, scheduling |
 | RAG pipeline | Complete | Ingest, chunk, embed, search (DuckDB + LanceDB) |

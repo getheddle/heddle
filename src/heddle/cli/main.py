@@ -11,7 +11,7 @@ Commands:
     heddle validate     -- Validate config files without starting infrastructure
     heddle council      -- Run or validate multi-agent council deliberations
     heddle rag          -- Zero-config RAG pipeline (ingest, search, stats, serve)
-    heddle worker       -- Start an LLM worker (requires OLLAMA_URL or ANTHROPIC_API_KEY)
+    heddle worker       -- Start an LLM worker (needs a local LLM URL or ANTHROPIC_API_KEY)
     heddle processor    -- Start a non-LLM processor worker (e.g., DoclingBackend)
     heddle pipeline     -- Start a pipeline orchestrator (sequential stage execution)
     heddle orchestrator -- Start the dynamic LLM-based orchestrator (OrchestratorActor)
@@ -134,10 +134,16 @@ def worker(config: str, nats_url: str, tier: str, skip_preflight: bool):
     LLM backends are resolved from environment variables:
 
     \b
-        OLLAMA_URL        -> OllamaBackend  (serves "local" tier)
-        OLLAMA_MODEL      -> Override Ollama model (default: llama3.2:3b)
-        ANTHROPIC_API_KEY -> AnthropicBackend (serves "standard" and "frontier")
-        FRONTIER_MODEL    -> Override frontier model (default: claude-opus-4-20250514)
+        LM_STUDIO_URL        -> LMStudioBackend  (serves "local" tier)
+        LM_STUDIO_MODEL      -> Override LM Studio model (default: default)
+        OLLAMA_URL           -> OllamaBackend    (serves "local" tier)
+        OLLAMA_MODEL         -> Override Ollama model (default: llama3.2:3b)
+        HEDDLE_LOCAL_BACKEND -> "lmstudio" or "ollama" — pick when both URLs are set
+        ANTHROPIC_API_KEY    -> AnthropicBackend (serves "standard" and "frontier")
+        FRONTIER_MODEL       -> Override frontier model (default: claude-opus-4-20250514)
+
+    When both LM_STUDIO_URL and OLLAMA_URL are set, LM Studio wins by
+    default; set HEDDLE_LOCAL_BACKEND=ollama to flip the preference.
 
     The worker subscribes to: heddle.tasks.{worker_name}.{tier}
     with queue group: workers-{worker_name} (enables horizontal scaling).
@@ -145,15 +151,13 @@ def worker(config: str, nats_url: str, tier: str, skip_preflight: bool):
     If --tier does not match the config's default_model_tier, a warning is
     logged but execution continues (the CLI tier takes precedence).
     """
-    import os
-
     import yaml
 
     if not skip_preflight:
         _run_preflight(nats_url, config=config, tier=tier, check_env=True)
 
     from heddle.core.config import validate_worker_config
-    from heddle.worker.backends import AnthropicBackend, OllamaBackend
+    from heddle.worker.backends import build_backends_from_env
     from heddle.worker.runner import LLMWorker
 
     with open(config) as f:
@@ -183,20 +187,13 @@ def worker(config: str, nats_url: str, tier: str, skip_preflight: bool):
             ),
         )
 
-    # Build backends from environment variables.
-    # Only tiers with configured backends can actually serve requests.
-    # If a backend for the requested --tier is not available, the worker will
-    # start but fail when it tries to process a task for that tier.
-    backends = {}
-    if os.getenv("OLLAMA_URL"):
-        ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-        backends["local"] = OllamaBackend(model=ollama_model, base_url=os.getenv("OLLAMA_URL"))
-    if os.getenv("ANTHROPIC_API_KEY"):
-        backends["standard"] = AnthropicBackend(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        backends["frontier"] = AnthropicBackend(
-            api_key=os.getenv("ANTHROPIC_API_KEY"),
-            model=os.getenv("FRONTIER_MODEL", "claude-opus-4-20250514"),
-        )
+    # Build backends from environment variables (single source of truth in
+    # heddle.worker.backends.build_backends_from_env — see that module for
+    # the resolution rules).  Only tiers with configured backends can serve
+    # requests; if --tier is missing a backend the worker still starts so
+    # operators can fix the env without a restart loop, but tasks for that
+    # tier will fail until a backend is available.
+    backends = build_backends_from_env()
 
     # Warn if no backend is available for the requested tier.
     if tier not in backends:
@@ -206,8 +203,8 @@ def worker(config: str, nats_url: str, tier: str, skip_preflight: bool):
             available_tiers=list(backends.keys()),
             hint=(
                 f"No backend configured for tier '{tier}'. "
-                f"Set OLLAMA_URL (for 'local') or ANTHROPIC_API_KEY "
-                f"(for 'standard'/'frontier') in your environment."
+                f"Set LM_STUDIO_URL or OLLAMA_URL (for 'local') or "
+                f"ANTHROPIC_API_KEY (for 'standard'/'frontier') in your environment."
             ),
         )
 
@@ -732,6 +729,7 @@ def workshop(
     LLM backends are resolved from environment variables:
 
     \b
+        LM_STUDIO_URL     -> local tier (preferred when both are set)
         OLLAMA_URL        -> local tier
         ANTHROPIC_API_KEY -> standard + frontier tiers
     """

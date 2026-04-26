@@ -6,16 +6,39 @@ Common issues and solutions when running Heddle.
 
 ## Setup & Configuration
 
-### `heddle setup` can't detect Ollama
+### `heddle setup` can't detect a local LLM runtime
 
-**Symptom:** Setup wizard reports "Ollama not detected" even though Ollama is running.
+**Symptom:** Setup wizard reports "LM Studio not detected" or "Ollama not detected"
+even though one of them is running.
 
 **Fix:**
 
-- Check Ollama is running: `curl http://localhost:11434/api/tags`
-- If Ollama is on a different port or host, enter the URL when prompted
-- Check firewall isn't blocking port 11434
-- If using Docker Ollama: `docker run -p 11434:11434 ollama/ollama`
+- LM Studio: confirm the local server is started (LM Studio app → Developer
+  tab → Start Server) and a model is loaded. Probe directly with
+  `curl http://localhost:1234/v1/models`. When prompted by the wizard,
+  enter the URL with the trailing `/v1` (e.g. `http://localhost:1234/v1`).
+- Ollama: check it is running with `curl http://localhost:11434/api/tags`.
+  If Ollama is on a different port or host, enter the URL when prompted.
+  If using Docker Ollama: `docker run -p 11434:11434 ollama/ollama`.
+- Both can coexist — the wizard probes each independently. Set
+  `HEDDLE_LOCAL_BACKEND=lmstudio` (or `ollama`) to choose which serves
+  the local tier when both are configured.
+
+### LM Studio request fails with "No models loaded"
+
+**Symptom:** A worker or `heddle rag` call against LM Studio returns
+HTTP 400 with `{"error": {"message": "No models loaded ...", ...}}`.
+
+**Fix:**
+
+- Open LM Studio's UI and explicitly load the model you want to use,
+  or run `lms load <model-id>` from the command line.
+- `/v1/models` lists *available* models (downloaded), not loaded ones.
+  The chat-completions endpoint refuses to route until a model is
+  actively in memory.
+- Set `LM_STUDIO_MODEL` to a real id from `/v1/models` (e.g.
+  `LM_STUDIO_MODEL=google/gemma-3-4b`) — the literal `default` is only
+  routed when LM Studio is configured to auto-load.
 
 ### `heddle setup` Anthropic key validation fails
 
@@ -35,7 +58,7 @@ Common issues and solutions when running Heddle.
 **Fix:**
 
 - Check the file exists: `cat ~/.heddle/config.yaml`
-- Env vars override config file values — check for conflicting `OLLAMA_URL`, `ANTHROPIC_API_KEY`
+- Env vars override config file values — check for conflicting `LM_STUDIO_URL`, `OLLAMA_URL`, `HEDDLE_LOCAL_BACKEND`, `ANTHROPIC_API_KEY`
 - Priority: CLI flags > env vars > config.yaml > defaults
 - See [Configuration](CONFIG.md) for the full priority chain
 
@@ -60,11 +83,21 @@ Common issues and solutions when running Heddle.
 
 **Fix:**
 
-- Check Ollama is running: `curl http://localhost:11434/api/tags`
-- Check embedding model is installed: `ollama list | grep nomic-embed-text`
-- Pull the model: `ollama pull nomic-embed-text`
-- Use `--no-embed` to skip embeddings: `heddle rag ingest --no-embed files...`
-- Check Ollama URL in config: `cat ~/.heddle/config.yaml | grep ollama_url`
+- Identify which embedding backend Heddle is using:
+  `heddle rag --help` (look for the active config) or check
+  `cat ~/.heddle/config.yaml`. By default, embeddings follow the
+  local-tier choice (LM Studio first, else Ollama).
+- LM Studio: confirm an embedding model is loaded
+  (`curl http://localhost:1234/v1/models | jq` and look for an `embed`
+  in the id, e.g. `text-embedding-nomic-embed-text-v1.5`). Load it
+  via the LM Studio UI or `lms load`.
+- Ollama: confirm it is running and the model is installed:
+  `ollama list | grep nomic-embed-text`; pull with
+  `ollama pull nomic-embed-text`.
+- Use `--no-embed` to skip embeddings entirely:
+  `heddle rag ingest --no-embed files...`
+- Force a specific backend on the command line:
+  `heddle rag --embedding-backend openai-compatible --lm-studio-url http://localhost:1234/v1 ingest ...`
 
 ### `heddle rag search` returns no results
 
@@ -165,14 +198,19 @@ export ANTHROPIC_API_KEY=sk-ant-...
 echo 'export ANTHROPIC_API_KEY=sk-ant-...' >> ~/.zshrc
 ```
 
-### OLLAMA_URL not set / Ollama not running
+### Local LLM URL not set / runtime not running
 
 **Symptom:** Workers using `local` tier fail to connect.
 
 **Fix:**
 
 ```bash
-# Install and start Ollama
+# Option A: LM Studio (download from https://lmstudio.ai, load a model,
+# then start the server in the Developer tab)
+export LM_STUDIO_URL=http://localhost:1234/v1
+export LM_STUDIO_MODEL=google/gemma-3-4b   # any id from /v1/models
+
+# Option B: Install and start Ollama
 brew install ollama  # macOS
 ollama serve &
 

@@ -15,6 +15,7 @@ Configuration is passed from the MCP gateway YAML ``tools.session`` section:
         baft_dir: /path/to/baft
         nats_url: nats://localhost:4222
         ollama_url: http://localhost:11434
+        lm_studio_url: http://localhost:1234/v1
         enable: [start, end, status, sync_check, sync]
 """
 
@@ -47,12 +48,14 @@ class SessionBridge:
         baft_dir: str | Path | None = None,
         nats_url: str = "nats://localhost:4222",
         ollama_url: str = "http://localhost:11434",
+        lm_studio_url: str | None = None,
     ) -> None:
         self.framework_dir = Path(framework_dir)
         self.workspace_dir = Path(workspace_dir)
         self.baft_dir = Path(baft_dir) if baft_dir else None
         self.nats_url = nats_url
         self.ollama_url = ollama_url
+        self.lm_studio_url = lm_studio_url
 
     _HANDLERS: ClassVar[dict[str, str]] = {
         "start": "_session_start",
@@ -111,6 +114,23 @@ class SessionBridge:
             return True, f"Ollama returned {resp.status_code}"
         except Exception:
             return False, f"Ollama unreachable at {self.ollama_url}"
+
+    def _check_lm_studio(self) -> tuple[bool, str]:  # pragma: no cover — mocked in tests
+        if not self.lm_studio_url:
+            return False, "LM Studio not configured"
+        try:
+            import httpx
+
+            url = self.lm_studio_url.rstrip("/")
+            if not url.endswith("/v1"):
+                url = f"{url}/v1"
+            resp = httpx.get(f"{url}/models", timeout=5)
+            if resp.status_code == 200:
+                models = [m["id"] for m in resp.json().get("data", [])]
+                return True, f"LM Studio reachable ({', '.join(models[:3])})"
+            return True, f"LM Studio returned {resp.status_code}"
+        except Exception:
+            return False, f"LM Studio unreachable at {self.lm_studio_url}"
 
     def _check_duckdb(self) -> tuple[bool, str]:  # pragma: no cover — mocked in tests
         db_path = self.workspace_dir / "itp.duckdb"
@@ -258,17 +278,22 @@ class SessionBridge:
         ollama_ok, ollama_msg = self._check_ollama()
         db_ok, db_msg = self._check_duckdb()
 
+        services: dict[str, Any] = {
+            "nats": {"ok": nats_ok, "message": nats_msg},
+            "ollama": {"ok": ollama_ok, "message": ollama_msg},
+            "duckdb": {"ok": db_ok, "message": db_msg},
+        }
+        if self.lm_studio_url:
+            lms_ok, lms_msg = self._check_lm_studio()
+            services["lm_studio"] = {"ok": lms_ok, "message": lms_msg}
+
         return {
             "sessions": sessions,
             "framework": {
                 "git_clean": git_clean,
                 "dirty_files": dirty_count if not git_clean else 0,
             },
-            "services": {
-                "nats": {"ok": nats_ok, "message": nats_msg},
-                "ollama": {"ok": ollama_ok, "message": ollama_msg},
-                "duckdb": {"ok": db_ok, "message": db_msg},
-            },
+            "services": services,
         }
 
     async def _session_sync_check(self, arguments: dict[str, Any]) -> dict[str, Any]:

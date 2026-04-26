@@ -48,6 +48,8 @@ def _detect_available_backends() -> list[dict[str, str]]:
     available = []
     if os.getenv("ANTHROPIC_API_KEY"):
         available.append({"name": "anthropic", "label": "Anthropic (Claude)"})
+    if os.getenv("LM_STUDIO_URL"):
+        available.append({"name": "lmstudio", "label": "LM Studio (local)"})
     if os.getenv("OLLAMA_URL"):
         available.append({"name": "ollama", "label": "Ollama (local)"})
     if os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_BASE_URL"):

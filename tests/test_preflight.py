@@ -52,17 +52,28 @@ async def test_nats_connectivity_failure():
 # ---------------------------------------------------------------------------
 
 
-def test_env_vars_local_missing_ollama(monkeypatch):
-    """Local tier without OLLAMA_URL returns a warning."""
+def test_env_vars_local_missing_both(monkeypatch):
+    """Local tier with neither LM_STUDIO_URL nor OLLAMA_URL warns."""
     monkeypatch.delenv("OLLAMA_URL", raising=False)
+    monkeypatch.delenv("LM_STUDIO_URL", raising=False)
     warnings = check_env_vars("local")
     assert len(warnings) == 1
     assert "OLLAMA_URL" in warnings[0]
+    assert "LM_STUDIO_URL" in warnings[0]
 
 
 def test_env_vars_local_with_ollama(monkeypatch):
     """Local tier with OLLAMA_URL set returns no warnings."""
+    monkeypatch.delenv("LM_STUDIO_URL", raising=False)
     monkeypatch.setenv("OLLAMA_URL", "http://localhost:11434")
+    warnings = check_env_vars("local")
+    assert warnings == []
+
+
+def test_env_vars_local_with_lm_studio(monkeypatch):
+    """Local tier with LM_STUDIO_URL set (only) also satisfies the check."""
+    monkeypatch.delenv("OLLAMA_URL", raising=False)
+    monkeypatch.setenv("LM_STUDIO_URL", "http://localhost:1234/v1")
     warnings = check_env_vars("local")
     assert warnings == []
 

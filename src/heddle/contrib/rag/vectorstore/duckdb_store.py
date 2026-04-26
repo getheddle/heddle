@@ -7,7 +7,9 @@ embedding vector.  Supports:
   - Full-text search via DuckDB FTS extension (optional)
   - Basic CRUD (get, delete by chunk_id)
 
-Uses Heddle's OllamaEmbeddingProvider for query embedding generation.
+Uses Heddle's :class:`OllamaEmbeddingProvider` (default) or
+:class:`OpenAICompatibleEmbeddingProvider` (e.g. for LM Studio) for
+query embedding generation.
 
 No external vector DB required — DuckDB handles both structured data and
 vector similarity in a single embedded database.
@@ -53,10 +55,29 @@ class DuckDBVectorStore(VectorStore):
         db_path: str = "/tmp/rag-vectors.duckdb",
         embedding_model: str = "nomic-embed-text",
         ollama_url: str = "http://localhost:11434",
+        embedding_backend: str = "ollama",
+        embedding_url: str | None = None,
     ) -> None:
+        """Initialize the store.
+
+        Args:
+            db_path: DuckDB file path.
+            embedding_model: Model name passed to the embedding provider.
+            ollama_url: Ollama base URL (used when
+                ``embedding_backend == "ollama"``).
+            embedding_backend: ``"ollama"`` or ``"openai-compatible"``.
+                The latter routes through
+                :class:`OpenAICompatibleEmbeddingProvider`, which works
+                with LM Studio, OpenAI, vLLM, TEI, etc.
+            embedding_url: Base URL for OpenAI-compatible embeddings
+                (e.g. ``http://localhost:1234/v1`` for LM Studio).
+                Required when ``embedding_backend == "openai-compatible"``.
+        """
         self.db_path = Path(db_path)
         self.embedding_model = embedding_model
         self.ollama_url = ollama_url
+        self.embedding_backend = embedding_backend
+        self.embedding_url = embedding_url
         self._conn: Any = None
         self._embedding_dim: int | None = None
 
@@ -100,7 +121,15 @@ class DuckDBVectorStore(VectorStore):
     # ------------------------------------------------------------------
 
     def _get_embedder(self) -> Any:
-        """Lazy-load the Ollama embedding provider."""
+        """Lazy-load the embedding provider configured for this store."""
+        if self.embedding_backend == "openai-compatible":
+            from heddle.worker.embeddings import OpenAICompatibleEmbeddingProvider
+
+            return OpenAICompatibleEmbeddingProvider(
+                model=self.embedding_model,
+                base_url=self.embedding_url,
+            )
+
         from heddle.worker.embeddings import OllamaEmbeddingProvider
 
         return OllamaEmbeddingProvider(

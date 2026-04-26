@@ -14,7 +14,7 @@ The fastest way to see Heddle work. Paste any text and get structured output.
 # 1. Install
 pip install heddle-ai[workshop]
 
-# 2. Configure (interactive wizard — detects Ollama, prompts for API keys)
+# 2. Configure (interactive wizard — detects LM Studio + Ollama, prompts for API keys)
 heddle setup
 
 # 3. Open the Workshop web UI
@@ -31,8 +31,10 @@ Try these first:
 - **extractor** — paste a contract or report, define fields to extract (names, dates, amounts)
 - **qa** — paste a passage and ask a question, get an answer with source citations
 
-All four work with Ollama (free, local). If you don't have Ollama, `heddle setup`
-will prompt for an Anthropic API key instead.
+All four work with a local LLM runtime — either **LM Studio**
+(`http://localhost:1234/v1`, MLX or llama.cpp under the hood) or
+**Ollama** (`http://localhost:11434`). If neither is running, `heddle
+setup` will prompt for an Anthropic API key instead.
 
 See [Workers Reference](workers-reference.md) for full I/O schemas and the
 [Workshop Tour](WORKSHOP_TOUR.md) for what each screen does.
@@ -61,9 +63,12 @@ heddle rag search "earthquake damage reports"
 heddle rag serve
 ```
 
-The `heddle setup` wizard detects Ollama, prompts for API keys, and writes
-`~/.heddle/config.yaml`. All settings can be overridden via environment
-variables or CLI flags. See [Configuration](CONFIG.md) for details.
+The `heddle setup` wizard detects LM Studio + Ollama, prompts for API
+keys, and writes `~/.heddle/config.yaml`. When both local runtimes are
+configured, LM Studio wins the local tier by default — set
+`HEDDLE_LOCAL_BACKEND=ollama` to flip the preference. All settings can
+be overridden via environment variables or CLI flags. See
+[Configuration](CONFIG.md) for details.
 
 ---
 
@@ -106,7 +111,7 @@ No NATS or infrastructure needed. The Workshop calls LLM backends directly.
 
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) package manager (recommended for development)
-- At least one LLM backend (Ollama recommended to start)
+- At least one LLM backend (LM Studio or Ollama recommended to start)
 - NATS and Valkey for full infrastructure (not needed for Quick Start)
 
 ---
@@ -121,7 +126,7 @@ uv sync --all-extras
 Heddle has optional extras for integrations:
 
 ```bash
-uv sync --extra rag           # RAG pipeline (DuckDB + Ollama embeddings)
+uv sync --extra rag           # RAG pipeline (DuckDB + LM Studio or Ollama embeddings)
 uv sync --extra lancedb       # LanceDB vector store (ANN search, alternative to DuckDB)
 uv sync --extra telegram      # Live Telegram channel capture via Telethon
 uv sync --extra duckdb        # DuckDB tools and query backends
@@ -147,22 +152,32 @@ The easiest path — run the setup wizard:
 uv run heddle setup
 ```
 
-This auto-detects Ollama, prompts for API keys, and writes `~/.heddle/config.yaml`.
+This auto-detects LM Studio + Ollama, prompts for API keys, and writes `~/.heddle/config.yaml`.
 
 **Or configure manually** via environment variables:
 
 ```bash
-# Option A: Ollama (free, local, recommended to start)
+# Option A: LM Studio (free, local, MLX runtime on Apple Silicon — newer default)
+# 1. Install LM Studio from https://lmstudio.ai
+# 2. Load a model in the UI, then start the local server (default port 1234)
+export LM_STUDIO_URL=http://localhost:1234/v1
+export LM_STUDIO_MODEL=google/gemma-3-4b   # match an id from /v1/models
+
+# Option B: Ollama (free, local)
 brew install ollama
 ollama serve &
 ollama pull llama3.2:3b
 export OLLAMA_URL=http://localhost:11434
 
-# Option B: Anthropic API
+# Option C: Anthropic API
 export ANTHROPIC_API_KEY=sk-ant-...
 
-# Option C: Any OpenAI-compatible API (vLLM, LiteLLM, llama.cpp server)
+# Option D: Any OpenAI-compatible API (vLLM, LiteLLM, llama.cpp server)
 # See OpenAICompatibleBackend in src/heddle/worker/backends.py
+
+# When both LM_STUDIO_URL and OLLAMA_URL are set, LM Studio wins by
+# default.  Force Ollama with:
+export HEDDLE_LOCAL_BACKEND=ollama
 ```
 
 Settings resolution priority: CLI flags > environment variables > `~/.heddle/config.yaml` > built-in defaults. See [Configuration](CONFIG.md) for the full reference.

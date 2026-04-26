@@ -14,11 +14,14 @@ import pytest
 
 from heddle.worker.backends import (
     AnthropicBackend,
+    LMStudioBackend,
     OllamaBackend,
     OpenAICompatibleBackend,
     _anthropic_messages,
     _ollama_messages,
     _openai_messages,
+    _select_local_backend,
+    build_backends_from_env,
 )
 
 # ---------------------------------------------------------------------------
@@ -757,3 +760,176 @@ class TestOpenAICompatibleBackendComplete:
         call_body = mock_post.call_args[1]["json"]
         assert call_body["messages"][0] == {"role": "system", "content": "system instructions"}
         assert call_body["messages"][1] == {"role": "user", "content": "real msg"}
+
+
+# ---------------------------------------------------------------------------
+# OpenAICompatibleBackend base_url normalization
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAICompatibleBackendBaseURL:
+    def test_strips_trailing_v1(self):
+        b = OpenAICompatibleBackend(base_url="http://localhost:1234/v1")
+        assert b.base_url == "http://localhost:1234"
+
+    def test_strips_trailing_slash(self):
+        b = OpenAICompatibleBackend(base_url="http://localhost:1234/")
+        assert b.base_url == "http://localhost:1234"
+
+    def test_strips_v1_and_trailing_slash(self):
+        b = OpenAICompatibleBackend(base_url="http://localhost:1234/v1/")
+        assert b.base_url == "http://localhost:1234"
+
+    def test_leaves_bare_host(self):
+        b = OpenAICompatibleBackend(base_url="http://localhost:1234")
+        assert b.base_url == "http://localhost:1234"
+
+
+# ---------------------------------------------------------------------------
+# LMStudioBackend
+# ---------------------------------------------------------------------------
+
+
+class TestLMStudioBackend:
+    def test_default_base_url(self):
+        backend = LMStudioBackend()
+        assert backend.base_url == "http://localhost:1234"
+        assert backend.model == "default"
+
+    def test_custom_base_url_with_v1(self):
+        backend = LMStudioBackend(base_url="http://example.com:1234/v1")
+        assert backend.base_url == "http://example.com:1234"
+
+    def test_gen_ai_system_is_lmstudio(self):
+        backend = LMStudioBackend()
+        assert backend.gen_ai_system == "lmstudio"
+
+    @pytest.mark.asyncio
+    async def test_response_reports_lmstudio_system(self):
+        backend = LMStudioBackend(model="qwen")
+        api_data = {
+            "model": "qwen",
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "Hi"},
+                    "finish_reason": "stop",
+                },
+            ],
+            "usage": {"prompt_tokens": 4, "completion_tokens": 2},
+        }
+        with patch.object(backend.client, "post", return_value=_mock_response(api_data)):
+            result = await backend.complete("sys", "msg")
+
+        assert result["content"] == "Hi"
+        assert result["gen_ai_system"] == "lmstudio"
+        # Other fields still follow OpenAI shape.
+        assert result["prompt_tokens"] == 4
+        assert result["completion_tokens"] == 2
+
+    @pytest.mark.asyncio
+    async def test_posts_to_v1_chat_completions(self):
+        """Verify the URL doubling bug we normalized away does not return."""
+        backend = LMStudioBackend(base_url="http://localhost:1234/v1")
+        api_data = {
+            "model": "qwen",
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "Hi"},
+                    "finish_reason": "stop",
+                },
+            ],
+            "usage": {"prompt_tokens": 4, "completion_tokens": 2},
+        }
+        mock_post = AsyncMock(return_value=_mock_response(api_data))
+        with patch.object(backend.client, "post", mock_post):
+            await backend.complete("sys", "msg")
+
+        # The path passed to the client should be /v1/chat/completions —
+        # base_url was stripped of /v1, so the final URL is .../v1/...
+        # not .../v1/v1/...
+        called_path = mock_post.call_args[0][0]
+        assert called_path == "/v1/chat/completions"
+
+
+# ---------------------------------------------------------------------------
+# build_backends_from_env / _select_local_backend
+# ---------------------------------------------------------------------------
+
+
+class TestSelectLocalBackend:
+    def test_neither_set(self, monkeypatch):
+        monkeypatch.delenv("LM_STUDIO_URL", raising=False)
+        monkeypatch.delenv("OLLAMA_URL", raising=False)
+        monkeypatch.delenv("HEDDLE_LOCAL_BACKEND", raising=False)
+        assert _select_local_backend() is None
+
+    def test_ollama_only(self, monkeypatch):
+        monkeypatch.delenv("LM_STUDIO_URL", raising=False)
+        monkeypatch.setenv("OLLAMA_URL", "http://localhost:11434")
+        monkeypatch.delenv("HEDDLE_LOCAL_BACKEND", raising=False)
+        backend = _select_local_backend()
+        assert isinstance(backend, OllamaBackend)
+
+    def test_lm_studio_only(self, monkeypatch):
+        monkeypatch.delenv("OLLAMA_URL", raising=False)
+        monkeypatch.setenv("LM_STUDIO_URL", "http://localhost:1234/v1")
+        monkeypatch.delenv("HEDDLE_LOCAL_BACKEND", raising=False)
+        backend = _select_local_backend()
+        assert isinstance(backend, LMStudioBackend)
+
+    def test_both_set_lm_studio_wins_by_default(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_URL", "http://localhost:11434")
+        monkeypatch.setenv("LM_STUDIO_URL", "http://localhost:1234/v1")
+        monkeypatch.delenv("HEDDLE_LOCAL_BACKEND", raising=False)
+        backend = _select_local_backend()
+        assert isinstance(backend, LMStudioBackend)
+
+    def test_explicit_ollama_preference(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_URL", "http://localhost:11434")
+        monkeypatch.setenv("LM_STUDIO_URL", "http://localhost:1234/v1")
+        monkeypatch.setenv("HEDDLE_LOCAL_BACKEND", "ollama")
+        backend = _select_local_backend()
+        assert isinstance(backend, OllamaBackend)
+
+    def test_explicit_lmstudio_preference(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_URL", "http://localhost:11434")
+        monkeypatch.setenv("LM_STUDIO_URL", "http://localhost:1234/v1")
+        monkeypatch.setenv("HEDDLE_LOCAL_BACKEND", "lmstudio")
+        backend = _select_local_backend()
+        assert isinstance(backend, LMStudioBackend)
+
+    def test_explicit_preference_unsatisfied_returns_none(self, monkeypatch):
+        """If user demands LM Studio but it's not configured, fall through to None."""
+        monkeypatch.setenv("OLLAMA_URL", "http://localhost:11434")
+        monkeypatch.delenv("LM_STUDIO_URL", raising=False)
+        monkeypatch.setenv("HEDDLE_LOCAL_BACKEND", "lmstudio")
+        assert _select_local_backend() is None
+
+    def test_lm_studio_model_env_override(self, monkeypatch):
+        monkeypatch.setenv("LM_STUDIO_URL", "http://localhost:1234/v1")
+        monkeypatch.setenv("LM_STUDIO_MODEL", "qwen/qwen2.5-7b")
+        monkeypatch.delenv("HEDDLE_LOCAL_BACKEND", raising=False)
+        backend = _select_local_backend()
+        assert isinstance(backend, LMStudioBackend)
+        assert backend.model == "qwen/qwen2.5-7b"
+
+
+class TestBuildBackendsFromEnv:
+    def test_includes_local_when_lm_studio_set(self, monkeypatch):
+        monkeypatch.setenv("LM_STUDIO_URL", "http://localhost:1234/v1")
+        monkeypatch.delenv("OLLAMA_URL", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("HEDDLE_LOCAL_BACKEND", raising=False)
+        backends = build_backends_from_env()
+        assert "local" in backends
+        assert isinstance(backends["local"], LMStudioBackend)
+        assert "standard" not in backends
+
+    def test_includes_anthropic_tiers_when_key_set(self, monkeypatch):
+        monkeypatch.delenv("LM_STUDIO_URL", raising=False)
+        monkeypatch.delenv("OLLAMA_URL", raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+        backends = build_backends_from_env()
+        assert "standard" in backends
+        assert "frontier" in backends
+        assert isinstance(backends["standard"], AnthropicBackend)

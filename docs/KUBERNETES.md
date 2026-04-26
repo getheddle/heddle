@@ -79,18 +79,24 @@ k8s/
 
 ---
 
-## Ollama on Mac with Minikube
+## Local LLM runtimes on Mac with Minikube
 
-For local LLM inference, run Ollama natively on the host and point workers to
-the host address:
+For local LLM inference, run LM Studio or Ollama natively on the host
+and point workers at the host address:
 
 ```bash
-# On host
-ollama serve &
+# Option A: LM Studio (start the local server in the LM Studio UI)
+LM_STUDIO_URL=http://host.minikube.internal:1234/v1
+LM_STUDIO_MODEL=google/gemma-3-4b   # any id from /v1/models
 
-# In worker config or environment
+# Option B: Ollama
+ollama serve &
 OLLAMA_URL=http://host.minikube.internal:11434
 ```
+
+When both are configured, set
+`HEDDLE_LOCAL_BACKEND=lmstudio` (or `ollama`) on the worker pods to
+choose which one serves the local tier.
 
 ---
 
@@ -103,7 +109,11 @@ Workers, router, and orchestrator containers use the following environment varia
 | `WORKER_CONFIG` | Workers | Path to worker YAML config |
 | `MODEL_TIER` | Workers | Model tier (local, standard, frontier) |
 | `NATS_URL` | All | NATS server URL |
+| `LM_STUDIO_URL` | Optional | LM Studio `/v1/` endpoint |
+| `LM_STUDIO_MODEL` | Optional | LM Studio model id |
 | `OLLAMA_URL` | Optional | Ollama API endpoint |
+| `OLLAMA_MODEL` | Optional | Ollama model name |
+| `HEDDLE_LOCAL_BACKEND` | Optional | `lmstudio` or `ollama` (when both URLs are set) |
 | `ANTHROPIC_API_KEY` | Optional | Anthropic API key (from secret) |
 | `FRONTIER_MODEL` | Optional | Model name for frontier tier |
 
@@ -122,8 +132,9 @@ Configure resource requests and limits for each component type:
 | NATS | 100m | 500m | 128Mi | 256Mi |
 | Valkey | 100m | 500m | 128Mi | 256Mi |
 
-Workers with local LLM backends (Ollama) need more resources because they
-proxy API calls. Workers using remote APIs (Anthropic) are lighter.
+Workers configured for the local tier (LM Studio or Ollama) generally
+need more resources because they proxy LLM calls. Workers using remote
+APIs (Anthropic) are lighter.
 
 Example in a deployment spec:
 

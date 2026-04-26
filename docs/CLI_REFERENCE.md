@@ -47,11 +47,12 @@ heddle setup [OPTIONS]
 
 Steps performed:
 
-1. Detects Ollama at `localhost:11434`
-2. Prompts for Anthropic API key (optional)
-3. Checks/pulls the embedding model
-4. Scans for Telegram export files
-5. Writes `~/.heddle/config.yaml`
+1. Detects LM Studio at `localhost:1234/v1` and Ollama at `localhost:11434`
+2. If both are configured, asks which serves the local tier
+3. Prompts for Anthropic API key (optional)
+4. Picks an embedding model (LM Studio: lists loaded embed models; Ollama: pulls if missing)
+5. Scans for Telegram export files
+6. Writes `~/.heddle/config.yaml`
 
 ---
 
@@ -138,6 +139,8 @@ heddle rag [GROUP-OPTIONS] COMMAND
 | `--db-path` | *(from config)* | Override vector store path |
 | `--store` | *(from config)* | Backend: `duckdb` or `lancedb` |
 | `--ollama-url` | *(from config)* | Override Ollama URL |
+| `--lm-studio-url` | *(from config)* | Override LM Studio URL (e.g. `http://localhost:1234/v1`) |
+| `--embedding-backend` | *(auto)* | Force `ollama` or `openai-compatible` |
 | `--embedding-model` | *(from config)* | Override embedding model |
 
 #### heddle rag ingest
@@ -150,7 +153,7 @@ heddle rag ingest [OPTIONS] PATHS...
 
 | Option | Default | Description |
 |---|---|---|
-| `--embed / --no-embed` | `--embed` | Generate embeddings via Ollama |
+| `--embed / --no-embed` | `--embed` | Generate embeddings via the configured backend (LM Studio or Ollama) |
 | `--window-hours` | `6` | Time window size in hours |
 | `--chunk-target` | `400` | Target chunk size in chars |
 | `--chunk-max` | `600` | Maximum chunk size in chars |
@@ -394,7 +397,7 @@ Infrastructure commands (`worker`, `processor`, `pipeline`, `orchestrator`,
 1. **NATS connectivity** -- verifies the NATS server is reachable and the
    JetStream API is available.
 2. **Model availability** -- for LLM workers, confirms the configured model is
-   loaded in Ollama (or that the API key is set for cloud models).
+   loaded in LM Studio or Ollama (or that the API key is set for cloud models).
 3. **Stream/subject setup** -- ensures the required NATS streams and subjects
    exist, creating them if necessary.
 
@@ -407,8 +410,12 @@ know the infrastructure is already running.
 
 | Variable | Affects | Description |
 |---|---|---|
+| `LM_STUDIO_URL` | All commands | LM Studio base URL (e.g. `http://localhost:1234/v1`) |
+| `LM_STUDIO_MODEL` | `worker`, `processor` | LM Studio model id (from `/v1/models`) |
 | `OLLAMA_URL` | All commands | Ollama base URL (overrides config) |
-| `OLLAMA_MODEL` | `worker`, `processor` | Default model name |
+| `OLLAMA_MODEL` | `worker`, `processor` | Default Ollama model name |
+| `HEDDLE_LOCAL_BACKEND` | All commands | `lmstudio` or `ollama` — which serves the local tier when both URLs are set (default: `lmstudio`) |
+| `HEDDLE_EMBEDDING_BACKEND` | RAG ingest/search | `openai-compatible` or `ollama` — overrides the auto-selected embedding backend |
 | `ANTHROPIC_API_KEY` | `worker`, `orchestrator` | Anthropic API key for cloud models |
 | `FRONTIER_MODEL` | `worker` | Model name for the frontier tier |
 | `OPENAI_API_KEY` | `worker` | OpenAI-compatible API key |

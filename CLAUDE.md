@@ -29,13 +29,17 @@ src/heddle/
     base.py               # TaskWorker base class (abstract)
     runner.py             # LLMWorker — main worker actor (JSON parsing, reset hook, tool-use loop)
                           #   execute_with_tools() — standalone tool-use loop (shared with Workshop)
-    backends.py           # LLMBackend ABC + AnthropicBackend, OllamaBackend, OpenAICompatibleBackend
+    backends.py           # LLMBackend ABC + AnthropicBackend, OllamaBackend, OpenAICompatibleBackend,
+                          #   LMStudioBackend (OpenAI-compat subclass for LM Studio's /v1/ server),
+                          #   build_backends_from_env() picks LM Studio or Ollama for the local tier
+                          #   based on env vars (LM Studio wins when both are set)
                           #   build_backends_from_env() — resolve backends from env vars
     processor.py          # ProcessorWorker, SyncProcessingBackend ABC (serialize_writes option),
                           #   BackendError hierarchy
     tools.py              # ToolProvider ABC, SyncToolProvider, load_tool_provider(), MAX_TOOL_ROUNDS=10
     knowledge.py          # Knowledge silo loading and write-back (read-only, read-write, tool silos)
-    embeddings.py         # EmbeddingProvider ABC, OllamaEmbeddingProvider (Ollama /api/embed)
+    embeddings.py         # EmbeddingProvider ABC, OllamaEmbeddingProvider (Ollama /api/embed),
+                          #   OpenAICompatibleEmbeddingProvider (LM Studio / OpenAI /v1/embeddings)
 
   orchestrator/
     runner.py             # OrchestratorActor — decompose/dispatch/collect/synthesize loop (concurrent goals via max_concurrent_goals)
@@ -168,7 +172,8 @@ src/heddle/
       base.py             # ChatBridge ABC, ChatResponse, SessionInfo
       anthropic.py        # AnthropicChatBridge — Claude API with session history
       openai.py           # OpenAIChatBridge — OpenAI/ChatGPT with session history
-      ollama.py           # OllamaChatBridge — local models with session history
+      ollama.py           # OllamaChatBridge — local Ollama models with session history
+      lmstudio.py         # LMStudioChatBridge — LM Studio's OpenAI-compatible /v1 server
       manual.py           # ManualChatBridge — human-in-the-loop (callback or queue)
       worker.py           # ChatBridgeBackend — wraps any ChatBridge as ProcessingBackend
     rag/
@@ -296,8 +301,8 @@ tests/                    # 82 test files, 1844 unit tests + 1 integration test 
 - **All inter-actor communication uses typed Pydantic messages** (`TaskMessage`, `TaskResult`, `OrchestratorGoal`, `CheckpointState` in `core/messages.py`).
 - **The router is deterministic** — it does not use an LLM. It routes by `worker_type` and `model_tier` using rules in `configs/router_rules.yaml`. Unroutable tasks go to `heddle.tasks.dead_letter`.
 - **Workers have strict I/O contracts** validated by `core/contracts.py`. Input and output schemas are defined per-worker via inline JSON Schema in YAML or via `input_schema_ref`/`output_schema_ref` pointing to Pydantic models (resolved at load time by `config.resolve_schema_refs()`). Boolean values are correctly distinguished from integers.
-- **Three model tiers exist:** `local` (Ollama), `standard` (Claude Sonnet), `frontier` (Claude Opus). The router and task metadata decide which tier handles each task.
-- **Three LLM backends:** `AnthropicBackend` (Claude API, version 2024-10-22), `OllamaBackend` (local models), `OpenAICompatibleBackend` (vLLM, llama.cpp, LiteLLM, etc.). All support tool-use.
+- **Three model tiers exist:** `local` (LM Studio or Ollama), `standard` (Claude Sonnet), `frontier` (Claude Opus). The router and task metadata decide which tier handles each task. When both `LM_STUDIO_URL` and `OLLAMA_URL` are set, LM Studio wins the local tier by default; flip with `HEDDLE_LOCAL_BACKEND=ollama`.
+- **LLM backends:** `AnthropicBackend` (Claude API, version 2024-10-22), `OllamaBackend` (local models via Ollama), `OpenAICompatibleBackend` (vLLM, llama.cpp, LiteLLM, etc.), and `LMStudioBackend` (an OpenAI-compatible subclass with LM Studio defaults). All support tool-use. `OpenAICompatibleBackend` accepts both `http://host:port` and `http://host:port/v1` base URLs (the trailing `/v1` is normalized away so requests still hit `/v1/chat/completions`).
 - **Rate limiting:** Token-bucket rate limiter enforces per-tier dispatch throttling based on `rate_limits` in `router_rules.yaml`.
 - **NATS subject convention:**
   - `heddle.tasks.incoming` — Router picks up tasks here
@@ -504,6 +509,8 @@ The Workshop is a web-based tool for the full worker lifecycle: Define → Test 
 
 ```bash
 uv sync --extra workshop
+LM_STUDIO_URL=http://localhost:1234/v1 uv run heddle workshop --port 8080
+# or, equivalently, with Ollama:
 OLLAMA_URL=http://localhost:11434 uv run heddle workshop --port 8080
 ```
 

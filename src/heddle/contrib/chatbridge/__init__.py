@@ -1,9 +1,9 @@
 """ChatBridge — external chat/LLM session adapters for Heddle.
 
-Wraps external chat APIs (Claude, OpenAI, Ollama, human-in-loop) as
-Heddle-compatible participants.  Each adapter maintains per-session
-conversation history, enabling multi-turn interactions in council
-discussions or standalone use.
+Wraps external chat APIs (Claude, OpenAI, Ollama, LM Studio,
+human-in-loop) as Heddle-compatible participants.  Each adapter
+maintains per-session conversation history, enabling multi-turn
+interactions in council discussions or standalone use.
 
 Requires: ``pip install heddle-ai[chatbridge]``
 """

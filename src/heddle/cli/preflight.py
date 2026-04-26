@@ -59,10 +59,12 @@ def check_env_vars(tier: str) -> list[str]:
     warnings: list[str] = []
 
     if tier == "local":
-        if not os.getenv("OLLAMA_URL"):
+        if not os.getenv("LM_STUDIO_URL") and not os.getenv("OLLAMA_URL"):
             warnings.append(
-                "OLLAMA_URL not set. Required for local tier workers. "
-                "Set it with: export OLLAMA_URL=http://localhost:11434"
+                "Neither LM_STUDIO_URL nor OLLAMA_URL is set. "
+                "Local tier workers need one of them. "
+                "Set: export LM_STUDIO_URL=http://localhost:1234/v1  "
+                "or:  export OLLAMA_URL=http://localhost:11434"
             )
     elif tier in ("standard", "frontier") and not os.getenv("ANTHROPIC_API_KEY"):
         warnings.append(

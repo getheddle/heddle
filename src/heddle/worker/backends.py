@@ -265,12 +265,27 @@ class OllamaBackend(LLMBackend):
 
 
 class OpenAICompatibleBackend(LLMBackend):
-    """Any OpenAI-compatible API (vLLM, llama.cpp server, LiteLLM, etc.)."""
+    """Any OpenAI-compatible API (vLLM, llama.cpp server, LiteLLM, LM Studio, etc.).
+
+    The ``base_url`` may be the host (e.g. ``http://localhost:8000``) or
+    include a trailing ``/v1`` (e.g. ``http://localhost:1234/v1``) — the
+    latter is normalized so that requests still hit ``/v1/chat/completions``.
+    """
+
+    # GenAI semantic-conventions ``gen_ai.system`` value reported in
+    # response dicts.  Subclasses (e.g. :class:`LMStudioBackend`) override.
+    gen_ai_system: str = "openai"
 
     def __init__(self, base_url: str, api_key: str = "not-needed", model: str = "default") -> None:
         self.model = model
+        # Strip a trailing ``/v1`` (and any stray trailing slash) so the
+        # ``/v1/chat/completions`` path we POST to does not end up doubled.
+        normalized = base_url.rstrip("/")
+        if normalized.endswith("/v1"):
+            normalized = normalized[: -len("/v1")]
+        self.base_url = normalized
         self.client = httpx.AsyncClient(
-            base_url=base_url,
+            base_url=normalized,
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=120.0,
         )
@@ -360,12 +375,41 @@ class OpenAICompatibleBackend(LLMBackend):
             "tool_calls": tool_calls,
             "stop_reason": stop_reason,
             # OTel GenAI semantic convention metadata
-            "gen_ai_system": "openai",
+            "gen_ai_system": self.gen_ai_system,
             "gen_ai_request_model": self.model,
             "gen_ai_response_model": data.get("model", self.model),
             "gen_ai_request_temperature": temperature,
             "gen_ai_request_max_tokens": max_tokens,
         }
+
+
+class LMStudioBackend(OpenAICompatibleBackend):
+    """Local models via LM Studio's OpenAI-compatible API.
+
+    LM Studio runs a local HTTP server (default port 1234) that exposes
+    an OpenAI-compatible ``/v1/chat/completions`` endpoint backed by
+    its MLX or llama.cpp runtime.  Any model loaded in LM Studio's UI
+    is reachable through this backend.
+
+    Args:
+        model: Model identifier as shown by ``GET /v1/models`` (or
+            ``"default"`` to use whichever model LM Studio routes to).
+        base_url: LM Studio server URL.  Both ``http://localhost:1234``
+            and ``http://localhost:1234/v1`` are accepted; the trailing
+            ``/v1`` is normalized away.
+        api_key: Ignored by LM Studio but sent as a Bearer token for
+            wire compatibility.
+    """
+
+    gen_ai_system = "lmstudio"
+
+    def __init__(
+        self,
+        model: str = "default",
+        base_url: str = "http://localhost:1234/v1",
+        api_key: str = "not-needed",
+    ) -> None:
+        super().__init__(base_url=base_url, api_key=api_key, model=model)
 
 
 # ---------------------------------------------------------------------------
@@ -490,6 +534,50 @@ def _openai_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
+def _select_local_backend() -> LLMBackend | None:
+    """Pick a backend for the ``local`` tier based on env vars.
+
+    Resolution rules:
+
+    - If ``HEDDLE_LOCAL_BACKEND`` is ``"lmstudio"``, use LM Studio (and
+      fail open if its URL is missing — the worker will simply not get
+      a local-tier backend rather than silently falling back to Ollama).
+    - If ``HEDDLE_LOCAL_BACKEND`` is ``"ollama"``, use Ollama similarly.
+    - Otherwise pick LM Studio when ``LM_STUDIO_URL`` is set, else
+      Ollama when ``OLLAMA_URL`` is set, else nothing.
+
+    Returns the configured backend or ``None`` if none can be resolved.
+    """
+    lm_studio_url = os.getenv("LM_STUDIO_URL")
+    ollama_url = os.getenv("OLLAMA_URL")
+    preference = os.getenv("HEDDLE_LOCAL_BACKEND", "").strip().lower()
+
+    def _make_lmstudio() -> LLMBackend | None:
+        if not lm_studio_url:
+            return None
+        return LMStudioBackend(
+            model=os.getenv("LM_STUDIO_MODEL", "default"),
+            base_url=lm_studio_url,
+        )
+
+    def _make_ollama() -> LLMBackend | None:
+        if not ollama_url:
+            return None
+        return OllamaBackend(
+            model=os.getenv("OLLAMA_MODEL", "llama3.2:3b"),
+            base_url=ollama_url,
+        )
+
+    if preference == "lmstudio":
+        return _make_lmstudio()
+    if preference == "ollama":
+        return _make_ollama()
+
+    # No explicit preference — LM Studio wins when both are set (newer
+    # default), otherwise fall through to whichever is configured.
+    return _make_lmstudio() or _make_ollama()
+
+
 def build_backends_from_env() -> dict[str, LLMBackend]:
     """Build LLM backends from environment variables and ``~/.heddle/config.yaml``.
 
@@ -497,10 +585,16 @@ def build_backends_from_env() -> dict[str, LLMBackend]:
 
     Resolves available backends based on which env vars are set:
 
-    - ``OLLAMA_URL`` → OllamaBackend for the ``local`` tier
+    - ``LM_STUDIO_URL`` → :class:`LMStudioBackend` for the ``local`` tier
+    - ``LM_STUDIO_MODEL`` → Override LM Studio model (default: ``default``)
+    - ``OLLAMA_URL`` → :class:`OllamaBackend` for the ``local`` tier
     - ``OLLAMA_MODEL`` → Override Ollama model (default: ``llama3.2:3b``)
-    - ``ANTHROPIC_API_KEY`` → AnthropicBackend for ``standard`` + ``frontier``
-    - ``FRONTIER_MODEL`` → Override frontier model (default: ``claude-opus-4-20250514``)
+    - ``HEDDLE_LOCAL_BACKEND`` → ``"lmstudio"`` or ``"ollama"`` to pick
+      explicitly when both URLs are set.  Defaults to LM Studio.
+    - ``ANTHROPIC_API_KEY`` → :class:`AnthropicBackend` for ``standard``
+      + ``frontier``
+    - ``FRONTIER_MODEL`` → Override frontier model (default:
+      ``claude-opus-4-20250514``)
 
     Returns:
         Dict mapping tier name → LLMBackend instance. May be empty if no
@@ -517,9 +611,9 @@ def build_backends_from_env() -> dict[str, LLMBackend]:
 
     backends: dict[str, LLMBackend] = {}
 
-    if os.getenv("OLLAMA_URL"):
-        ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-        backends["local"] = OllamaBackend(model=ollama_model, base_url=os.getenv("OLLAMA_URL"))
+    local_backend = _select_local_backend()
+    if local_backend is not None:
+        backends["local"] = local_backend
 
     if os.getenv("ANTHROPIC_API_KEY"):
         backends["standard"] = AnthropicBackend(api_key=os.getenv("ANTHROPIC_API_KEY"))

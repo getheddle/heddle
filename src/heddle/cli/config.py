@@ -25,9 +25,20 @@ class HeddleConfig:
     # LLM backends
     ollama_url: str | None = None
     ollama_model: str = "llama3.2:3b"
+    lm_studio_url: str | None = None
+    lm_studio_model: str = "default"
+    # Which local backend wins when both ``ollama_url`` and
+    # ``lm_studio_url`` are configured.  Accepts ``"lmstudio"`` or
+    # ``"ollama"``.  When unset, LM Studio is preferred (newer default).
+    local_backend: str | None = None
     anthropic_api_key: str | None = None
     frontier_model: str = "claude-opus-4-20250514"
     embedding_model: str = "nomic-embed-text"
+    # Which embedding backend the RAG pipeline should use.  Accepts
+    # ``"ollama"`` or ``"openai-compatible"`` (LM Studio etc.).  When
+    # unset, follows ``local_backend`` and then falls back to whichever
+    # URL is configured.
+    embedding_backend: str | None = None
 
     # RAG pipeline
     rag_data_dir: str | None = None
@@ -45,8 +56,12 @@ class HeddleConfig:
 _ENV_MAP: dict[str, str] = {
     "ollama_url": "OLLAMA_URL",
     "ollama_model": "OLLAMA_MODEL",
+    "lm_studio_url": "LM_STUDIO_URL",
+    "lm_studio_model": "LM_STUDIO_MODEL",
+    "local_backend": "HEDDLE_LOCAL_BACKEND",
     "anthropic_api_key": "ANTHROPIC_API_KEY",
     "frontier_model": "FRONTIER_MODEL",
+    "embedding_backend": "HEDDLE_EMBEDDING_BACKEND",
 }
 
 
@@ -96,12 +111,20 @@ def save_config(config: HeddleConfig, path: str = DEFAULT_CONFIG_PATH) -> None: 
         backends["ollama_url"] = config.ollama_url
     if config.ollama_model != "llama3.2:3b":
         backends["ollama_model"] = config.ollama_model
+    if config.lm_studio_url:
+        backends["lm_studio_url"] = config.lm_studio_url
+    if config.lm_studio_model != "default":
+        backends["lm_studio_model"] = config.lm_studio_model
+    if config.local_backend:
+        backends["local_backend"] = config.local_backend
     if config.anthropic_api_key:
         backends["anthropic_api_key"] = config.anthropic_api_key
     if config.frontier_model != "claude-opus-4-20250514":
         backends["frontier_model"] = config.frontier_model
     if config.embedding_model != "nomic-embed-text":
         backends["embedding_model"] = config.embedding_model
+    if config.embedding_backend:
+        backends["embedding_backend"] = config.embedding_backend
     if backends:
         data["backends"] = backends
 

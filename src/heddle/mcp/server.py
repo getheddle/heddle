@@ -130,6 +130,10 @@ def create_server(config_path: str) -> tuple[FastMCPType, MCPGateway]:
                 "ollama_url",
                 os.environ.get("OLLAMA_URL", "http://localhost:11434"),
             ),
+            lm_studio_url=session_config.get(
+                "lm_studio_url",
+                os.environ.get("LM_STUDIO_URL"),
+            ),
         )
 
     # Council tools (optional — only if tools.council is present).

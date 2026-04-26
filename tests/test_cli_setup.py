@@ -14,7 +14,12 @@ import structlog
 from click.testing import CliRunner
 
 _saved_structlog_config = structlog.get_config()
-from heddle.cli.setup import _detect_ollama, _find_telegram_exports, setup  # noqa: E402
+from heddle.cli.setup import (  # noqa: E402
+    _detect_lm_studio,
+    _detect_ollama,
+    _find_telegram_exports,
+    setup,
+)
 
 structlog.configure(**_saved_structlog_config)
 
@@ -48,6 +53,45 @@ def test_detect_ollama_unreachable():
     assert models == []
 
 
+def test_detect_lm_studio_success():
+    """_detect_lm_studio returns (True, model_ids) when LM Studio responds."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "data": [
+            {"id": "qwen/qwen2.5-7b"},
+            {"id": "text-embedding-nomic-embed-text-v1.5"},
+        ]
+    }
+    with patch("httpx.get", return_value=mock_resp):
+        found, models = _detect_lm_studio("http://localhost:1234/v1")
+    assert found is True
+    assert "qwen/qwen2.5-7b" in models
+    assert "text-embedding-nomic-embed-text-v1.5" in models
+
+
+def test_detect_lm_studio_strips_v1_then_re_appends():
+    """Both http://host:port and http://host:port/v1 work."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"data": [{"id": "model-a"}]}
+    with patch("httpx.get", return_value=mock_resp) as mock_get:
+        _detect_lm_studio("http://localhost:1234")
+    mock_get.assert_called_once()
+    args, _ = mock_get.call_args
+    assert args[0].endswith("/v1/models")
+
+
+def test_detect_lm_studio_unreachable():
+    """_detect_lm_studio returns (False, []) when connection fails."""
+    import httpx
+
+    with patch("httpx.get", side_effect=httpx.ConnectError("refused")):
+        found, models = _detect_lm_studio("http://localhost:1234/v1")
+    assert found is False
+    assert models == []
+
+
 def test_find_telegram_exports(tmp_path):
     """_find_telegram_exports finds result*.json files in a directory."""
     (tmp_path / "result-1.json").write_text("{}")
@@ -76,10 +120,19 @@ def test_setup_help():
     assert "Interactive setup wizard" in result.output
 
 
-def test_setup_non_interactive_no_ollama(tmp_path):
-    """Non-interactive mode skips prompts and writes config."""
+def _patch_detectors(lm_studio: tuple[bool, list[str]], ollama: tuple[bool, list[str]]):
+    """Patch both detectors at once so the wizard's local-LLM section is hermetic."""
+    return (
+        patch("heddle.cli.setup._detect_lm_studio", return_value=lm_studio),
+        patch("heddle.cli.setup._detect_ollama", return_value=ollama),
+    )
+
+
+def test_setup_non_interactive_no_local(tmp_path):
+    """Non-interactive mode with no local LLMs still writes config."""
     cfg_path = str(tmp_path / "config.yaml")
-    with patch("heddle.cli.setup._detect_ollama", return_value=(False, [])):
+    p1, p2 = _patch_detectors((False, []), (False, []))
+    with p1, p2:
         runner = CliRunner()
         result = runner.invoke(setup, ["--non-interactive", "--config-path", cfg_path])
     assert result.exit_code == 0
@@ -87,36 +140,81 @@ def test_setup_non_interactive_no_ollama(tmp_path):
     assert Path(cfg_path).exists()
 
 
-def test_setup_non_interactive_with_ollama(tmp_path):
-    """Non-interactive mode detects Ollama and saves URL."""
+def test_setup_non_interactive_with_ollama_only(tmp_path):
+    """Non-interactive mode detects Ollama (no LM Studio) and saves URL."""
     cfg_path = str(tmp_path / "config.yaml")
-    with patch(
-        "heddle.cli.setup._detect_ollama",
-        return_value=(True, ["llama3.2:3b", "nomic-embed-text"]),
-    ):
+    p1, p2 = _patch_detectors(
+        (False, []),
+        (True, ["llama3.2:3b", "nomic-embed-text"]),
+    )
+    with p1, p2:
         runner = CliRunner()
         result = runner.invoke(setup, ["--non-interactive", "--config-path", cfg_path])
     assert result.exit_code == 0
     assert "Ollama detected" in result.output
     assert "nomic-embed-text available" in result.output
 
-    # Verify saved config
     from heddle.cli.config import load_config
 
     config = load_config(cfg_path)
     assert config.ollama_url == "http://localhost:11434"
+    assert config.local_backend == "ollama"
+
+
+def test_setup_non_interactive_with_lm_studio_only(tmp_path):
+    """Non-interactive mode detects LM Studio (no Ollama) and saves URL."""
+    cfg_path = str(tmp_path / "config.yaml")
+    p1, p2 = _patch_detectors(
+        (True, ["qwen/qwen2.5-7b", "text-embedding-nomic-embed-text-v1.5"]),
+        (False, []),
+    )
+    with p1, p2:
+        runner = CliRunner()
+        result = runner.invoke(setup, ["--non-interactive", "--config-path", cfg_path])
+    assert result.exit_code == 0
+    assert "LM Studio detected" in result.output
+
+    from heddle.cli.config import load_config
+
+    config = load_config(cfg_path)
+    assert config.lm_studio_url == "http://localhost:1234/v1"
+    assert config.local_backend == "lmstudio"
+    assert config.embedding_backend == "openai-compatible"
+
+
+def test_setup_non_interactive_both_runtimes(tmp_path):
+    """Non-interactive with both runtimes — LM Studio wins by default."""
+    cfg_path = str(tmp_path / "config.yaml")
+    p1, p2 = _patch_detectors(
+        (True, ["qwen/qwen2.5-7b"]),
+        (True, ["llama3.2:3b"]),
+    )
+    with p1, p2:
+        runner = CliRunner()
+        result = runner.invoke(setup, ["--non-interactive", "--config-path", cfg_path])
+    assert result.exit_code == 0
+
+    from heddle.cli.config import load_config
+
+    config = load_config(cfg_path)
+    assert config.lm_studio_url == "http://localhost:1234/v1"
+    assert config.ollama_url == "http://localhost:11434"
+    # Wizard does not prompt in non-interactive mode and leaves
+    # local_backend as auto/None when both are present (resolution
+    # happens at runtime via build_backends_from_env).
 
 
 def test_setup_interactive_skips_prompts(tmp_path):
-    """Interactive mode with Enter (empty) inputs skips optional fields."""
+    """Interactive mode with empty inputs skips optional fields."""
     cfg_path = str(tmp_path / "config.yaml")
-    with patch("heddle.cli.setup._detect_ollama", return_value=(False, [])):
+    p1, p2 = _patch_detectors((False, []), (False, []))
+    with p1, p2:
         runner = CliRunner()
-        # Provide empty inputs for: ollama url, anthropic key, data dir
+        # Inputs in order: lm-studio url, ollama url, anthropic key, data dir
         result = runner.invoke(
             setup,
             ["--config-path", cfg_path],
-            input="\n\n\n",
+            input="\n\n\n\n",
         )
     assert result.exit_code == 0
     assert "Config saved" in result.output
@@ -125,16 +223,18 @@ def test_setup_interactive_skips_prompts(tmp_path):
 def test_setup_interactive_with_anthropic_key(tmp_path):
     """Interactive mode accepts and validates an Anthropic API key."""
     cfg_path = str(tmp_path / "config.yaml")
+    p1, p2 = _patch_detectors((False, []), (False, []))
     with (
-        patch("heddle.cli.setup._detect_ollama", return_value=(False, [])),
+        p1,
+        p2,
         patch("heddle.cli.setup._test_anthropic_key", return_value=True),
     ):
         runner = CliRunner()
-        # Inputs: skip ollama url, enter API key, skip data dir
+        # Inputs: skip lm-studio, skip ollama, enter API key, skip data dir
         result = runner.invoke(
             setup,
             ["--config-path", cfg_path],
-            input="\nsk-ant-test-key\n\n",
+            input="\n\nsk-ant-test-key\n\n",
         )
     assert result.exit_code == 0
     assert "Key validated" in result.output
@@ -149,16 +249,15 @@ def test_setup_rerun_preserves_existing(tmp_path):
     """Re-running setup loads existing config as defaults."""
     cfg_path = str(tmp_path / "config.yaml")
 
-    # First run: save an Ollama URL
     from heddle.cli.config import HeddleConfig, save_config
 
     save_config(HeddleConfig(ollama_url="http://saved:11434"), cfg_path)
 
-    # Second run: non-interactive, Ollama at saved URL
-    with patch(
-        "heddle.cli.setup._detect_ollama",
-        return_value=(True, ["llama3.2:3b"]),
-    ):
+    p1, p2 = _patch_detectors(
+        (False, []),
+        (True, ["llama3.2:3b"]),
+    )
+    with p1, p2:
         runner = CliRunner()
         result = runner.invoke(setup, ["--non-interactive", "--config-path", cfg_path])
 
@@ -174,13 +273,14 @@ def test_setup_data_dir_with_exports(tmp_path):
     (data_dir / "result-1.json").write_text("{}")
     (data_dir / "result-2.json").write_text("{}")
 
-    with patch("heddle.cli.setup._detect_ollama", return_value=(False, [])):
+    p1, p2 = _patch_detectors((False, []), (False, []))
+    with p1, p2:
         runner = CliRunner()
-        # Inputs: skip ollama url, skip API key, enter data dir
+        # Inputs: skip lm-studio url, skip ollama url, skip API key, data dir
         result = runner.invoke(
             setup,
             ["--config-path", cfg_path],
-            input=f"\n\n{data_dir}\n",
+            input=f"\n\n\n{data_dir}\n",
         )
     assert result.exit_code == 0
     assert "Found 2 export file(s)" in result.output

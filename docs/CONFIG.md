@@ -22,11 +22,22 @@ Passing `--ollama-url http://host3:11434` on the command line overrides both.
 
 ```yaml
 backends:
+  # Local LLM runtimes — set one or both.  When both are configured,
+  # ``local_backend`` (or HEDDLE_LOCAL_BACKEND) decides which serves
+  # the local tier.  Default: LM Studio wins.
+  lm_studio_url: "http://localhost:1234/v1"
+  lm_studio_model: "google/gemma-3-4b"     # any id from /v1/models
   ollama_url: "http://localhost:11434"
   ollama_model: "llama3.2:3b"
+  local_backend: "lmstudio"                # or "ollama"
+
+  # Cloud / OpenAI-compatible
   anthropic_api_key: "sk-ant-..."
-  embedding_model: "nomic-embed-text"
   frontier_model: "claude-opus-4-20250514"
+
+  # Embeddings — backend defaults to whatever serves the local tier.
+  embedding_backend: "openai-compatible"   # or "ollama"
+  embedding_model: "text-embedding-nomic-embed-text-v1.5"
 
 rag:
   rag_data_dir: "/path/to/exports"
@@ -42,17 +53,27 @@ defaults for anything omitted.
 
 ## Environment Variables
 
-Only four config fields have environment-variable mappings:
+These config fields have environment-variable mappings:
 
-| Config Field       | Environment Variable | Used By            |
-|--------------------|----------------------|--------------------|
-| `ollama_url`       | `OLLAMA_URL`         | All LLM commands   |
-| `ollama_model`     | `OLLAMA_MODEL`       | Worker, Workshop   |
-| `anthropic_api_key`| `ANTHROPIC_API_KEY`  | Worker, Workshop   |
-| `frontier_model`   | `FRONTIER_MODEL`     | Worker, Workshop   |
+| Config Field         | Environment Variable        | Used By            |
+|----------------------|-----------------------------|--------------------|
+| `lm_studio_url`      | `LM_STUDIO_URL`             | All LLM commands   |
+| `lm_studio_model`    | `LM_STUDIO_MODEL`           | Worker, Workshop   |
+| `ollama_url`         | `OLLAMA_URL`                | All LLM commands   |
+| `ollama_model`       | `OLLAMA_MODEL`              | Worker, Workshop   |
+| `local_backend`      | `HEDDLE_LOCAL_BACKEND`      | Local-tier resolution |
+| `anthropic_api_key`  | `ANTHROPIC_API_KEY`         | Worker, Workshop   |
+| `frontier_model`     | `FRONTIER_MODEL`            | Worker, Workshop   |
+| `embedding_backend`  | `HEDDLE_EMBEDDING_BACKEND`  | RAG ingest / search |
 
-Other settings (`rag_*`, `workshop_*`, `embedding_model`) are config-file or
-CLI-flag only.
+`HEDDLE_LOCAL_BACKEND` accepts ``lmstudio`` or ``ollama`` and decides
+which runtime wins the ``local`` tier when both URLs are configured.
+When unset, LM Studio is preferred (newer default).
+`HEDDLE_EMBEDDING_BACKEND` accepts ``openai-compatible`` (LM Studio etc.)
+or ``ollama``; when unset, embeddings follow the local-tier choice.
+
+Other settings (`rag_*`, `workshop_*`, `embedding_model`) are config-file
+or CLI-flag only.
 
 ## Creating the Config
 
@@ -75,6 +96,7 @@ customize:
 
 ```bash
 OLLAMA_URL=http://gpu-box:11434 heddle setup --non-interactive
+LM_STUDIO_URL=http://localhost:1234/v1 heddle setup --non-interactive
 ```
 
 **Manual creation** -- just write the YAML file directly:

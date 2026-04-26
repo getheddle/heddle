@@ -1,15 +1,24 @@
 """
 Embedding provider abstraction for vector generation.
 
-Workers and tools can generate vector embeddings from text via an
-EmbeddingProvider. The default implementation uses Ollama's /api/embed
-endpoint with models like nomic-embed-text.
+Workers and tools generate vector embeddings from text via an
+:class:`EmbeddingProvider`.  Two implementations ship with Heddle:
+
+- :class:`OllamaEmbeddingProvider` — Ollama's ``/api/embed`` endpoint.
+- :class:`OpenAICompatibleEmbeddingProvider` — any
+  ``/v1/embeddings`` endpoint (LM Studio, OpenAI, vLLM, TEI, …).
 
 Example usage::
 
     provider = OllamaEmbeddingProvider(model="nomic-embed-text")
     vector = await provider.embed("some text to embed")
     vectors = await provider.embed_batch(["text 1", "text 2"])
+
+    # LM Studio (or any OpenAI-compatible /v1/embeddings server):
+    provider = OpenAICompatibleEmbeddingProvider(
+        model="text-embedding-nomic-embed-text-v1.5",
+        base_url="http://localhost:1234/v1",
+    )
 """
 
 from __future__ import annotations
@@ -98,6 +107,95 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         resp.raise_for_status()
         data = resp.json()
         embeddings = data["embeddings"]
+
+        if self._dimensions is None and embeddings:
+            self._dimensions = len(embeddings[0])
+
+        return embeddings
+
+    @property
+    def dimensions(self) -> int:
+        """Return embedding dimensionality (detected from first call)."""
+        if self._dimensions is None:
+            raise RuntimeError(
+                "Embedding dimensions not yet known. Call embed() or embed_batch() first."
+            )
+        return self._dimensions
+
+
+class OpenAICompatibleEmbeddingProvider(EmbeddingProvider):
+    """Generate embeddings via any OpenAI-compatible ``/v1/embeddings`` API.
+
+    Works with LM Studio, OpenAI, vLLM, Text Embeddings Inference (TEI),
+    LiteLLM, and any other server that speaks the OpenAI embeddings
+    schema.  Batch input is sent as a list under ``input`` per the
+    OpenAI spec; the server is expected to return ``data`` as a list of
+    objects with an ``embedding`` field.
+
+    Args:
+        model: Embedding model name as exposed by the server's
+            ``/v1/models`` endpoint (e.g.
+            ``"text-embedding-nomic-embed-text-v1.5"`` for LM Studio,
+            ``"text-embedding-3-small"`` for OpenAI).
+        base_url: Server base URL.  Both ``http://host:port`` and
+            ``http://host:port/v1`` are accepted; the trailing ``/v1``
+            is normalized away.  Falls back to ``LM_STUDIO_URL`` env
+            var, then ``http://localhost:1234/v1``.
+        api_key: Sent as a Bearer token.  LM Studio ignores it; OpenAI
+            requires a real key.  Falls back to ``OPENAI_API_KEY`` env.
+    """
+
+    def __init__(
+        self,
+        model: str = "text-embedding-nomic-embed-text-v1.5",
+        base_url: str | None = None,
+        api_key: str | None = None,
+    ) -> None:
+        self.model = model
+        raw = base_url or os.environ.get("LM_STUDIO_URL") or "http://localhost:1234/v1"
+        normalized = raw.rstrip("/")
+        if normalized.endswith("/v1"):
+            normalized = normalized[: -len("/v1")]
+        self.base_url = normalized
+        self._dimensions: int | None = None
+        key = api_key or os.environ.get("OPENAI_API_KEY") or "not-needed"
+        self._client = httpx.AsyncClient(
+            base_url=normalized,
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=120.0,
+        )
+
+    async def embed(self, text: str) -> list[float]:
+        """Generate embedding for a single text string."""
+        resp = await self._client.post(
+            "/v1/embeddings",
+            json={"model": self.model, "input": text},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        embedding = data["data"][0]["embedding"]
+
+        if self._dimensions is None:
+            self._dimensions = len(embedding)
+
+        return embedding
+
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings for a batch of texts in one call."""
+        if not texts:
+            return []
+
+        resp = await self._client.post(
+            "/v1/embeddings",
+            json={"model": self.model, "input": texts},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        # OpenAI spec: data is a list of {object, index, embedding}.
+        # Sort by index to be safe (most servers return in order, but
+        # the spec does not strictly guarantee it).
+        items = sorted(data["data"], key=lambda d: d.get("index", 0))
+        embeddings = [item["embedding"] for item in items]
 
         if self._dimensions is None and embeddings:
             self._dimensions = len(embeddings[0])
