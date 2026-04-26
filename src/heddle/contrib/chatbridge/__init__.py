@@ -9,5 +9,12 @@ Requires: ``pip install heddle-ai[chatbridge]``
 """
 
 from heddle.contrib.chatbridge.base import ChatBridge, ChatResponse, SessionInfo
+from heddle.contrib.chatbridge.discover import chatbridge_spec, make_chatbridge
 
-__all__ = ["ChatBridge", "ChatResponse", "SessionInfo"]
+__all__ = [
+    "ChatBridge",
+    "ChatResponse",
+    "SessionInfo",
+    "chatbridge_spec",
+    "make_chatbridge",
+]

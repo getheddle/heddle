@@ -17,6 +17,7 @@ Usage::
 
 from __future__ import annotations
 
+import importlib
 import json
 import time
 from datetime import UTC, datetime
@@ -35,6 +36,7 @@ from heddle.contrib.council.transcript import TranscriptStore
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from heddle.contrib.chatbridge.base import ChatBridge
     from heddle.contrib.council.config import CouncilConfig
     from heddle.contrib.council.schemas import AgentConfig
     from heddle.worker.backends import LLMBackend
@@ -58,12 +60,16 @@ class CouncilRunner:
 
     def __init__(
         self,
-        backends: dict[str, LLMBackend],
+        backends: dict[str, LLMBackend] | None = None,
         config: CouncilConfig | None = None,
     ) -> None:
-        self.backends = backends
+        self.backends = backends or {}
         self._default_config = config
         self._active_transcript: TranscriptStore | None = None
+        # Cache of ChatBridge instances keyed by agent name.  Each
+        # agent with ``bridge`` set gets a dedicated bridge so per-
+        # session conversation history is preserved across rounds.
+        self._bridges: dict[str, ChatBridge] = {}
 
     def inject(
         self,
@@ -218,7 +224,17 @@ class CouncilRunner:
         topic: str,
         config: CouncilConfig,
     ) -> TranscriptEntry:
-        """Execute a single agent's turn via direct backend call."""
+        """Execute a single agent's turn.
+
+        When ``agent.bridge`` is set, the turn is dispatched through
+        the configured :class:`ChatBridge` (each agent gets its own
+        bridge instance so multi-turn conversations work across
+        rounds).  Otherwise the runner falls back to the tier-based
+        :class:`LLMBackend` path.
+        """
+        if agent.bridge:
+            return await self._execute_via_bridge(agent, context, round_num, topic, config)
+
         tier = agent.tier.value
         backend = self.backends.get(tier)
 
@@ -269,6 +285,126 @@ class CouncilRunner:
             model_used=response.get("model"),
             timestamp=datetime.now(UTC),
         )
+
+    async def _execute_via_bridge(
+        self,
+        agent: AgentConfig,
+        context: dict[str, Any],
+        round_num: int,
+        topic: str,
+        config: CouncilConfig,
+    ) -> TranscriptEntry:
+        """Execute a single agent's turn through its :class:`ChatBridge`."""
+        try:
+            bridge = self._get_or_create_bridge(agent, config)
+        except Exception as e:
+            logger.error(
+                "council.bridge.instantiation_failed",
+                agent=agent.name,
+                bridge=agent.bridge,
+                error=str(e),
+            )
+            return TranscriptEntry(
+                round_num=round_num,
+                agent_name=agent.name,
+                role=agent.role,
+                content=f"[ERROR: failed to instantiate bridge '{agent.bridge}': {e}]",
+                timestamp=datetime.now(UTC),
+            )
+
+        user_message = json.dumps(context, ensure_ascii=False, indent=2)
+
+        try:
+            response = await bridge.send_turn(
+                message=user_message,
+                context={"round_num": round_num, "topic": topic},
+                session_id=agent.name,
+            )
+        except Exception as e:
+            logger.error(
+                "council.agent_turn.failed",
+                agent=agent.name,
+                error=str(e),
+            )
+            return TranscriptEntry(
+                round_num=round_num,
+                agent_name=agent.name,
+                role=agent.role,
+                content=f"[ERROR: {e}]",
+                timestamp=datetime.now(UTC),
+            )
+
+        usage = response.token_usage or {}
+        return TranscriptEntry(
+            round_num=round_num,
+            agent_name=agent.name,
+            role=agent.role,
+            content=response.content or "",
+            token_count=usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0),
+            model_used=response.model,
+            timestamp=datetime.now(UTC),
+        )
+
+    def _get_or_create_bridge(
+        self,
+        agent: AgentConfig,
+        config: CouncilConfig,
+    ) -> ChatBridge:
+        """Lazily instantiate (and cache) the :class:`ChatBridge` for one agent.
+
+        ``agent.bridge`` is a dotted path to the bridge class
+        (e.g. ``heddle.contrib.chatbridge.openai.OpenAIChatBridge``).
+        ``agent.bridge_config`` is forwarded as keyword arguments.
+        The agent's role is woven into the bridge's system prompt
+        unless ``bridge_config`` already supplies one.
+        """
+        if agent.name in self._bridges:
+            return self._bridges[agent.name]
+
+        if not agent.bridge:
+            msg = f"Agent '{agent.name}' has no bridge configured"
+            raise ValueError(msg)
+
+        module_path, _, class_name = agent.bridge.rpartition(".")
+        if not module_path:
+            msg = (
+                f"Agent '{agent.name}' bridge '{agent.bridge}' is not a "
+                "fully-qualified dotted path (expected e.g. "
+                "'heddle.contrib.chatbridge.openai.OpenAIChatBridge')"
+            )
+            raise ValueError(msg)
+        module = importlib.import_module(module_path)
+        cls = getattr(module, class_name)
+
+        bridge_kwargs = dict(agent.bridge_config)
+        bridge_kwargs.setdefault("system_prompt", self._build_agent_prompt(agent, config))
+
+        bridge = cls(**bridge_kwargs)
+        self._bridges[agent.name] = bridge
+        return bridge
+
+    async def aclose(self) -> None:
+        """Close any cached :class:`ChatBridge` sessions.
+
+        ChatBridges may hold open ``httpx.AsyncClient`` connections.
+        Call this when you are done with the runner to release them
+        cleanly.  Safe to call multiple times.
+        """
+        for bridge in self._bridges.values():
+            close = getattr(bridge, "aclose", None) or getattr(bridge, "close", None)
+            if close is None:
+                continue
+            try:
+                result = close()
+                if hasattr(result, "__await__"):
+                    await result
+            except Exception as e:  # pragma: no cover — best-effort cleanup
+                logger.warning(
+                    "council.bridge.close_failed",
+                    bridge=type(bridge).__name__,
+                    error=str(e),
+                )
+        self._bridges.clear()
 
     @staticmethod
     def _build_agent_prompt(

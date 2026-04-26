@@ -16,6 +16,8 @@ from heddle.contrib.council.scorer import (
     AgentScore,
     JudgePanelScorer,
     JudgeVerdict,
+    RubricScorer,
+    RubricVerdict,
     ScoringResult,
 )
 
@@ -328,3 +330,303 @@ class TestConstructor:
         prompt = "topic={topic} agents={agents} rubric={rubric_fields} t={transcript}"
         scorer = JudgePanelScorer(judges=[AsyncMock()], scoring_prompt=prompt)
         assert scorer.scoring_prompt == prompt
+
+
+# ---------------------------------------------------------------------------
+# RubricScorer
+# ---------------------------------------------------------------------------
+
+
+def _rubric_response(
+    scores: dict[str, dict[str, float]],
+    best: str = "",
+    reasoning: str = "test",
+) -> ChatResponse:
+    """Build a ChatResponse with a per-participant rubric JSON payload."""
+    import json
+
+    body = json.dumps({"scores": scores, "best_response": best, "reasoning": reasoning})
+    return ChatResponse(content=body, model="judge-rubric")
+
+
+def _rubric_council(prompt: str = "Q") -> CouncilResult:
+    """One-round council with three named participants."""
+    return CouncilResult(
+        topic=prompt,
+        rounds_completed=1,
+        converged=False,
+        synthesis="Facilitator summary.",
+        transcript=[
+            RoundEntry(
+                round_num=1,
+                entries=[
+                    TranscriptEntry(round_num=1, agent_name="alpha", content="A says..."),
+                    TranscriptEntry(round_num=1, agent_name="beta", content="B says..."),
+                    TranscriptEntry(round_num=1, agent_name="gamma", content="C says..."),
+                ],
+            )
+        ],
+    )
+
+
+class TestRubricVerdictModel:
+    def test_defaults(self):
+        v = RubricVerdict(judge_model="m")
+        assert v.scores == {}
+        assert v.best_response == ""
+        assert v.reasoning == ""
+
+
+class TestRubricScorerConstruction:
+    def test_empty_judges_raises(self):
+        with pytest.raises(ValueError, match="at least one judge"):
+            RubricScorer(judges=[])
+
+    def test_default_rubric_fields(self):
+        scorer = RubricScorer(judges=[AsyncMock()])
+        assert "accuracy" in scorer.rubric_fields
+        assert "depth" in scorer.rubric_fields
+        # Different default than JudgePanelScorer's debate-tuned fields.
+        assert "argument_quality" not in scorer.rubric_fields
+
+
+class TestRubricScorerAliasMap:
+    def test_build_alias_map_sorts_alphabetically(self):
+        m = RubricScorer.build_alias_map(["zeta", "alpha", "mu"])
+        assert m == {"alpha": "Participant A", "mu": "Participant B", "zeta": "Participant C"}
+
+
+class TestRubricParseVerdict:
+    def _scorer(self):
+        return RubricScorer(judges=[AsyncMock()])
+
+    def test_parses_clean_payload(self):
+        scorer = self._scorer()
+        body = (
+            '{"scores": {'
+            '"Participant A": {"accuracy": 0.9, "depth": 0.8},'
+            '"Participant B": {"accuracy": 0.7, "depth": 0.6}'
+            '}, "best_response": "Participant A", "reasoning": "A is better"}'
+        )
+        v = scorer._parse_verdict(body, "judge-1", {"Participant A", "Participant B"})
+        assert v is not None
+        assert v.scores["Participant A"]["accuracy"] == 0.9
+        assert v.scores["Participant B"]["depth"] == 0.6
+        assert v.best_response == "Participant A"
+
+    def test_strips_markdown_fence(self):
+        scorer = self._scorer()
+        body = '```json\n{"scores": {"Participant A": {"a": 0.5}}}\n```'
+        v = scorer._parse_verdict(body, "j", {"Participant A"})
+        assert v is not None
+        assert v.scores["Participant A"]["a"] == 0.5
+
+    def test_drops_unknown_aliases(self):
+        scorer = self._scorer()
+        body = (
+            '{"scores": {'
+            '"Participant A": {"accuracy": 0.9},'
+            '"Participant Z": {"accuracy": 0.1}'  # not in valid set
+            "}}"
+        )
+        v = scorer._parse_verdict(body, "j", {"Participant A"})
+        assert v is not None
+        assert v.scores == {"Participant A": {"accuracy": 0.9}}
+
+    def test_drops_non_numeric_dimensions(self):
+        scorer = self._scorer()
+        body = '{"scores": {"Participant A": {"accuracy": "high", "depth": 0.7}}}'
+        v = scorer._parse_verdict(body, "j", {"Participant A"})
+        assert v is not None
+        assert v.scores == {"Participant A": {"depth": 0.7}}
+
+    def test_no_valid_scores_returns_none(self):
+        scorer = self._scorer()
+        body = '{"scores": {"Participant Z": {"a": 0.5}}}'
+        assert scorer._parse_verdict(body, "j", {"Participant A"}) is None
+
+    def test_invalid_json_returns_none(self):
+        scorer = self._scorer()
+        assert scorer._parse_verdict("not json", "j", {"Participant A"}) is None
+
+    def test_missing_scores_block_returns_none(self):
+        scorer = self._scorer()
+        assert scorer._parse_verdict('{"reasoning": "x"}', "j", {"Participant A"}) is None
+
+
+class TestRubricAggregate:
+    def test_average_across_judges(self):
+        scorer = RubricScorer(judges=[AsyncMock()])
+        verdicts = [
+            RubricVerdict(
+                judge_model="j1",
+                scores={
+                    "Participant A": {"accuracy": 0.9, "depth": 0.8},
+                    "Participant B": {"accuracy": 0.5, "depth": 0.5},
+                },
+            ),
+            RubricVerdict(
+                judge_model="j2",
+                scores={
+                    "Participant A": {"accuracy": 0.7, "depth": 0.6},
+                    "Participant B": {"accuracy": 0.5, "depth": 0.5},
+                },
+            ),
+        ]
+        alias_map = {"a_agent": "Participant A", "b_agent": "Participant B"}
+        scores = scorer._aggregate(verdicts, ["a_agent", "b_agent"], alias_map)
+        by_name = {s.agent_name: s for s in scores}
+
+        assert by_name["a_agent"].rubric["accuracy"] == pytest.approx(0.8)
+        assert by_name["a_agent"].rubric["depth"] == pytest.approx(0.7)
+        assert by_name["a_agent"].score == pytest.approx(0.75)
+        assert by_name["a_agent"].notes == "Participant A"
+
+        assert by_name["b_agent"].rubric["accuracy"] == pytest.approx(0.5)
+        assert by_name["b_agent"].score == pytest.approx(0.5)
+
+    def test_missing_alias_in_some_verdicts(self):
+        """Average ignores judges that did not score that participant."""
+        scorer = RubricScorer(judges=[AsyncMock()])
+        verdicts = [
+            RubricVerdict(judge_model="j1", scores={"Participant A": {"x": 1.0}}),
+            RubricVerdict(judge_model="j2", scores={"Participant A": {"x": 0.0}}),
+            RubricVerdict(judge_model="j3", scores={"Participant B": {"x": 0.5}}),
+        ]
+        alias_map = {"a_agent": "Participant A", "b_agent": "Participant B"}
+        scores = scorer._aggregate(verdicts, ["a_agent", "b_agent"], alias_map)
+        by_name = {s.agent_name: s for s in scores}
+        # Two judges scored A on x → mean of [1.0, 0.0] = 0.5
+        assert by_name["a_agent"].rubric["x"] == pytest.approx(0.5)
+        # Only one judge scored B → mean of [0.5] = 0.5
+        assert by_name["b_agent"].rubric["x"] == pytest.approx(0.5)
+
+    def test_no_scores_yields_zero(self):
+        scorer = RubricScorer(judges=[AsyncMock()])
+        scores = scorer._aggregate([], ["a"], {"a": "Participant A"})
+        assert scores[0].score == 0.0
+        assert scores[0].rubric == {}
+
+
+class TestRubricPickWinner:
+    def test_clear_winner_returns_gap(self):
+        scores = [
+            AgentScore(agent_name="a", score=0.9),
+            AgentScore(agent_name="b", score=0.7),
+            AgentScore(agent_name="c", score=0.5),
+        ]
+        winner, gap = RubricScorer._pick_winner(scores)
+        assert winner == "a"
+        assert gap == pytest.approx(0.2)
+
+    def test_tie_at_top_is_draw(self):
+        scores = [
+            AgentScore(agent_name="a", score=0.8),
+            AgentScore(agent_name="b", score=0.8),
+            AgentScore(agent_name="c", score=0.4),
+        ]
+        winner, gap = RubricScorer._pick_winner(scores)
+        assert winner is None
+        assert gap == 0.0
+
+    def test_all_zero_is_draw(self):
+        scores = [AgentScore(agent_name="a"), AgentScore(agent_name="b")]
+        winner, gap = RubricScorer._pick_winner(scores)
+        assert winner is None
+        assert gap == 0.0
+
+    def test_single_agent(self):
+        winner, gap = RubricScorer._pick_winner([AgentScore(agent_name="a", score=0.7)])
+        assert winner == "a"
+        assert gap == pytest.approx(0.7)
+
+
+class TestRubricScoreEndToEnd:
+    async def test_three_participants_unanimous_winner(self):
+        # Two judges, both score Participant A highest.
+        judges = [
+            AsyncMock(),
+            AsyncMock(),
+        ]
+        judges[0].send_turn.return_value = _rubric_response(
+            {
+                "Participant A": {"accuracy": 0.9, "depth": 0.85},
+                "Participant B": {"accuracy": 0.7, "depth": 0.7},
+                "Participant C": {"accuracy": 0.5, "depth": 0.5},
+            },
+            best="Participant A",
+        )
+        judges[1].send_turn.return_value = _rubric_response(
+            {
+                "Participant A": {"accuracy": 0.85, "depth": 0.9},
+                "Participant B": {"accuracy": 0.65, "depth": 0.7},
+                "Participant C": {"accuracy": 0.55, "depth": 0.45},
+            },
+            best="Participant A",
+        )
+
+        scorer = RubricScorer(judges=judges, rubric_fields=["accuracy", "depth"])
+        result = await scorer.score(_rubric_council())
+
+        assert result.winner == "alpha"  # alphabetical sort puts alpha first → Participant A
+        assert result.win_margin > 0
+        # Per-agent rubric averaged across judges.
+        by_name = {a.agent_name: a for a in result.agent_scores}
+        assert by_name["alpha"].rubric["accuracy"] == pytest.approx((0.9 + 0.85) / 2)
+        assert by_name["alpha"].score == pytest.approx(((0.9 + 0.85) / 2 + (0.85 + 0.9) / 2) / 2)
+        # Alias mapping is in metadata for the reveal.
+        assert result.metadata["alias_map"] == {
+            "alpha": "Participant A",
+            "beta": "Participant B",
+            "gamma": "Participant C",
+        }
+        # best_response votes mapped back to real agent names.
+        assert result.metadata["best_response_votes"] == {"alpha": 2}
+        # Raw verdicts stored for audit.
+        assert len(result.metadata["rubric_verdicts"]) == 2
+
+    async def test_judges_anonymized_at_send(self):
+        """The judge prompt must NOT contain the real agent names."""
+        judge = AsyncMock()
+        judge.send_turn.return_value = _rubric_response(
+            {
+                "Participant A": {"accuracy": 0.5},
+                "Participant B": {"accuracy": 0.5},
+                "Participant C": {"accuracy": 0.5},
+            }
+        )
+        scorer = RubricScorer(judges=[judge], rubric_fields=["accuracy"])
+        await scorer.score(_rubric_council())
+
+        sent = judge.send_turn.await_args.kwargs["message"]
+        assert "alpha" not in sent
+        assert "beta" not in sent
+        assert "gamma" not in sent
+        assert "PARTICIPANT A" in sent  # transcript header uses upper-case alias
+
+    async def test_failed_judge_does_not_block_aggregation(self):
+        good = AsyncMock()
+        good.send_turn.return_value = _rubric_response(
+            {
+                "Participant A": {"accuracy": 0.9},
+                "Participant B": {"accuracy": 0.4},
+                "Participant C": {"accuracy": 0.4},
+            },
+            best="Participant A",
+        )
+        bad = AsyncMock()
+        bad.send_turn.side_effect = RuntimeError("network down")
+        scorer = RubricScorer(judges=[good, bad], rubric_fields=["accuracy"])
+
+        result = await scorer.score(_rubric_council())
+        assert result.metadata["verdict_count"] == 1
+        assert result.winner == "alpha"
+
+    async def test_all_judges_fail_returns_draw(self):
+        bad = AsyncMock()
+        bad.send_turn.side_effect = RuntimeError("boom")
+        scorer = RubricScorer(judges=[bad, bad])
+        result = await scorer.score(_rubric_council())
+        assert result.winner is None
+        assert result.win_margin == 0.0
+        assert all(s.score == 0.0 for s in result.agent_scores)

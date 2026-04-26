@@ -27,6 +27,8 @@ from heddle.contrib.council.scorer import (
     AgentScore,
     JudgePanelScorer,
     JudgeVerdict,
+    RubricScorer,
+    RubricVerdict,
     Scorer,
     ScoringResult,
 )
@@ -48,6 +50,8 @@ __all__ = [
     "Matchup",
     "MatchupResult",
     "RoundEntry",
+    "RubricScorer",
+    "RubricVerdict",
     "Scorer",
     "ScoringResult",
     "TournamentResult",

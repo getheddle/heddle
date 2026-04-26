@@ -100,37 +100,44 @@ scorer = JudgePanelScorer(
 
 - **Council** — multi-round structured debate via a built-in
   `structured_debate` protocol
-- **ChatBridge** — pluggable, session-aware adapters for Anthropic,
-  OpenAI, Ollama, or human-in-the-loop
+- **Real per-debater ChatBridges** — every debater is dispatched
+  through its own session-aware ChatBridge (Anthropic, OpenAI, LM
+  Studio, Ollama) routed by model name via
+  `heddle.contrib.chatbridge.chatbridge_spec`. Model differences are
+  genuine, not label-only.
 - **Scorer** — `JudgePanelScorer` aggregates panel verdicts; bring
   your own scorer by subclassing `Scorer`
 - **Tournament** — `TournamentRunner` schedules round-robin matchups
   with concurrent execution
-- **Mixed-vendor judging** — judges can come from a different family
-  than debaters to reduce family-bias (Mazur's anti-bias rule)
+- **Mixed-vendor judging** — judges should come from a different
+  family than debaters to reduce family-bias (Mazur's anti-bias rule)
 
 ## Customizing
 
 **Add or change topics.** Edit `examples/debate-arena/topics.txt` or
 pass `--topics "topic 1, topic 2"` directly on the command line.
 
-**Single-provider mode.** If all your debaters come from the same
-provider, that's fine. Heddle's `CouncilRunner` picks a backend by
-tier — model labels become identifiers in the system prompt, and the
-debate hinges on assigned roles and any persona prompt the debater
-factory injects.
+**Same-provider mode.** Both debaters can be from the same provider —
+e.g. `claude-sonnet-4-20250514,claude-haiku-4-5-20251001` — and
+they will still produce genuinely different responses because each
+runs through its own ChatBridge with its own model id. The honest
+inverse of the old "label-only" mode.
 
-**Custom debater factory.** The default factory just labels each
-debater with the model name. Replace it for persona-differentiated
-debates or per-topic prompt customization:
+**Custom debater factory.** The default factory wires each debater
+to a ChatBridge picked from the model name. Replace it for
+persona-differentiated debates or per-topic prompt customization:
 
 ```python
+from heddle.contrib.chatbridge.discover import chatbridge_spec
+
 def my_factory(model_key: str, role: str, topic: str) -> AgentConfig:
+    bridge_path, bridge_kwargs = chatbridge_spec(model_key)
     return AgentConfig(
         name=f"debater_{model_key}",
-        worker_type="reviewer",
-        tier=ModelTier.STANDARD,
-        role=f"You are {model_key}, a debater specializing in {topic_field(topic)}. {role}",
+        bridge=bridge_path,
+        bridge_config=bridge_kwargs,
+        tier=ModelTier.STANDARD,  # ignored when bridge is set
+        role=f"You are {model_key}, specializing in {topic_field(topic)}. {role}",
         max_tokens_per_turn=1500,
     )
 ```

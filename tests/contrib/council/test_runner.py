@@ -189,3 +189,226 @@ class TestCouncilRunner:
         entries = result.transcript[0].entries
         assert entries[0].content == "Local view"
         assert entries[1].content == "Frontier view"
+
+
+# ---------------------------------------------------------------------------
+# Bridge support
+# ---------------------------------------------------------------------------
+
+
+class _StubBridge:
+    """Minimal ChatBridge double that records calls and returns canned content.
+
+    The real :class:`ChatBridge` interface (``send_turn``,
+    ``get_session_info``, ``close_session``) is built around per-session
+    state.  The runner only needs ``send_turn`` for one-shot turns, so
+    this stub reduces the test fixture to the surface that's actually
+    exercised.
+    """
+
+    def __init__(self, content: str = "Bridge response", model: str = "stub-model"):
+        from heddle.contrib.chatbridge.base import ChatResponse
+
+        self.content = content
+        self.model = model
+        self._response_cls = ChatResponse
+        self.calls: list[dict] = []
+        self.closed = False
+
+    async def send_turn(self, message, context, session_id):
+        self.calls.append({"message": message, "context": context, "session_id": session_id})
+        return self._response_cls(
+            content=self.content,
+            model=self.model,
+            token_usage={"prompt_tokens": 10, "completion_tokens": 5},
+            stop_reason="stop",
+            session_id=session_id,
+        )
+
+    async def aclose(self):  # exercised by CouncilRunner.aclose()
+        self.closed = True
+
+
+class TestBridgeSupport:
+    """The runner dispatches through ``agent.bridge`` when set."""
+
+    async def test_bridge_dispatch_short_circuits_backend(self, monkeypatch):
+        # If the runner reached the backend path, this would raise — no
+        # tier backend was provided.
+        bridge = _StubBridge(content="From bridge", model="bridge-model")
+
+        # Patch the dotted-path import so we control the bridge instance.
+        import heddle.contrib.council.runner as runner_mod
+
+        captured: dict = {}
+
+        class _BridgeFactory:
+            def __init__(self, **kwargs):
+                captured["kwargs"] = kwargs
+
+            async def send_turn(self, *a, **kw):
+                return await bridge.send_turn(*a, **kw)
+
+            async def aclose(self):
+                bridge.closed = True
+
+        fake_module = type("M", (), {"FakeBridge": _BridgeFactory})
+        monkeypatch.setattr(
+            runner_mod.importlib,
+            "import_module",
+            lambda name: fake_module if name == "fake.bridge" else __import__(name),
+        )
+
+        config = CouncilConfig(
+            name="bridged",
+            max_rounds=1,
+            convergence={"method": "none"},
+            agents=[
+                {
+                    "name": "agent_a",
+                    "bridge": "fake.bridge.FakeBridge",
+                    "bridge_config": {"model": "bridge-model"},
+                    "tier": "standard",
+                },
+                {
+                    "name": "agent_b",
+                    "bridge": "fake.bridge.FakeBridge",
+                    "bridge_config": {"model": "bridge-model"},
+                    "tier": "standard",
+                },
+            ],
+            facilitator={"tier": "standard"},
+        )
+        runner = CouncilRunner(backends={"standard": _mock_backend()})
+
+        result = await runner.run("Topic", config=config)
+        await runner.aclose()
+
+        assert result.rounds_completed == 1
+        # All entries came from the bridge — content matches the stub.
+        for entry in result.transcript[0].entries:
+            assert entry.content == "From bridge"
+            assert entry.model_used == "bridge-model"
+            assert entry.token_count == 15  # 10 prompt + 5 completion
+
+        # System prompt was injected into the bridge constructor by
+        # default (since bridge_config didn't supply one).
+        assert "system_prompt" in captured["kwargs"]
+        assert captured["kwargs"]["model"] == "bridge-model"
+
+    async def test_bridge_caching_uses_one_instance_per_agent(self, monkeypatch):
+        import heddle.contrib.council.runner as runner_mod
+
+        instance_count = {"n": 0}
+        bridge = _StubBridge()
+
+        class _BridgeFactory:
+            def __init__(self, **kwargs):
+                instance_count["n"] += 1
+
+            async def send_turn(self, *a, **kw):
+                return await bridge.send_turn(*a, **kw)
+
+            async def aclose(self):
+                pass
+
+        fake_module = type("M", (), {"FakeBridge": _BridgeFactory})
+        monkeypatch.setattr(
+            runner_mod.importlib,
+            "import_module",
+            lambda name: fake_module if name == "fake.bridge" else __import__(name),
+        )
+
+        config = CouncilConfig(
+            name="cached",
+            max_rounds=2,
+            convergence={"method": "none"},
+            agents=[
+                {
+                    "name": "only_agent",
+                    "bridge": "fake.bridge.FakeBridge",
+                    "bridge_config": {},
+                },
+                {
+                    "name": "second_agent",
+                    "bridge": "fake.bridge.FakeBridge",
+                    "bridge_config": {},
+                },
+            ],
+            facilitator={"tier": "standard"},
+        )
+        runner = CouncilRunner(backends={"standard": _mock_backend()})
+        await runner.run("Topic", config=config)
+
+        # 2 agents, 2 rounds = 4 turns, but only 2 bridge instances
+        # (one per agent, cached across rounds).
+        assert instance_count["n"] == 2
+        assert len(bridge.calls) == 4
+
+    async def test_invalid_bridge_path_returns_error_entry(self):
+        config = CouncilConfig(
+            name="bad",
+            max_rounds=1,
+            convergence={"method": "none"},
+            agents=[
+                {
+                    "name": "agent_a",
+                    "bridge": "no.such.module.NoSuchClass",
+                },
+                {
+                    "name": "agent_b",
+                    "bridge": "no.such.module.NoSuchClass",
+                },
+            ],
+            facilitator={"tier": "standard"},
+        )
+        runner = CouncilRunner(backends={"standard": _mock_backend()})
+        result = await runner.run("Topic", config=config)
+
+        for entry in result.transcript[0].entries:
+            assert "[ERROR" in entry.content
+            assert "no.such.module" in entry.content
+
+    async def test_aclose_closes_cached_bridges(self, monkeypatch):
+        import heddle.contrib.council.runner as runner_mod
+
+        bridges_made: list = []
+
+        class _BridgeFactory:
+            def __init__(self, **kwargs):
+                self.closed = False
+                bridges_made.append(self)
+
+            async def send_turn(self, *a, **kw):
+                from heddle.contrib.chatbridge.base import ChatResponse
+
+                return ChatResponse(content="ok", model="x", token_usage={})
+
+            async def aclose(self):
+                self.closed = True
+
+        fake_module = type("M", (), {"FakeBridge": _BridgeFactory})
+        monkeypatch.setattr(
+            runner_mod.importlib,
+            "import_module",
+            lambda name: fake_module if name == "fake.bridge" else __import__(name),
+        )
+
+        config = CouncilConfig(
+            name="closes",
+            max_rounds=1,
+            convergence={"method": "none"},
+            agents=[
+                {"name": "agent_a", "bridge": "fake.bridge.FakeBridge"},
+                {"name": "agent_b", "bridge": "fake.bridge.FakeBridge"},
+            ],
+            facilitator={"tier": "standard"},
+        )
+        runner = CouncilRunner(backends={"standard": _mock_backend()})
+        await runner.run("Topic", config=config)
+        await runner.aclose()
+
+        assert len(bridges_made) == 2
+        assert all(b.closed for b in bridges_made)
+        # Cache cleared after aclose.
+        assert runner._bridges == {}

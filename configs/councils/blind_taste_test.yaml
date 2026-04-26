@@ -1,0 +1,65 @@
+name: "blind_taste_test"
+# Blind judging is the showcase, not multi-round Delphi.  With a
+# single round and empty peer visibility, every protocol behaves the
+# same — round_robin is the most precise label for what actually
+# happens here.  Anonymization is enforced at SCORE time by
+# RubricScorer (see examples/blind-taste-test/run.py).
+protocol: "round_robin"
+max_rounds: 1
+timeout_seconds: 300
+
+# No convergence — single-round single-shot answers are not iterating
+# toward agreement.
+convergence:
+  method: "none"
+
+# These three slots are placeholders.  examples/blind-taste-test/run.py
+# replaces them per matchup with real ChatBridge-backed agents (one
+# per ``--models`` entry).  ``sees_transcript_from: []`` keeps every
+# response strictly independent — no agent sees any other agent's
+# answer, so judging is genuinely blind comparison.
+agents:
+  - name: "taster_a"
+    worker_type: "reviewer"
+    tier: "standard"
+    role: >
+      You are a participant in a blind evaluation.  Answer the
+      question thoughtfully, clearly, and substantively.  Your
+      response will be judged anonymously — focus on quality of
+      content, not style tricks or self-identification.
+    sees_transcript_from: []
+    max_tokens_per_turn: 1500
+
+  - name: "taster_b"
+    worker_type: "reviewer"
+    tier: "standard"
+    role: >
+      You are a participant in a blind evaluation.  Answer the
+      question thoughtfully, clearly, and substantively.  Your
+      response will be judged anonymously — focus on quality of
+      content, not style tricks or self-identification.
+    sees_transcript_from: []
+    max_tokens_per_turn: 1500
+
+  - name: "taster_c"
+    worker_type: "reviewer"
+    tier: "standard"
+    role: >
+      You are a participant in a blind evaluation.  Answer the
+      question thoughtfully, clearly, and substantively.  Your
+      response will be judged anonymously — focus on quality of
+      content, not style tricks or self-identification.
+    sees_transcript_from: []
+    max_tokens_per_turn: 1500
+
+facilitator:
+  tier: "standard"
+  synthesis_prompt: |
+    Briefly summarize the three anonymous responses (one short
+    paragraph total).  Note where they agreed and where they
+    diverged — but do NOT rank, score, or speculate about which
+    model produced which response.  The judge panel scores
+    separately; your job is descriptive synthesis only.
+  convergence_prompt: |
+    Rate the level of agreement among the participants from 0.0 to 1.0.
+    Respond with JSON only: {"score": 0.X, "reason": "..."}

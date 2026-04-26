@@ -48,6 +48,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from heddle.contrib.chatbridge.discover import chatbridge_spec, make_chatbridge
 from heddle.contrib.council.config import load_council_config
 from heddle.contrib.council.runner import CouncilRunner
 from heddle.contrib.council.schemas import AgentConfig
@@ -79,50 +80,26 @@ def color_for(model: str, models: list[str]) -> str:
     return MODEL_PALETTE[models.index(model) % len(MODEL_PALETTE)]
 
 
-# -- Provider detection ----------------------------------------------------
-
-
-def make_chatbridge(model_name: str) -> ChatBridge:
-    """Build a ChatBridge by sniffing the model name.
-
-    Naming conventions:
-      - ``claude*`` or ``anthropic/<model>`` → AnthropicChatBridge
-      - ``gpt*`` or ``openai/<model>`` → OpenAIChatBridge
-      - anything else → OllamaChatBridge (local)
-    """
-    name = model_name.strip()
-    lower = name.lower()
-    if lower.startswith("claude") or lower.startswith("anthropic/"):
-        from heddle.contrib.chatbridge.anthropic import AnthropicChatBridge
-
-        model = name.split("/", 1)[1] if "/" in name else name
-        return AnthropicChatBridge(model=model)
-    if lower.startswith("gpt") or lower.startswith("openai/"):
-        from heddle.contrib.chatbridge.openai import OpenAIChatBridge
-
-        model = name.split("/", 1)[1] if "/" in name else name
-        return OpenAIChatBridge(model=model)
-    from heddle.contrib.chatbridge.ollama import OllamaChatBridge
-
-    return OllamaChatBridge(model=name)
-
-
 # -- Default agent_factory --------------------------------------------------
 
 
 def default_agent_factory(model_key: str, role: str, topic: str) -> AgentConfig:
-    """Build a debater AgentConfig from a model label.
+    """Build a debater AgentConfig backed by a real :class:`ChatBridge`.
 
-    The label is woven into the system prompt so debaters can be told
-    apart even when sharing a backend.  The runner overrides ``name``
-    to match the template's ``pro`` / ``con`` slot, so the scorer's
-    winner field stays stable.
+    Model differentiation is genuine, not just label-only — each
+    debater is dispatched through its own ChatBridge (Anthropic /
+    OpenAI / LM Studio / Ollama, picked from the model name by
+    :func:`chatbridge_spec`).  The runner overrides ``name`` to match
+    the template's ``pro`` / ``con`` slot, so the scorer's winner
+    field stays stable across matchups.
     """
     del topic  # default factory does not customize per topic
+    bridge_path, bridge_kwargs = chatbridge_spec(model_key)
     return AgentConfig(
         name=f"debater_{model_key}",
-        worker_type="reviewer",
-        tier=ModelTier.STANDARD,
+        bridge=bridge_path,
+        bridge_config=bridge_kwargs,
+        tier=ModelTier.STANDARD,  # ignored when ``bridge`` is set
         role=f"You are debater '{model_key}'. {role}",
         max_tokens_per_turn=1000,
     )
