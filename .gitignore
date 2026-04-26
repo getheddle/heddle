@@ -17,3 +17,11 @@ site/
 
 # Environment
 .env
+
+# Local-only design + agent session prompts (queued future work).
+# See "Session-starter queue" in CLAUDE.md for the convention.
+session-starters/
+
+# Local-only Claude Code prompt scratchpad (queued before being
+# applied to the repo).  Not part of any deliverable.
+CLAUDE_CODE_PROMPT.md

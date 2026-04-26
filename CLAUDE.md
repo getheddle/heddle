@@ -698,6 +698,10 @@ When you add a new provider/runtime that has its own quirks, append an entry her
 4. **Local-runtime registry** — replace the hardcoded LM Studio / Ollama branches in `worker/backends.py:_select_local_backend`, `cli/setup.py`, `cli/preflight.py`, `cli/rag.py`, `workshop/app.py`, and `mcp/session_bridge.py` with a data-driven `LocalRuntime` registry. Anchor design + migration map are in the docstring of `_select_local_backend`. Trigger: adding a third runtime (Exo on `:52415/v1`, vLLM, llama.cpp server, MLX-server, …).
 5. **Thinking-mode config knob** — `disable_thinking=True` constructor flag on `OpenAICompatibleBackend`/`OpenAIChatBridge` (and similarly for Ollama and Anthropic) that maps to provider-specific request params instead of relying on the `reasoning_content` rescue. See `TODO(thinking-config)`, `TODO(anthropic-thinking)`, `TODO(ollama-think-tags)`. Trigger: when an example needs strict JSON output from a thinking model, or when reasoning-token cost becomes a tracked metric.
 
+## Session-starter queue
+
+`session-starters/` (gitignored) holds the user's queue of design-chat starters and the matching Claude Code prompts that follow from them. The convention is one file per queued session, named with a sortable letter prefix (`A-…`, `B-…`, …) so the order is obvious in the directory listing. Files in here are inputs to future work, not deliverables — they belong on the user's machine only and never enter git history. Treat the directory the same way as `CLAUDE_CODE_PROMPT.md` (also gitignored): read it for context when the user references "the next session" or asks you to start on a specific letter; do not commit it; do not echo its contents into a commit message verbatim. When a session-starter has produced shipped work, the corresponding file may be deleted, archived locally, or left in place — that is the user's choice, not a cleanup task for the agent.
+
 ## What NOT to do
 
 - Don't add shared mutable state between workers. Workers are isolated actors.
