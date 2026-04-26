@@ -11,13 +11,13 @@ Heddle Council + ChatBridge primitives, in a few hundred lines of code.
 ## What it does
 
 1. Generates a round-robin schedule: every model debates every other
-   model on every topic, both sides (with sides swapped).  Three
+   model on every topic, both sides (with sides swapped). Three
    models and two topics produces 12 matchups.
 2. For each matchup, runs a structured debate via Heddle's Council
    framework: PRO and CON take turns over `max_rounds` rounds, then a
    facilitator produces a balanced summary.
 3. Sends the full transcript to a panel of judge LLMs (each a
-   `ChatBridge`).  Judges return JSON with the winner, a 0..1 margin,
+   `ChatBridge`). Judges return JSON with the winner, a 0..1 margin,
    and rubric scores.
 4. Aggregates judge verdicts by **majority vote** — a 2-2 or 1-1-1
    split is recorded as a draw, not broken by margin.
@@ -50,7 +50,7 @@ Each judge is a separate `ChatBridge` — a session-aware LLM client.
 The scorer formats the full debate transcript (turns and any audience
 interjections), sends it to all judges in parallel via
 `asyncio.gather`, parses each JSON verdict, and aggregates by majority
-vote.  Tied verdicts are recorded as draws.
+vote. Tied verdicts are recorded as draws.
 
 The default rubric covers:
 
@@ -111,17 +111,17 @@ scorer = JudgePanelScorer(
 
 ## Customizing
 
-**Add or change topics.**  Edit `examples/debate-arena/topics.txt` or
+**Add or change topics.** Edit `examples/debate-arena/topics.txt` or
 pass `--topics "topic 1, topic 2"` directly on the command line.
 
-**Single-provider mode.**  If all your debaters come from the same
-provider, that's fine.  Heddle's `CouncilRunner` picks a backend by
+**Single-provider mode.** If all your debaters come from the same
+provider, that's fine. Heddle's `CouncilRunner` picks a backend by
 tier — model labels become identifiers in the system prompt, and the
 debate hinges on assigned roles and any persona prompt the debater
 factory injects.
 
-**Custom debater factory.**  The default factory just labels each
-debater with the model name.  Replace it for persona-differentiated
+**Custom debater factory.** The default factory just labels each
+debater with the model name. Replace it for persona-differentiated
 debates or per-topic prompt customization:
 
 ```python
@@ -135,11 +135,11 @@ def my_factory(model_key: str, role: str, topic: str) -> AgentConfig:
     )
 ```
 
-**Concurrency.**  `--concurrency 4` runs four matchups in parallel.
+**Concurrency.** `--concurrency 4` runs four matchups in parallel.
 API rate limits typically bite first; start at 1 and increase only if
 you have headroom.
 
-**Custom rubric.**  Pass `rubric_fields=[...]` and a matching
-`scoring_prompt=` template to `JudgePanelScorer`.  Your prompt must
+**Custom rubric.** Pass `rubric_fields=[...]` and a matching
+`scoring_prompt=` template to `JudgePanelScorer`. Your prompt must
 include `{transcript}`, `{topic}`, `{agents}`, and `{rubric_fields}`
 placeholders.
