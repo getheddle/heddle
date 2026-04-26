@@ -27,6 +27,9 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import httpx
+import structlog
+
+logger = structlog.get_logger()
 
 
 class LLMBackend(ABC):
@@ -132,7 +135,21 @@ class AnthropicBackend(LLMBackend):
         resp.raise_for_status()
         data = resp.json()
 
-        # Parse response — may contain text blocks, tool_use blocks, or both
+        # Parse response — may contain text blocks, tool_use blocks,
+        # and (when extended thinking is enabled by the caller)
+        # ``thinking`` blocks.  We currently only surface text and
+        # tool_use; thinking blocks are silently dropped.  This is
+        # safe because Anthropic's extended thinking is opt-in (the
+        # request body must include ``thinking={"type": "enabled",
+        # "budget_tokens": N}``), and Heddle does not enable it
+        # today — see TODO below.
+        #
+        # TODO(anthropic-thinking): when callers can opt in to
+        # Anthropic extended thinking via a backend parameter (e.g.
+        # ``thinking_budget_tokens=4096``), surface the
+        # ``thinking`` blocks separately on the response dict
+        # (mirror the OpenAI-compat ``reasoning_content`` field).
+        # See https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
         content = None
         tool_calls = None
 
@@ -174,6 +191,25 @@ class OllamaBackend(LLMBackend):
 
     Note: Ollama's token counts (prompt_eval_count, eval_count) may be
     absent for some models; we default to 0 in that case.
+
+    Thinking-model quirk:
+        Ollama serves several thinking-style models (qwen3*,
+        deepseek-r1*, …) that emit their reasoning trace inline as
+        ``<think>...</think>`` tags inside ``message.content``.  We
+        currently pass the content through unmodified — the tags
+        end up in the agent's response and downstream consumers
+        (workers, judges) see them.  For most council use cases
+        this is fine; for strict-JSON workers it can corrupt
+        output.
+
+    TODO(ollama-think-tags): expose a ``strip_think_tags=True``
+    constructor flag (or surface ``reasoning_content`` similarly to
+    :class:`OpenAICompatibleBackend`) that splits ``<think>...</think>``
+    out of ``content`` and returns it on a separate response key.
+    Most newer Ollama builds also support
+    ``options.think: false`` (or model-specific
+    ``chat_template_kwargs={"enable_thinking": false}``) to disable
+    the trace at request time — wire that through the same flag.
     """
 
     def __init__(self, model: str = "llama3.2:3b", base_url: str = "http://ollama:11434") -> None:
@@ -343,16 +379,51 @@ class OpenAICompatibleBackend(LLMBackend):
         choice = data["choices"][0]
         message = choice.get("message", {})
         content = message.get("content")
-        # Some OpenAI-compatible providers (LM Studio for
-        # thinking/reasoning models, DeepSeek, vLLM with reasoning
-        # parsers) return the model's chain-of-thought separately on
-        # ``message.reasoning_content`` while leaving ``content``
-        # empty.  Fall back to it so workers don't silently lose
-        # output; surface the raw value too for callers that want to
-        # log or strip it.
+        # Thinking-model quirk: several OpenAI-compatible providers
+        # (LM Studio for qwen3.*/deepseek-r1, vLLM with a reasoning
+        # parser, DeepSeek's first-party API) split the model's
+        # chain-of-thought onto ``message.reasoning_content`` while
+        # leaving ``message.content`` empty.  Naïve OpenAI parsers
+        # treat the empty string as the model's reply and drop the
+        # actual output on the floor.  We rescue it so workers
+        # don't silently lose output, AND surface the raw value on
+        # the response dict so callers can log or strip it.
+        #
+        # The rescued content is the ENTIRE thinking trace, which
+        # is verbose internal monologue — not what an operator
+        # usually wants displayed to end-users.  See
+        # docs/TROUBLESHOOTING.md "Thinking model returns empty
+        # content" for the available knobs (qwen ``/no_think`` /
+        # ``enable_thinking: false``, deepseek-r1 prompt-side
+        # disable, OpenAI ``reasoning_effort``, etc.).
+        #
+        # TODO(thinking-config): expose a ``disable_thinking=True``
+        # constructor flag that maps to provider-appropriate
+        # request params (``extra_body={"enable_thinking": False}``
+        # for qwen via vLLM/LM Studio, ``reasoning_effort="low"``
+        # for OpenAI o-series) so callers can opt out of the
+        # reasoning trace at request time instead of paying for
+        # tokens we then have to rescue.  The OpenAI Chat
+        # Completions schema does not standardize this — it has to
+        # be provider-specific.
         reasoning_content = message.get("reasoning_content") or None
         if not content and reasoning_content:
             content = reasoning_content
+            # Operator-relevant signal: the model produced no
+            # visible answer and we are surfacing its monologue as
+            # a substitute.  Useful for spotting silently-broken
+            # configs (max_tokens too low, system prompt
+            # interfering, etc.) without paging on every successful
+            # call.
+            logger.info(
+                "backend.reasoning_content.rescue",
+                gen_ai_system=self.gen_ai_system,
+                model=self.model,
+                response_model=data.get("model"),
+                completion_tokens=data.get("usage", {}).get("completion_tokens", 0),
+                max_tokens=max_tokens,
+                reasoning_chars=len(reasoning_content),
+            )
         tool_calls = None
 
         raw_calls = message.get("tool_calls")

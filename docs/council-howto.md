@@ -178,6 +178,23 @@ python examples/town-hall/run.py \
 Type messages while the debate runs; your input appears in the next
 agent's context under `[AUDIENCE REACTIONS]`.
 
+### Post-hoc scoring
+
+Once a council finishes, two scorers can grade the result. Both
+implement the `Scorer` ABC; both return a `ScoringResult`.
+
+| Scorer | Use case |
+|--------|---------|
+| `JudgePanelScorer` | Adversarial / two-side debates. Each judge picks one winner; the panel aggregates by majority vote (ties → draws). |
+| `RubricScorer` | Independent per-participant evaluation (Q&A panels, blind taste tests). Judges grade *every* participant on *every* rubric dimension. Anonymizes the transcript at score time so judges grade content, not branding; the alias map (`agent_name → "Participant A/B/C"`) lands in `metadata` for the caller's reveal step. |
+
+`TournamentRunner` schedules round-robin matchups across many
+models / topics, dispatches each through the configured scorer, and
+aggregates a leaderboard plus a head-to-head matchup matrix. Both
+the [debate-arena](../examples/debate-arena/) and
+[blind-taste-test](../examples/blind-taste-test/) examples are full
+working demonstrations.
+
 ---
 
 ## ChatBridge — external LLM adapters
@@ -186,13 +203,20 @@ Not every council participant needs to be a standard Heddle worker.
 ChatBridge adapters let you bring in external LLM providers or human
 participants as full council members.
 
+`CouncilRunner` dispatches each agent through its configured bridge
+when `agent.bridge` is set (cached per agent name across rounds, so
+session history is preserved). When `agent.bridge` is unset, the
+runner falls back to the tier-based `LLMBackend` path. Mixing both
+in one council is fine — agents are routed independently.
+
 ### Available adapters
 
 | Adapter | Provider | Key feature |
 |---------|----------|-------------|
 | `AnthropicChatBridge` | Claude API | Session-aware, messages accumulate |
-| `OpenAIChatBridge` | OpenAI / ChatGPT | GPT-4o, GPT-4, etc. |
+| `OpenAIChatBridge` | OpenAI / ChatGPT | GPT-4o, GPT-4, etc.; rescues thinking-model output from `reasoning_content` |
 | `OllamaChatBridge` | Ollama (local) | Local models with conversation history |
+| `LMStudioChatBridge` | LM Studio | OpenAI-compatible `/v1` server (MLX or llama.cpp); subclass of `OpenAIChatBridge` |
 | `ManualChatBridge` | Human | Callback or queue-based, with timeout |
 
 ### Using a ChatBridge agent in a council
@@ -204,9 +228,16 @@ agents:
     bridge_config:
       model: "gpt-4o"
       api_key_env: "OPENAI_API_KEY"
-    tier: "standard"
+    tier: "standard"  # ignored when ``bridge`` is set
     role: "External perspective — challenge assumptions from a different model's viewpoint"
+    max_tokens_per_turn: 1500   # propagated to the bridge unless bridge_config overrides
 ```
+
+For programmatic construction, `chatbridge_spec(model_name)` from
+`heddle.contrib.chatbridge.discover` returns `(dotted_path, kwargs)`
+ready to drop into an `AgentConfig` — the [debate-arena](../examples/debate-arena/)
+and [blind-taste-test](../examples/blind-taste-test/) examples use it
+to wire one bridge per debater from a CLI `--models` list.
 
 ### Human-in-the-loop
 

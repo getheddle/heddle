@@ -9,8 +9,11 @@ import os
 from typing import Any
 
 import httpx
+import structlog
 
 from heddle.contrib.chatbridge.base import ChatBridge, ChatResponse, SessionInfo
+
+logger = structlog.get_logger()
 
 
 class OpenAIChatBridge(ChatBridge):
@@ -77,14 +80,37 @@ class OpenAIChatBridge(ChatBridge):
         choice = data.get("choices", [{}])[0]
         message = choice.get("message", {})
         content = message.get("content") or ""
-        # Thinking-style models (qwen3.5, deepseek-r1, …) routed via
-        # LM Studio etc. emit their visible answer on
-        # ``reasoning_content`` while leaving ``content`` empty.  Fall
-        # back so callers don't get an empty string; the raw value is
-        # also surfaced on ``ChatResponse.reasoning_content``.
+        # Thinking-model quirk (mirrors OpenAICompatibleBackend in
+        # heddle.worker.backends): some OpenAI-compatible providers
+        # (LM Studio for qwen3.*/deepseek-r1, vLLM with a reasoning
+        # parser, DeepSeek's first-party API) split the model's
+        # chain-of-thought onto ``message.reasoning_content`` while
+        # leaving ``message.content`` empty.  We rescue it so
+        # callers don't get a silent empty string, and surface the
+        # raw value on ``ChatResponse.reasoning_content`` so
+        # operators can log or strip it.  See
+        # docs/TROUBLESHOOTING.md "Thinking model returns empty
+        # content" for provider knobs that disable the trace at
+        # request time.
+        #
+        # TODO(thinking-config): expose a ``disable_thinking=True``
+        # constructor flag (paired with the matching backend
+        # parameter) that maps to provider-specific request params
+        # — qwen ``extra_body={"enable_thinking": False}`` via
+        # LM Studio / vLLM, OpenAI ``reasoning_effort="low"``, etc.
+        # See the equivalent TODO in OpenAICompatibleBackend.
         reasoning_content = message.get("reasoning_content") or None
         if not content and reasoning_content:
             content = reasoning_content
+            logger.info(
+                "chatbridge.reasoning_content.rescue",
+                bridge_type=self.bridge_type,
+                model=self._model,
+                response_model=data.get("model"),
+                completion_tokens=data.get("usage", {}).get("completion_tokens", 0),
+                max_tokens=self._max_tokens,
+                reasoning_chars=len(reasoning_content),
+            )
 
         # Append assistant response to session history.
         session.messages.append({"role": "assistant", "content": content})

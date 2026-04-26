@@ -164,18 +164,30 @@ src/heddle/
       protocol.py         # DiscussionProtocol ABC + RoundRobin, StructuredDebate, Delphi
       convergence.py      # ConvergenceDetector — none, position_stability, llm_judge
       runner.py           # CouncilRunner — NATS-free execution (like WorkerTestRunner)
+                          #   Honours agent.bridge for per-agent ChatBridge dispatch
+                          #   (cached per agent across rounds), with aclose() for cleanup
+      scorer.py           # Scorer ABC + JudgePanelScorer (debate, single-winner) +
+                          #   RubricScorer (blind per-participant per-dimension)
+      tournament.py       # TournamentRunner — round-robin matchup generation,
+                          #   concurrent execution, leaderboard + matchup matrix
     subprocess/
       backend.py          # SubprocessBackend — wrap CLI tools as Heddle workers
                           #   Four io_modes: json_stdio, stdin_stdout, args_stdout, file_file
                           #   Error hierarchy: SubprocessBackendError, Timeout, Exit, OutputParse
     chatbridge/           # External chat/LLM session adapters
-      base.py             # ChatBridge ABC, ChatResponse, SessionInfo
+      base.py             # ChatBridge ABC, ChatResponse (with reasoning_content), SessionInfo
       anthropic.py        # AnthropicChatBridge — Claude API with session history
-      openai.py           # OpenAIChatBridge — OpenAI/ChatGPT with session history
+      openai.py           # OpenAIChatBridge — OpenAI/ChatGPT with session history;
+                          #   rescues thinking-model output from message.reasoning_content
       ollama.py           # OllamaChatBridge — local Ollama models with session history
       lmstudio.py         # LMStudioChatBridge — LM Studio's OpenAI-compatible /v1 server
+                          #   (subclass of OpenAIChatBridge — inherits the rescue)
       manual.py           # ManualChatBridge — human-in-the-loop (callback or queue)
       worker.py           # ChatBridgeBackend — wraps any ChatBridge as ProcessingBackend
+      discover.py         # chatbridge_spec(model_id) → (dotted_path, kwargs);
+                          #   make_chatbridge(model_id) — model-name → bridge routing
+                          #   shared by examples (claude*/gpt*/lmstudio/ → branded;
+                          #   else Ollama)
     rag/
       backends.py         # Processor backends: IngestorBackend, MuxBackend, ChunkerBackend,
                           #   VectorStoreBackend (configurable store_class / ingestor_class)
@@ -288,7 +300,8 @@ tests/                    # 82 test files, 1844 unit tests + 1 integration test 
   test_deepeval_worker.py                         # @pytest.mark.deepeval (DeepEval + Ollama judge)
   conftest.py                                     # Shared fixtures: skip_no_deepeval, helpers
   contrib/council/        # 6 council test files (schemas, config, transcript, protocol, convergence, runner)
-  contrib/chatbridge/     # 6 chatbridge test files (base, anthropic, openai, ollama, manual, worker)
+  contrib/chatbridge/     # 8 chatbridge test files (base, anthropic, openai, ollama,
+                          #                          lmstudio, manual, worker, discover)
   contrib/docproc/        # Document extraction backend tests (MarkItDown, SmartExtractor, contracts)
   contrib/rag/            # 8 RAG test files (abstractions, backends, chunker, ingestion, mux, schemas, telegram_live, tools)
   contrib/lancedb/        # LanceDB store tests
@@ -664,12 +677,26 @@ Heddle supports multiple users (e.g., two analysts on Claude Desktop) working si
 - **Scheduler expansion** (`expand_from` in schedule config) dispatches one task per active session. The expansion function returns a list of context dicts, each merged into the task payload.
 - **DuckDB write serialization** — `SyncProcessingBackend(serialize_writes=True)` wraps calls in an `asyncio.Lock` to prevent concurrent writes to single-writer stores. Run a single DE processor instance for safe serialized writes.
 
+## Known LLM quirks (and how Heddle handles them)
+
+A short catalogue of provider-specific behaviours that have leaked into Heddle's parsing layer. Each entry points at the source-code TODO that controls the eventual fix.
+
+- **OpenAI-compatible thinking models split content:** qwen3.x, deepseek-r1, OpenAI o-series (via LiteLLM), and any model served by LM Studio or vLLM with a reasoning parser put their visible answer on `message.reasoning_content` and leave `message.content` empty. `OpenAICompatibleBackend` (and `OpenAIChatBridge`) rescue it and emit `backend.reasoning_content.rescue` / `chatbridge.reasoning_content.rescue` info-logs so operators can see when it's happening. The raw value is also surfaced on the response dict / `ChatResponse.reasoning_content`. **Ideal fix:** expose a `disable_thinking=True` flag that maps to provider-specific `extra_body` params (qwen `enable_thinking: false`, OpenAI `reasoning_effort: low`). See `TODO(thinking-config)` in `src/heddle/worker/backends.py` and `src/heddle/contrib/chatbridge/openai.py`.
+- **Anthropic extended thinking is opt-in and currently unused:** Claude's `thinking` content blocks are silently dropped by `AnthropicBackend` when present. Heddle never enables extended thinking on requests today, so this is dormant. **Ideal fix:** a `thinking_budget_tokens` parameter that opts in and surfaces `thinking` blocks on a separate response key. See `TODO(anthropic-thinking)` in `src/heddle/worker/backends.py`.
+- **Ollama-served thinking models embed the trace inline:** qwen3 / deepseek-r1 GGUFs emit `<think>...</think>` tags inside `message.content` rather than splitting them out. `OllamaBackend` passes content through unmodified — agents see the tags. Newer Ollama builds accept `options.think: false` and `chat_template_kwargs={"enable_thinking": false}`. **Ideal fix:** a `strip_think_tags=True` flag plus passthrough of those request options. See `TODO(ollama-think-tags)` in `src/heddle/worker/backends.py`.
+- **Bridge token budget vs. agent token budget:** `agent.max_tokens_per_turn` only reaches `ChatBridge` constructors via `setdefault` in `CouncilRunner._get_or_create_bridge` (added v0.9.x). Without it, the bridge's own default (typically 2000) silently wins. Thinking models compound this — they spend the budget on reasoning before producing a final answer. The `backend.reasoning_content.rescue` log includes both `completion_tokens` and `max_tokens` so an exhausted budget is identifiable.
+- **LM Studio "No models loaded" 400:** `/v1/models` lists *available* (downloaded) models, not loaded ones. `LMStudioBackend` and `LMStudioChatBridge` accept `model="default"` but LM Studio rejects it unless a default is configured server-side. See `docs/TROUBLESHOOTING.md` for resolution.
+- **OpenAI-compatible base-URL doubling:** providers (LM Studio is the loud one) document base URLs as `http://host:port/v1` rather than the host. `OpenAICompatibleBackend.__init__` strips a trailing `/v1` so `/v1/chat/completions` doesn't end up doubled. Same normalization in `LMStudioChatBridge` / `OpenAICompatibleEmbeddingProvider`.
+
+When you add a new provider/runtime that has its own quirks, append an entry here AND drop a `TODO(<short-tag>)` at the parsing site — keeps the catalogue searchable.
+
 ## What to implement next
 
 1. **Workshop MetricsCollector** — optional NATS subscriber for live worker metrics in Workshop dashboard
 2. **Worker-side batching (Strategy D)** — batch similar tasks into single LLM calls
 3. **Decomposition caching (Strategy E)** — cache decomposition plans for repeated goal patterns
 4. **Local-runtime registry** — replace the hardcoded LM Studio / Ollama branches in `worker/backends.py:_select_local_backend`, `cli/setup.py`, `cli/preflight.py`, `cli/rag.py`, `workshop/app.py`, and `mcp/session_bridge.py` with a data-driven `LocalRuntime` registry. Anchor design + migration map are in the docstring of `_select_local_backend`. Trigger: adding a third runtime (Exo on `:52415/v1`, vLLM, llama.cpp server, MLX-server, …).
+5. **Thinking-mode config knob** — `disable_thinking=True` constructor flag on `OpenAICompatibleBackend`/`OpenAIChatBridge` (and similarly for Ollama and Anthropic) that maps to provider-specific request params instead of relying on the `reasoning_content` rescue. See `TODO(thinking-config)`, `TODO(anthropic-thinking)`, `TODO(ollama-think-tags)`. Trigger: when an example needs strict JSON output from a thinking model, or when reasoning-token cost becomes a tracked metric.
 
 ## What NOT to do
 

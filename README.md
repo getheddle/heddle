@@ -185,6 +185,7 @@ Go deeper:
 |-------|-------------|
 | [RAG Pipeline](docs/rag-howto.md) | Social media stream analysis end-to-end |
 | [Multi-Agent Councils](docs/council-howto.md) | Structured deliberation with multiple LLM agents |
+| [Council showcases](examples/) | Three runnable demos: [Town Hall](examples/town-hall/) (audience interjections), [Debate Arena](examples/debate-arena/) (round-robin tournament with judges), [Blind Taste Test](examples/blind-taste-test/) (anonymous LLM evaluation) |
 | [Building Workflows](docs/building-workflows.md) | Custom steps, pipelines, tools, knowledge |
 | [Workshop](docs/workshop.md) | Web UI architecture and enhancement guide |
 | [Architecture](docs/ARCHITECTURE.md) | System design, message flow, NATS subjects |
@@ -206,7 +207,7 @@ Go deeper:
 | Workshop web UI | Complete | Test bench, eval runner, pipeline editor |
 | MCP gateway | Complete | FastMCP 3.x, session tools, workshop tools |
 | Multi-agent deliberation | Complete | Council framework, ChatBridge adapters, 3 protocols |
-| Tests | 1807 passing | 90%+ coverage, no infrastructure needed |
+| Tests | 2067 passing | 90%+ coverage, no infrastructure needed |
 
 ---
 

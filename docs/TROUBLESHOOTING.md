@@ -43,15 +43,51 @@ worker never receives a silent-empty response. The raw value is also
 surfaced separately on `ChatResponse.reasoning_content` and on the
 backend's response dict, so callers can log or strip it.
 
-If you still see empty content from a thinking model:
+**Detecting it programmatically:** the rescue is logged at info
+level (`backend.reasoning_content.rescue` /
+`chatbridge.reasoning_content.rescue` with `model`,
+`completion_tokens`, `max_tokens`, and `reasoning_chars`). The raw
+trace is also on `response["reasoning_content"]` (backend) /
+`ChatResponse.reasoning_content` (bridge), so callers can detect
+"this turn used the fallback" with a single null check.
+
+**Disabling the trace at request time** (preferred over rescue when
+you control the model choice):
+
+- **Qwen3 family via LM Studio / vLLM:** add
+  `extra_body={"chat_template_kwargs": {"enable_thinking": false}}`
+  to the request, OR append `/no_think` to the user/system prompt.
+  Heddle does not yet pass `extra_body` through — see the
+  `TODO(thinking-config)` markers in
+  `src/heddle/worker/backends.py` and
+  `src/heddle/contrib/chatbridge/openai.py` for the planned knob.
+- **DeepSeek-R1 family:** the model's chat template emits the
+  `<think>` block by default; some servers (vLLM with the
+  `--reasoning-parser` flag) split it onto `reasoning_content`
+  automatically. No first-class disable switch; pick a non-R1
+  variant if you don't want reasoning.
+- **OpenAI o-series (o1, o3, o4-mini):** set
+  `reasoning={"effort": "low"}` to minimise the trace
+  (cannot be fully disabled). Also not yet plumbed through the
+  Heddle backend — same TODO.
+- **Anthropic extended thinking:** off by default. Heddle does not
+  enable it (`thinking={"type": "enabled", ...}`) on requests, so
+  Claude responses won't have a thinking block unless future code
+  opts in. See `TODO(anthropic-thinking)` in
+  `src/heddle/worker/backends.py` for the planned hookup.
+- **Ollama-served thinking models:** newer Ollama builds accept
+  `options.think: false` in the chat request, OR
+  `chat_template_kwargs={"enable_thinking": false}` for qwen3 GGUFs.
+  `OllamaBackend` does not pass these through yet — see
+  `TODO(ollama-think-tags)`. For now, the trace appears inline as
+  `<think>...</think>` inside `content` (not split out).
+
+**Other escape hatches:**
 
 - Bump `max_tokens` — the model may be spending its whole budget on
   the reasoning trace before producing a final answer. In council
-  configs this is `max_tokens_per_turn`; CouncilRunner now propagates
-  it to bridges automatically.
-- Disable the runtime's "thinking" mode in the LM Studio model
-  settings if the model supports it (some Qwen models can be
-  prompted with `/no_think` to skip the reasoning trace).
+  configs this is `max_tokens_per_turn`; `CouncilRunner` now
+  propagates it to bridges automatically.
 - Pick a non-thinking model. The blind-taste-test example uses
   `gemma-3-4b`, `nemotron-3-nano-4b`, and `lfm2-24b-a2b` for that
   reason — they emit clean final answers without reasoning blocks.
