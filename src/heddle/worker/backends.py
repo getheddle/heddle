@@ -343,6 +343,16 @@ class OpenAICompatibleBackend(LLMBackend):
         choice = data["choices"][0]
         message = choice.get("message", {})
         content = message.get("content")
+        # Some OpenAI-compatible providers (LM Studio for
+        # thinking/reasoning models, DeepSeek, vLLM with reasoning
+        # parsers) return the model's chain-of-thought separately on
+        # ``message.reasoning_content`` while leaving ``content``
+        # empty.  Fall back to it so workers don't silently lose
+        # output; surface the raw value too for callers that want to
+        # log or strip it.
+        reasoning_content = message.get("reasoning_content") or None
+        if not content and reasoning_content:
+            content = reasoning_content
         tool_calls = None
 
         raw_calls = message.get("tool_calls")
@@ -374,6 +384,7 @@ class OpenAICompatibleBackend(LLMBackend):
             "completion_tokens": usage.get("completion_tokens", 0),
             "tool_calls": tool_calls,
             "stop_reason": stop_reason,
+            "reasoning_content": reasoning_content,
             # OTel GenAI semantic convention metadata
             "gen_ai_system": self.gen_ai_system,
             "gen_ai_request_model": self.model,

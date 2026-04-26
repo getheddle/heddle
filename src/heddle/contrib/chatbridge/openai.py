@@ -75,7 +75,16 @@ class OpenAIChatBridge(ChatBridge):
         data = resp.json()
 
         choice = data.get("choices", [{}])[0]
-        content = choice.get("message", {}).get("content", "")
+        message = choice.get("message", {})
+        content = message.get("content") or ""
+        # Thinking-style models (qwen3.5, deepseek-r1, …) routed via
+        # LM Studio etc. emit their visible answer on
+        # ``reasoning_content`` while leaving ``content`` empty.  Fall
+        # back so callers don't get an empty string; the raw value is
+        # also surfaced on ``ChatResponse.reasoning_content``.
+        reasoning_content = message.get("reasoning_content") or None
+        if not content and reasoning_content:
+            content = reasoning_content
 
         # Append assistant response to session history.
         session.messages.append({"role": "assistant", "content": content})
@@ -90,6 +99,7 @@ class OpenAIChatBridge(ChatBridge):
             },
             stop_reason=choice.get("finish_reason"),
             session_id=session_id,
+            reasoning_content=reasoning_content,
         )
 
     async def get_session_info(self, session_id: str) -> SessionInfo:

@@ -16,13 +16,28 @@ from pydantic import BaseModel, Field
 
 
 class ChatResponse(BaseModel):
-    """Response from a chat bridge turn."""
+    """Response from a chat bridge turn.
+
+    For "thinking" / chain-of-thought models served by some
+    OpenAI-compatible providers (LM Studio, vLLM with reasoning
+    models, DeepSeek, …), the visible answer may be empty while the
+    model produces a long internal monologue.  When that happens,
+    bridges fall back to using the reasoning text as ``content`` so
+    downstream consumers see *something*; the raw monologue is still
+    available on ``reasoning_content`` for callers that want to
+    surface it separately (or strip it from logs).
+    """
 
     content: str
     model: str | None = None
     token_usage: dict[str, int] = Field(default_factory=dict)
     stop_reason: str | None = None
     session_id: str = ""
+    # Raw reasoning trace from thinking-style models, when the
+    # provider exposes it as a separate field (e.g. LM Studio's
+    # ``message.reasoning_content``).  ``None`` when the provider
+    # does not split reasoning from content.
+    reasoning_content: str | None = None
 
 
 class SessionInfo(BaseModel):

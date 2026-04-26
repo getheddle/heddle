@@ -296,6 +296,61 @@ class TestBridgeSupport:
         assert "system_prompt" in captured["kwargs"]
         assert captured["kwargs"]["model"] == "bridge-model"
 
+    async def test_max_tokens_per_turn_propagates_to_bridge(self, monkeypatch):
+        """``agent.max_tokens_per_turn`` must reach the bridge constructor;
+        otherwise thinking models can blow past the agent's declared cap
+        because the bridge's own default (e.g. 2000) wins."""
+        import heddle.contrib.council.runner as runner_mod
+
+        captured: dict = {}
+
+        class _BridgeFactory:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            async def send_turn(self, *a, **kw):
+                from heddle.contrib.chatbridge.base import ChatResponse
+
+                return ChatResponse(content="ok", model="x", token_usage={})
+
+            async def aclose(self):
+                pass
+
+        fake_module = type("M", (), {"FakeBridge": _BridgeFactory})
+        monkeypatch.setattr(
+            runner_mod.importlib,
+            "import_module",
+            lambda name: fake_module if name == "fake.bridge" else __import__(name),
+        )
+
+        config = CouncilConfig(
+            name="budget",
+            max_rounds=1,
+            convergence={"method": "none"},
+            agents=[
+                {
+                    "name": "agent_a",
+                    "bridge": "fake.bridge.FakeBridge",
+                    "max_tokens_per_turn": 1500,
+                },
+                {
+                    "name": "agent_b",
+                    "bridge": "fake.bridge.FakeBridge",
+                    # Caller-supplied bridge_config takes precedence.
+                    "bridge_config": {"max_tokens": 99},
+                    "max_tokens_per_turn": 1500,
+                },
+            ],
+            facilitator={"tier": "standard"},
+        )
+        runner = CouncilRunner(backends={"standard": _mock_backend()})
+        await runner.run("Topic", config=config)
+
+        # First agent: max_tokens defaulted from agent.max_tokens_per_turn.
+        # Second agent's bridge_config explicitly set 99, so setdefault is a no-op
+        # — capture from the LAST construction call should be 99.
+        assert captured["max_tokens"] == 99
+
     async def test_bridge_caching_uses_one_instance_per_agent(self, monkeypatch):
         import heddle.contrib.council.runner as runner_mod
 

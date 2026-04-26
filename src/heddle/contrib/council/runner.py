@@ -378,6 +378,12 @@ class CouncilRunner:
 
         bridge_kwargs = dict(agent.bridge_config)
         bridge_kwargs.setdefault("system_prompt", self._build_agent_prompt(agent, config))
+        # Bridges accept ``max_tokens`` as a constructor arg (with
+        # their own default).  Honour the agent's per-turn budget
+        # unless ``bridge_config`` explicitly overrides it — without
+        # this, thinking models can blow well past the agent's
+        # declared cap because the bridge's own default wins.
+        bridge_kwargs.setdefault("max_tokens", agent.max_tokens_per_turn)
 
         bridge = cls(**bridge_kwargs)
         self._bridges[agent.name] = bridge

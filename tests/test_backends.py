@@ -761,6 +761,92 @@ class TestOpenAICompatibleBackendComplete:
         assert call_body["messages"][0] == {"role": "system", "content": "system instructions"}
         assert call_body["messages"][1] == {"role": "user", "content": "real msg"}
 
+    @pytest.mark.asyncio
+    async def test_reasoning_content_fallback_when_content_empty(self, backend):
+        """LM Studio thinking models return content="" + reasoning_content=...;
+        the backend should fall back to reasoning so workers don't lose output."""
+        api_data = {
+            "model": "qwen3.5-9b",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "reasoning_content": "The answer is 42.",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 4, "completion_tokens": 30},
+        }
+        with patch.object(backend.client, "post", return_value=_mock_response(api_data)):
+            result = await backend.complete("sys", "msg")
+
+        # content was rescued from reasoning_content
+        assert result["content"] == "The answer is 42."
+        # raw reasoning is also surfaced for callers that want to log/strip it
+        assert result["reasoning_content"] == "The answer is 42."
+
+    @pytest.mark.asyncio
+    async def test_reasoning_content_does_not_overwrite_real_content(self, backend):
+        """When content has data, it wins regardless of reasoning_content."""
+        api_data = {
+            "model": "qwen3.5-9b",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Final answer.",
+                        "reasoning_content": "Long internal monologue...",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 4, "completion_tokens": 30},
+        }
+        with patch.object(backend.client, "post", return_value=_mock_response(api_data)):
+            result = await backend.complete("sys", "msg")
+
+        assert result["content"] == "Final answer."
+        # reasoning is still surfaced separately
+        assert result["reasoning_content"] == "Long internal monologue..."
+
+    @pytest.mark.asyncio
+    async def test_reasoning_content_absent_returns_none(self, backend):
+        """Plain (non-thinking) responses get reasoning_content=None, not ''."""
+        api_data = {
+            "model": "gpt-test",
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "Hi"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        }
+        with patch.object(backend.client, "post", return_value=_mock_response(api_data)):
+            result = await backend.complete("sys", "msg")
+        assert result["reasoning_content"] is None
+
+    @pytest.mark.asyncio
+    async def test_both_empty_yields_empty_content(self, backend):
+        """If both fields are empty, content stays empty (no synthesis)."""
+        api_data = {
+            "model": "gpt-test",
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "", "reasoning_content": ""},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0},
+        }
+        with patch.object(backend.client, "post", return_value=_mock_response(api_data)):
+            result = await backend.complete("sys", "msg")
+        # Empty string in OpenAI shape — caller can detect None vs ""
+        assert result["content"] in ("", None)
+        assert result["reasoning_content"] is None
+
 
 # ---------------------------------------------------------------------------
 # OpenAICompatibleBackend base_url normalization

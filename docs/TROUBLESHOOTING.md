@@ -24,6 +24,38 @@ even though one of them is running.
   `HEDDLE_LOCAL_BACKEND=lmstudio` (or `ollama`) to choose which serves
   the local tier when both are configured.
 
+### Thinking model returns empty content (qwen3.5, deepseek-r1, …)
+
+**Symptom:** A worker or council agent backed by an LM Studio
+"thinking" model (qwen3.5-9b, qwen3.5-35b-a3b, deepseek-r1, etc.)
+produces zero visible output, even though the request succeeds and
+token counts are non-zero.
+
+**Cause:** LM Studio splits these models' responses into
+`message.content` (the visible answer) and `message.reasoning_content`
+(the chain-of-thought). When the model dumps everything into
+`reasoning_content` and leaves `content` empty, naive OpenAI parsers
+see an empty string.
+
+**Fix:** Heddle's `OpenAICompatibleBackend` and `OpenAIChatBridge`
+fall back to `reasoning_content` when `content` is empty, so the
+worker never receives a silent-empty response. The raw value is also
+surfaced separately on `ChatResponse.reasoning_content` and on the
+backend's response dict, so callers can log or strip it.
+
+If you still see empty content from a thinking model:
+
+- Bump `max_tokens` — the model may be spending its whole budget on
+  the reasoning trace before producing a final answer. In council
+  configs this is `max_tokens_per_turn`; CouncilRunner now propagates
+  it to bridges automatically.
+- Disable the runtime's "thinking" mode in the LM Studio model
+  settings if the model supports it (some Qwen models can be
+  prompted with `/no_think` to skip the reasoning trace).
+- Pick a non-thinking model. The blind-taste-test example uses
+  `gemma-3-4b`, `nemotron-3-nano-4b`, and `lfm2-24b-a2b` for that
+  reason — they emit clean final answers without reasoning blocks.
+
 ### LM Studio request fails with "No models loaded"
 
 **Symptom:** A worker or `heddle rag` call against LM Studio returns
