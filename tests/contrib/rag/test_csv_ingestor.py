@@ -167,9 +167,7 @@ class TestCsvIngestor:
         assert len(posts) == 1
         assert posts[0].text_clean.startswith("caf")
         # Warning is logged about fallback
-        assert any(
-            "errors='replace'" in record.getMessage() for record in caplog.records
-        )
+        assert any("errors='replace'" in record.getMessage() for record in caplog.records)
 
     def test_load_required_before_ingest(self, tmp_path: Path) -> None:
         csv_path = _write_csv(

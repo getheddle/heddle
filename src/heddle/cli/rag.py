@@ -218,9 +218,7 @@ def ingest(  # noqa: PLR0915
     click.echo()
 
     metadata_cols = (
-        [c.strip() for c in metadata_columns.split(",") if c.strip()]
-        if metadata_columns
-        else None
+        [c.strip() for c in metadata_columns.split(",") if c.strip()] if metadata_columns else None
     )
 
     # Step 1: Ingest

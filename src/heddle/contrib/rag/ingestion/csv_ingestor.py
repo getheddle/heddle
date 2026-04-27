@@ -88,20 +88,15 @@ class CsvIngestor(Ingestor):
         reader = csv.DictReader(io.StringIO(text), delimiter=self.delimiter)
         if not reader.fieldnames or self.text_column not in reader.fieldnames:
             raise ValueError(
-                f"text_column '{self.text_column}' not in CSV columns: "
-                f"{reader.fieldnames}"
+                f"text_column '{self.text_column}' not in CSV columns: {reader.fieldnames}"
             )
         if self.id_column and self.id_column not in reader.fieldnames:
             raise ValueError(
-                f"id_column '{self.id_column}' not in CSV columns: "
-                f"{reader.fieldnames}"
+                f"id_column '{self.id_column}' not in CSV columns: {reader.fieldnames}"
             )
         for col in self.metadata_columns:
             if col not in reader.fieldnames:
-                raise ValueError(
-                    f"metadata column '{col}' not in CSV columns: "
-                    f"{reader.fieldnames}"
-                )
+                raise ValueError(f"metadata column '{col}' not in CSV columns: {reader.fieldnames}")
 
         self._rows = [dict(row) for row in reader]
         self._channel_name = self.source_path.stem

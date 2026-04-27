@@ -74,9 +74,7 @@ class TestPlainTextIngestor:
         assert len(posts) == 1
         # Lossy decode preserves the prefix
         assert posts[0].text_clean.startswith("caf")
-        assert any(
-            "errors='replace'" in record.getMessage() for record in caplog.records
-        )
+        assert any("errors='replace'" in record.getMessage() for record in caplog.records)
 
     def test_metadata_extras(self, tmp_path: Path) -> None:
         f = tmp_path / "doc.txt"

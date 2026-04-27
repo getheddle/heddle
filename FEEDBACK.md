@@ -28,6 +28,7 @@
 ## Notable decisions for Chat to be aware of
 
 ### Test layout
+
 Plan asked for `tests/contrib/rag/ingestion/test_csv_ingestor.py` etc., but the
 existing convention under `tests/contrib/rag/` is **flat** (no `ingestion/`
 sub-directory). I matched the existing convention rather than introducing a
@@ -37,11 +38,13 @@ new sub-tree. Files are at:
 - `tests/contrib/rag/test_text_ingestor.py`
 
 ### CLI test class name
+
 The CLI routing tests live in the existing `tests/test_cli_rag.py` (extended
 the file rather than creating a new one). Five new tests were added; the
 existing `test_rag_ingest_help` was tightened to assert the new help text.
 
 ### CsvIngestor / PlainTextIngestor synthetic channel id
+
 Both ingestors use `int.from_bytes(sha256(path)[:8], 'big') & 0x7FFFFFFFFFFFFFFF`
 to produce a stable per-source channel id. This is **deterministic per
 resolved path** (re-loading the same file yields the same id), which keeps
@@ -50,11 +53,13 @@ sources. There is a `test_channel_id_stable_per_path` test pinning this
 behaviour.
 
 ### Encoding fallback
+
 On `UnicodeDecodeError`, both ingestors log a warning and re-read the file
 with `errors="replace"`. This matches the spec ("try UTF-8 first, fall back
 to UTF-8 with `errors='replace'` and log a warning").
 
 ### Workshop-ui.svg
+
 The plan only flagged the `LOOM WORKSHOP` text on line 10. The same SVG
 also has a stale `Loom Workshop — UI Overview` title on line 7. Left as-is
 since it was out of scope; flagging here so a future session can sweep it.

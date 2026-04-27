@@ -66,9 +66,7 @@ class PlainTextIngestor(Ingestor):
             self._files = [self.source_path]
             self._channel_name = self.source_path.parent.name or self.source_path.stem
         else:
-            self._files = sorted(
-                p for p in self.source_path.glob(self.glob_pattern) if p.is_file()
-            )
+            self._files = sorted(p for p in self.source_path.glob(self.glob_pattern) if p.is_file())
             self._channel_name = self.source_path.name or "plain_text"
 
         self._channel_id = _stable_id(str(self.source_path.resolve()))
