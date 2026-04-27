@@ -19,13 +19,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
+          fetch-depth: 0
       - name: Export drawio → SVG
         uses: rlespinasse/drawio-export-action@v2
         with:
           path: docs/diagrams
           format: svg
           output: ../images
-          embed: true
+          embed-diagram: true
           remove-page-suffix: true
       - name: Commit exported SVGs
         uses: stefanzweifel/git-auto-commit-action@v5
