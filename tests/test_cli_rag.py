@@ -34,7 +34,14 @@ def test_rag_ingest_help():
     """rag ingest --help shows usage."""
     result = CliRunner().invoke(rag, ["ingest", "--help"])
     assert result.exit_code == 0
-    assert "Ingest Telegram JSON exports" in result.output
+    assert "Ingest documents into the vector store" in result.output
+    # Mentions all three supported source types
+    assert "Telegram" in result.output
+    assert "CSV" in result.output
+    assert "plain text" in result.output
+    # New flags surface in help
+    assert "--text-column" in result.output
+    assert "--id-column" in result.output
 
 
 def test_rag_search_help():
@@ -237,6 +244,182 @@ def test_rag_ingest_multiple_files(tmp_path):
     assert "Channel2" in result.output
     assert "Channel3" in result.output
     assert "3 channels" in result.output
+
+
+# ---------------------------------------------------------------------------
+# File-type routing
+# ---------------------------------------------------------------------------
+
+
+def _patch_pipeline(mock_store, num_chunks: int = 1):
+    """Common patches for the pipeline downstream of ingestion."""
+    return [
+        patch(
+            "heddle.contrib.rag.mux.stream_mux.merge_from_ingestors",
+            return_value=_make_mock_stream(),
+        ),
+        patch(
+            "heddle.contrib.rag.chunker.sentence_chunker.chunk_mux_entry",
+            return_value=_make_mock_chunks(num_chunks),
+        ),
+        patch("heddle.cli.rag._open_store", return_value=mock_store),
+    ]
+
+
+def test_rag_ingest_routes_csv_to_csv_ingestor(tmp_path):
+    """A .csv input is routed to CsvIngestor with --text-column."""
+    csv_file = tmp_path / "comments.csv"
+    csv_file.write_text("id,body\n1,hello world\n2,goodbye\n", encoding="utf-8")
+    cfg_path = str(tmp_path / "config.yaml")
+
+    mock_store = MagicMock()
+    mock_store.add_embedded_chunks.return_value = 1
+
+    csv_mock = _make_mock_ingestor(channel_name="comments")
+    pipe_patches = _patch_pipeline(mock_store)
+
+    with (
+        patch(
+            "heddle.contrib.rag.ingestion.csv_ingestor.CsvIngestor",
+            return_value=csv_mock,
+        ) as csv_cls,
+        pipe_patches[0],
+        pipe_patches[1],
+        pipe_patches[2],
+    ):
+        result = CliRunner().invoke(
+            rag,
+            [
+                "--config-path",
+                cfg_path,
+                "ingest",
+                "--no-embed",
+                "--text-column",
+                "body",
+                str(csv_file),
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    csv_cls.assert_called_once()
+    kwargs = csv_cls.call_args.kwargs
+    assert kwargs["text_column"] == "body"
+
+
+def test_rag_ingest_csv_requires_text_column(tmp_path):
+    """A .csv input without --text-column is rejected."""
+    csv_file = tmp_path / "x.csv"
+    csv_file.write_text("a,b\n1,2\n", encoding="utf-8")
+    cfg_path = str(tmp_path / "config.yaml")
+
+    result = CliRunner().invoke(
+        rag,
+        [
+            "--config-path",
+            cfg_path,
+            "ingest",
+            "--no-embed",
+            str(csv_file),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "--text-column" in result.output
+
+
+def test_rag_ingest_routes_txt_to_text_ingestor(tmp_path):
+    """A .txt input is routed to PlainTextIngestor."""
+    txt_file = tmp_path / "doc.txt"
+    txt_file.write_text("a plain document", encoding="utf-8")
+    cfg_path = str(tmp_path / "config.yaml")
+
+    mock_store = MagicMock()
+    mock_store.add_embedded_chunks.return_value = 1
+
+    txt_mock = _make_mock_ingestor(channel_name="doc")
+    pipe_patches = _patch_pipeline(mock_store)
+
+    with (
+        patch(
+            "heddle.contrib.rag.ingestion.text_ingestor.PlainTextIngestor",
+            return_value=txt_mock,
+        ) as txt_cls,
+        pipe_patches[0],
+        pipe_patches[1],
+        pipe_patches[2],
+    ):
+        result = CliRunner().invoke(
+            rag,
+            [
+                "--config-path",
+                cfg_path,
+                "ingest",
+                "--no-embed",
+                str(txt_file),
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    txt_cls.assert_called_once()
+
+
+def test_rag_ingest_routes_directory_to_text_ingestor(tmp_path):
+    """A directory input is routed to PlainTextIngestor with the configured glob."""
+    cfg_path = str(tmp_path / "config.yaml")
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "a.txt").write_text("alpha", encoding="utf-8")
+
+    mock_store = MagicMock()
+    mock_store.add_embedded_chunks.return_value = 1
+
+    txt_mock = _make_mock_ingestor(channel_name="docs")
+    pipe_patches = _patch_pipeline(mock_store)
+
+    with (
+        patch(
+            "heddle.contrib.rag.ingestion.text_ingestor.PlainTextIngestor",
+            return_value=txt_mock,
+        ) as txt_cls,
+        pipe_patches[0],
+        pipe_patches[1],
+        pipe_patches[2],
+    ):
+        result = CliRunner().invoke(
+            rag,
+            [
+                "--config-path",
+                cfg_path,
+                "ingest",
+                "--no-embed",
+                "--text-glob",
+                "*.txt",
+                str(docs_dir),
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    txt_cls.assert_called_once()
+    assert txt_cls.call_args.kwargs.get("glob") == "*.txt"
+
+
+def test_rag_ingest_unsupported_extension_errors(tmp_path):
+    """An unrecognized extension raises a ClickException with a clear message."""
+    bad = tmp_path / "weird.parquet"
+    bad.write_text("not a valid source", encoding="utf-8")
+    cfg_path = str(tmp_path / "config.yaml")
+
+    result = CliRunner().invoke(
+        rag,
+        [
+            "--config-path",
+            cfg_path,
+            "ingest",
+            "--no-embed",
+            str(bad),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "Unsupported file type" in result.output
 
 
 # ---------------------------------------------------------------------------

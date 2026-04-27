@@ -6,7 +6,7 @@ Uses classes from heddle.contrib.rag with sensible defaults.
 
 Commands::
 
-    heddle rag ingest <paths>...   # Ingest Telegram JSON exports
+    heddle rag ingest <paths>...   # Ingest Telegram JSON, CSV, or plain text
     heddle rag search <query>      # Semantic search
     heddle rag stats               # Store statistics
     heddle rag serve               # Start Workshop with RAG dashboard
@@ -166,6 +166,23 @@ def rag(
 @click.option("--window-hours", default=6, type=int, help="Time window size in hours.")
 @click.option("--chunk-target", default=400, type=int, help="Target chunk size in chars.")
 @click.option("--chunk-max", default=600, type=int, help="Maximum chunk size in chars.")
+@click.option(
+    "--text-column",
+    default=None,
+    help="CSV: column with document text (required for .csv inputs).",
+)
+@click.option("--id-column", default=None, help="CSV: column for stable doc IDs.")
+@click.option(
+    "--metadata-columns",
+    default=None,
+    help="CSV: comma-separated columns to keep as metadata.",
+)
+@click.option("--delimiter", default=",", help="CSV: field delimiter.")
+@click.option(
+    "--text-glob",
+    default="**/*.txt",
+    help="Plain text: glob pattern when path is a directory.",
+)
 @click.pass_context
 def ingest(  # noqa: PLR0915
     ctx: click.Context,
@@ -174,12 +191,23 @@ def ingest(  # noqa: PLR0915
     window_hours: int,
     chunk_target: int,
     chunk_max: int,
+    text_column: str | None,
+    id_column: str | None,
+    metadata_columns: str | None,
+    delimiter: str,
+    text_glob: str,
 ) -> None:
-    """Ingest Telegram JSON exports into the vector store."""
+    """Ingest documents into the vector store.
+
+    Supports Telegram JSON exports, CSV files, and plain text files or
+    directories.
+    """
     from datetime import timedelta
 
     from heddle.contrib.rag.chunker.sentence_chunker import ChunkConfig, chunk_mux_entry
+    from heddle.contrib.rag.ingestion.csv_ingestor import CsvIngestor
     from heddle.contrib.rag.ingestion.telegram_ingestor import TelegramIngestor
+    from heddle.contrib.rag.ingestion.text_ingestor import PlainTextIngestor
     from heddle.contrib.rag.mux.stream_mux import merge_from_ingestors
     from heddle.contrib.rag.schemas.mux import MuxWindowConfig
 
@@ -189,19 +217,51 @@ def ingest(  # noqa: PLR0915
     click.echo(click.style("  Heddle RAG — Ingest", fg="cyan", bold=True))
     click.echo()
 
+    metadata_cols = (
+        [c.strip() for c in metadata_columns.split(",") if c.strip()]
+        if metadata_columns
+        else None
+    )
+
     # Step 1: Ingest
-    click.echo("  [1/4] Loading Telegram exports...")
+    click.echo("  [1/4] Loading sources...")
     ingestors = []
     for path in paths:
+        p = Path(path)
+        suffix = p.suffix.lower()
+
         t0 = time.perf_counter()
-        ingestor = TelegramIngestor(path, min_text_len=10).load()
+        if p.is_dir():
+            ingestor = PlainTextIngestor(p, glob=text_glob).load()
+        elif suffix == ".json":
+            ingestor = TelegramIngestor(str(p), min_text_len=10).load()
+        elif suffix == ".csv":
+            if not text_column:
+                raise click.ClickException(
+                    f"CSV file '{p}' requires --text-column to identify the text field."
+                )
+            ingestor = CsvIngestor(
+                source_path=p,
+                text_column=text_column,
+                id_column=id_column,
+                metadata_columns=metadata_cols,
+                delimiter=delimiter,
+            ).load()
+        elif suffix in (".txt", ".md"):
+            ingestor = PlainTextIngestor(p).load()
+        else:
+            raise click.ClickException(
+                f"Unsupported file type for '{p}': {suffix or '<no extension>'}. "
+                "Supported: .json, .csv, .txt, .md, or a directory."
+            )
+
         posts = ingestor.ingest_all()
         elapsed = time.perf_counter() - t0
         click.echo(f"    {ingestor.channel_name:<30} {len(posts):>5} posts  ({elapsed:.2f}s)")
         ingestors.append(ingestor)
 
     if not ingestors:
-        raise click.ClickException("No valid exports found.")
+        raise click.ClickException("No valid sources found.")
 
     # Step 2: Multiplex
     click.echo(f"\n  [2/4] Multiplexing ({window_hours}h windows)...")

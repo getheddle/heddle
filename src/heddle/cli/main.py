@@ -111,7 +111,7 @@ def _run_preflight(
 
 @click.group()
 def cli():
-    """Heddle -- Lightweight Orchestrated Operational Mesh."""
+    """Heddle — Config-driven multi-LLM workflows."""
     pass
 
 

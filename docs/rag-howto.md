@@ -1,10 +1,10 @@
-# RAG Pipeline for Social Media Stream Analysis
+# RAG Pipeline
 
 ## Overview
 
-`heddle.contrib.rag` is a contrib module for processing social media streams (currently Telegram channels) through a multi-stage pipeline: ingest, normalize, multiplex, chunk, embed, and analyze.
+`heddle.contrib.rag` is a contrib module for processing document streams through a multi-stage pipeline: ingest, normalize, multiplex, chunk, embed, and analyze.
 
-It is designed for Persian/RTL text but works with any language.
+Supported sources: Telegram JSON exports, CSV files, and plain text files or directories. The module is designed for Persian/RTL text but works with any language.
 
 ## Quick Start (CLI)
 
@@ -15,8 +15,10 @@ The fastest way to use the RAG pipeline — no Python code needed:
 uv sync --extra rag
 uv run heddle setup                    # interactive wizard
 
-# 2. Ingest Telegram exports
-uv run heddle rag ingest /path/to/exports/result*.json
+# 2. Ingest your data — pick one of:
+uv run heddle rag ingest /path/to/exports/result*.json                  # Telegram
+uv run heddle rag ingest comments.csv --text-column body                # CSV
+uv run heddle rag ingest /path/to/transcripts/                          # plain text dir
 
 # 3. Search
 uv run heddle rag search "earthquake damage reports" --limit 10
@@ -36,6 +38,63 @@ uv run heddle rag --store lancedb ingest /path/to/exports/*.json
 ```
 
 See the [CLI Reference](CLI_REFERENCE.md#heddle-rag-group) for all options.
+
+## Ingesting CSV files
+
+Use `--text-column` to point at the column carrying the document text.
+Optional flags pick up extra metadata and stable identifiers.
+
+```bash
+# Public-comment dataset where each row is a comment in the `body` column
+uv run heddle rag ingest comments.csv --text-column body
+
+# Use a stable id column and keep author/topic as metadata
+uv run heddle rag ingest comments.csv \
+    --text-column body \
+    --id-column comment_id \
+    --metadata-columns author,topic
+
+# Tab-separated values
+uv run heddle rag ingest survey.tsv --text-column response --delimiter $'\t'
+```
+
+How a row becomes a `NormalizedPost`:
+
+- `text_clean` ← the value of `--text-column`
+- `message_id` ← the `--id-column` value (or row index if not given)
+- `source_channel_name` ← CSV file stem; `source_channel_id` ← stable hash of the
+  resolved file path (so multiple CSVs stay distinguishable downstream)
+- `timestamp` ← file mtime (used for windowing)
+- columns named in `--metadata-columns` are attached as extras
+
+Rows with empty text are skipped. Files that aren't valid UTF-8 are
+re-decoded with `errors="replace"` and a warning is logged.
+
+## Ingesting plain text files
+
+Pass either a single file or a directory. With a directory, the
+default glob is `**/*.txt` (recursive); override with `--text-glob`.
+
+```bash
+# A single transcript
+uv run heddle rag ingest transcript.txt
+
+# A folder of transcripts (recursive)
+uv run heddle rag ingest /path/to/transcripts/
+
+# A folder of Markdown notes only, non-recursive
+uv run heddle rag ingest /path/to/notes/ --text-glob "*.md"
+```
+
+How a file becomes a `NormalizedPost`:
+
+- One file = one document. The whole file body is the `text_clean`.
+- `message_id` ← stable hash of the resolved file path
+- `source_channel_name` ← directory name (or parent directory of a single file)
+- The file path, size, and mtime are attached as extras (`file_path`,
+  `file_size`).
+
+Empty files are skipped. Encoding fallback works the same as for CSV.
 
 ## Installation
 

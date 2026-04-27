@@ -1,0 +1,34 @@
+name: Build diagrams
+
+on:
+  push:
+    paths:
+      - 'docs/diagrams/**.drawio'
+  pull_request:
+    paths:
+      - 'docs/diagrams/**.drawio'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Export drawio → SVG
+        uses: rlespinasse/drawio-export-action@v2
+        with:
+          path: docs/diagrams
+          format: svg
+          output: ../images
+          embed: true
+          remove-page-suffix: true
+      - name: Commit exported SVGs
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          file_pattern: 'docs/images/*.svg'
+          commit_message: 'chore(diagrams): auto-export drawio → svg'

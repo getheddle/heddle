@@ -1,6 +1,6 @@
 # Local Deployment Guide
 
-**Heddle — Lightweight Orchestrated Operational Mesh**
+**Heddle — Config-driven multi-LLM workflows**
 
 ---
 

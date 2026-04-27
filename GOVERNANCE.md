@@ -1,6 +1,6 @@
 # Governance
 
-**Heddle — Lightweight Orchestrated Operational Mesh**
+**Heddle — Config-driven multi-LLM workflows**
 **Effective:** 2026
 **Contact:** admin@irantransitionproject.org
 

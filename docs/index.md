@@ -21,54 +21,83 @@ and measure whether changes help or hurt.
   Document ──► Extract ──► Classify ──► Summarize ──► Report
                  │            │            │
                  │            │            └─ Claude Opus (complex reasoning)
-                 │            └─ Ollama local (fast, free)
-                 └─ Ollama local (fast, free)
+                 │            └─ LM Studio / Ollama local (fast, free)
+                 └─ LM Studio / Ollama local (fast, free)
 ```
 
-Steps can run in parallel, use different AI models, and be tested with the
-built-in Workshop web UI — all without deploying any infrastructure.
+Steps run in parallel when they can, and are tested with the built-in
+Workshop web UI — all without deploying any infrastructure. When you're
+ready to scale, Heddle adds a message bus (NATS) that connects everything
+for production use.
 
-## Quick Start
+## Try It in 60 Seconds
 
 ```bash
 pip install heddle-ai[workshop]    # install from PyPI
-heddle setup                       # configure (auto-detects Ollama)
+heddle setup                       # configure (auto-detects LM Studio + Ollama)
 heddle workshop                    # open the web UI at localhost:8080
 ```
 
-Open your browser, pick a worker (summarizer, classifier, extractor, qa,
-reviewer, or translator), paste some text, and see results. No data files
-needed — just text you already have.
+Open your browser at `http://localhost:8080`, pick a worker (summarizer,
+classifier, extractor, translator, qa, or reviewer), paste any text, and
+click Run. No data files needed.
 
-Want to analyze Telegram channels? See the [RAG quickstart](GETTING_STARTED.md#rag-quickstart).
+**Have Telegram exports?** Install with `pip install heddle-ai[rag]`
+instead, then run `heddle rag ingest`, `heddle rag search`, and
+`heddle rag serve` for full social media stream analysis.
+
+## Three Ways to Use Heddle
+
+**1. Workshop (no setup beyond install).** Test shipped workers in the
+browser — paste text, get results. Six ready-made workers ship with Heddle.
+
+**2. Build your own steps (guided).** Scaffold workers and pipelines
+interactively with `heddle new worker` and `heddle new pipeline` — YAML
+is generated for you. Test and evaluate in the Workshop web UI.
+
+**3. Distributed infrastructure (production).** For teams, continuous
+processing, or high-throughput scenarios: run the router, workers, and
+pipeline orchestrator across machines. Scale any component by running
+more copies — NATS load-balances automatically.
 
 ## Who This Is For
 
-**Anyone hitting the limits of single-prompt AI.** Start with the six
-shipped workers in Workshop — no coding needed.
+**Anyone hitting the limits of single-prompt AI.** Whether you're a
+student comparing how different models answer questions, a teacher
+grading essays and checking for bias, or a city clerk categorizing public
+comments — if you need more than one AI step working together, Heddle
+gives you a structured way to build that.
 
 **Researchers and analysts** — process documents, extract data, build
-analytical pipelines with knowledge silos and blind audit review.
+analytical pipelines. Heddle's knowledge silos and blind audit pattern
+let you get genuine adversarial review of AI-generated analysis — not the
+pseudo-review you get when the same model checks its own work.
 
-**AI engineers** — multi-step LLM workflows with typed contracts,
-tool-use, and pipeline orchestration.
+**AI engineers** — build multi-step LLM workflows with typed contracts,
+tool-use, knowledge injection, and pipeline orchestration.
 
-**Platform teams** — Kubernetes deployment with rate limiting, model tier
-management, and OpenTelemetry tracing.
+**Platform teams** — deploy to Kubernetes with rate limiting, model tier
+management, dead-letter handling, and OpenTelemetry tracing.
 
 ## Key Features
 
 | Feature | What It Does |
 |---------|-------------|
-| **6 Ready-Made Workers** | Summarizer, classifier, extractor, translator, QA, reviewer — use immediately |
+| **6 Ready-Made Workers** | Summarizer, classifier, extractor, translator, QA, reviewer — chain them immediately |
 | **Workshop** | Web UI for testing, evaluating, and comparing step outputs |
 | **Built-in Evaluation** | Test suites, scoring, golden dataset baselines, regression detection |
 | **Config-Driven** | Define workers in YAML — no Python code needed for LLM steps |
 | **Knowledge Silos** | Per-worker access control; blind audit workers can't see what they're reviewing |
 | **Pipeline Orchestration** | Chain steps with automatic dependency detection and parallelism |
-| **Three Model Tiers** | Local (Ollama), Standard (Claude Sonnet), Frontier (Claude Opus) |
-| **RAG Pipeline** | Telegram channel ingestion, chunking, vector search |
-| **MCP Gateway** | Expose any workflow as an MCP server |
+| **Three Model Tiers** | Local (LM Studio or Ollama), Standard (Claude Sonnet), Frontier (Claude Opus) |
+| **Document Processing** | PDF/DOCX extraction via MarkItDown (fast) or Docling (deep OCR) |
+| **RAG Pipeline** | Telegram ingestion, chunking, vector search (DuckDB or LanceDB) |
+| **Multi-Agent Councils** | Multi-round deliberation with debate, Delphi, and round-robin protocols |
+| **ChatBridge Adapters** | Use Claude, GPT-4, LM Studio, Ollama, or humans as council participants |
+| **MCP Gateway** | Expose any workflow as an MCP server with a single YAML config |
+| **Config Wizard** | `heddle setup` auto-detects backends; `heddle new` scaffolds workers and pipelines |
+| **Live Monitoring** | TUI dashboard, OpenTelemetry tracing, dead-letter inspection |
+| **Deployment** | Docker Compose, Kubernetes manifests, mDNS discovery |
 
 ## Documentation
 
@@ -80,14 +109,26 @@ Start here:
 | **[Getting Started](GETTING_STARTED.md)** | Install, configure, and get your first result |
 | **[Why Heddle?](WHY_HEDDLE.md)** | How Heddle compares to other frameworks — and when not to use it |
 | **[Workshop Tour](WORKSHOP_TOUR.md)** | What each Workshop screen does and when to use it |
+| **[Configuration](CONFIG.md)** | `~/.heddle/config.yaml` reference and priority chain |
+| **[CLI Reference](CLI_REFERENCE.md)** | Every command with every flag and default |
 | **[Workers Reference](workers-reference.md)** | 6 shipped workers with I/O schemas and examples |
-| **[CLI Reference](CLI_REFERENCE.md)** | All commands with every flag and default |
 
 Go deeper:
 
 | Guide | Description |
 |-------|-------------|
-| [Building Workflows](building-workflows.md) | Custom steps, pipelines, tools, knowledge |
 | [RAG Pipeline](rag-howto.md) | Social media stream analysis end-to-end |
+| [Multi-Agent Councils](council-howto.md) | Structured deliberation with multiple LLM agents |
+| [Adversarial Review](BLIND_AUDIT.md) | Set up genuine blind review using knowledge silos |
+| [Building Workflows](building-workflows.md) | Custom steps, pipelines, tools, knowledge |
+| [Workshop Architecture](workshop.md) | Web UI architecture and enhancement guide |
 | [Architecture](ARCHITECTURE.md) | System design, message flow, NATS subjects |
+| [Design Invariants](DESIGN_INVARIANTS.md) | Non-obvious design decisions (read before structural changes) |
+| [Troubleshooting](TROUBLESHOOTING.md) | Common issues and solutions |
 | [Deployment](LOCAL_DEPLOYMENT.md) | Local, Docker, and [Kubernetes](KUBERNETES.md) |
+
+Council showcases (runnable demos in the repo's `examples/` directory):
+
+- **Town Hall Debate** — audience interjections during multi-agent deliberation
+- **Debate Arena** — round-robin tournament with judge panels and scoring
+- **Blind Taste Test** — anonymous LLM evaluation using the Delphi protocol

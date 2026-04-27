@@ -7,7 +7,7 @@
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 <!-- Keep in sync with pyproject.toml version -->
-[![Heddle v0.9.0](https://img.shields.io/badge/heddle-v0.9.0-blueviolet.svg)](https://github.com/getheddle/heddle)
+[![Heddle v0.9.2](https://img.shields.io/badge/heddle-v0.9.2-blueviolet.svg)](https://github.com/getheddle/heddle)
 [![Status: Active Development](https://img.shields.io/badge/status-active_development-brightgreen.svg)]()
 
 **Turn what you know into testable AI steps. Chain them into workflows.
@@ -176,7 +176,7 @@ Start here:
 | **[Why Heddle?](docs/WHY_HEDDLE.md)** | How Heddle compares to other frameworks — and when not to use it |
 | **[Workshop Tour](docs/WORKSHOP_TOUR.md)** | What each Workshop screen does and when to use it |
 | **[Configuration](docs/CONFIG.md)** | `~/.heddle/config.yaml` reference and priority chain |
-| **[CLI Reference](docs/CLI_REFERENCE.md)** | All 19 commands with every flag and default |
+| **[CLI Reference](docs/CLI_REFERENCE.md)** | All 17 commands with every flag and default |
 | **[Workers Reference](docs/workers-reference.md)** | 6 shipped workers with I/O schemas and examples |
 
 Go deeper:

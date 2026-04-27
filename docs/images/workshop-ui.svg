@@ -7,7 +7,7 @@
 <text x="40" y="38" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="700" fill="#1e1e26" text-anchor="start" dominant-baseline="central">Loom Workshop — UI Overview</text>
 <text x="40" y="62" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="400" fill="#888" text-anchor="start" dominant-baseline="central">Web-based worker lifecycle management  ·  FastAPI + HTMX + Pico CSS</text>
 <rect x="30" y="100" width="1140" height="50" rx="8" fill="#1a1a2e"/>
-<text x="55" y="125" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#f5c72e" text-anchor="middle" dominant-baseline="central">LOOM WORKSHOP</text>
+<text x="55" y="125" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#f5c72e" text-anchor="middle" dominant-baseline="central">HEDDLE WORKSHOP</text>
 <text x="250" y="125" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#ccc" text-anchor="middle" dominant-baseline="central">Workers</text>
 <text x="370" y="125" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#ccc" text-anchor="middle" dominant-baseline="central">Pipelines</text>
 <text x="490" y="125" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#ccc" text-anchor="middle" dominant-baseline="central">Apps</text>

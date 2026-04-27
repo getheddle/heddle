@@ -43,8 +43,10 @@ See [Workers Reference](workers-reference.md) for full I/O schemas and the
 
 ## RAG Quickstart
 
-If you have Telegram JSON exports, Heddle can ingest, chunk, embed, and search
-them:
+Heddle can ingest, chunk, embed, and search documents from Telegram JSON
+exports, CSV files, or plain text files.
+
+### Telegram JSON exports
 
 ```bash
 # 1. Install with RAG support
@@ -62,6 +64,35 @@ heddle rag search "earthquake damage reports"
 # 5. Open the dashboard
 heddle rag serve
 ```
+
+### RAG Quickstart — CSV
+
+For tabular data — public-comment exports, survey responses, support
+tickets — point `--text-column` at the column carrying document text:
+
+```bash
+pip install heddle-ai[rag]
+heddle setup
+heddle rag ingest comments.csv --text-column body
+heddle rag search "complaints about parking"
+```
+
+See [RAG how-to](rag-howto.md#ingesting-csv-files) for `--id-column`,
+`--metadata-columns`, and custom delimiters.
+
+### RAG Quickstart — plain text
+
+For folders of `.txt`/`.md` transcripts, notes, or scraped articles:
+
+```bash
+pip install heddle-ai[rag]
+heddle setup
+heddle rag ingest /path/to/transcripts/
+heddle rag search "supply-chain mentions"
+```
+
+See [RAG how-to](rag-howto.md#ingesting-plain-text-files) for the glob
+pattern flag and single-file usage.
 
 The `heddle setup` wizard detects LM Studio + Ollama, prompts for API
 keys, and writes `~/.heddle/config.yaml`. When both local runtimes are
