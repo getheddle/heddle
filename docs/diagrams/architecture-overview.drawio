@@ -1,0 +1,117 @@
+<mxfile host="app.diagrams.net" agent="heddle-docs" version="22.0.0">
+  <diagram name="architecture-overview" id="arch-overview">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Heddle Architecture Overview" style="text;html=1;fontSize=18;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="350" y="10" width="300" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- NATS Message Bus - spanning bar -->
+        <mxCell id="nats" value="NATS Message Bus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="100" y="300" width="800" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Pipeline Definition Layer -->
+        <mxCell id="pipeline-group" value="Pipeline Definition" style="swimlane;startSize=25;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="60" width="250" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="yaml" value="YAML Config" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="pipeline-group">
+          <mxGeometry x="20" y="40" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="orchestrator" value="Orchestrator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="pipeline-group">
+          <mxGeometry x="130" y="40" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="checkpoints" value="Checkpoints" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="pipeline-group">
+          <mxGeometry x="20" y="100" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="model-tiers" value="Model Tiers&#xa;Local / Std / Frontier" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="pipeline-group">
+          <mxGeometry x="130" y="100" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="silos" value="Knowledge Silos" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="pipeline-group">
+          <mxGeometry x="75" y="150" width="100" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Worker Layer -->
+        <mxCell id="worker-group" value="Workers (Actors)" style="swimlane;startSize=25;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="60" width="250" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="worker-base" value="BaseWorker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="worker-group">
+          <mxGeometry x="75" y="40" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="worker-prompt" value="Prompt Templates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="worker-group">
+          <mxGeometry x="20" y="100" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="worker-llm" value="LLM Backends&#xa;Anthropic / Ollama" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="worker-group">
+          <mxGeometry x="130" y="100" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="worker-council" value="Council Workers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="worker-group">
+          <mxGeometry x="75" y="150" width="100" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Interface Layer -->
+        <mxCell id="iface-group" value="Interfaces" style="swimlane;startSize=25;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="700" y="60" width="200" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="mcp" value="MCP Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="iface-group">
+          <mxGeometry x="50" y="40" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="workshop" value="Workshop (Web UI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="iface-group">
+          <mxGeometry x="50" y="100" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="cli" value="CLI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="iface-group">
+          <mxGeometry x="50" y="150" width="100" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Contrib Layer -->
+        <mxCell id="contrib-group" value="Contrib Modules" style="swimlane;startSize=25;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="400" width="800" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="c-chatbridge" value="chatbridge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="contrib-group">
+          <mxGeometry x="10" y="35" width="85" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c-council" value="council" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="contrib-group">
+          <mxGeometry x="105" y="35" width="85" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c-docproc" value="docproc" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="contrib-group">
+          <mxGeometry x="200" y="35" width="85" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c-duckdb" value="duckdb" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="contrib-group">
+          <mxGeometry x="295" y="35" width="85" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c-lancedb" value="lancedb" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="contrib-group">
+          <mxGeometry x="390" y="35" width="85" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c-rag" value="rag" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="contrib-group">
+          <mxGeometry x="485" y="35" width="85" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c-redis" value="redis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="contrib-group">
+          <mxGeometry x="580" y="35" width="85" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c-subprocess" value="subprocess" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="contrib-group">
+          <mxGeometry x="675" y="35" width="110" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows: layers to NATS -->
+        <mxCell id="e-pipe-nats" style="endArrow=classic;startArrow=classic;html=1;rounded=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="pipeline-group" target="nats">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-worker-nats" style="endArrow=classic;startArrow=classic;html=1;rounded=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="worker-group" target="nats">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-iface-nats" style="endArrow=classic;startArrow=classic;html=1;rounded=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="iface-group" target="nats">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows: NATS to contrib -->
+        <mxCell id="e-nats-contrib" style="endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="nats" target="contrib-group">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

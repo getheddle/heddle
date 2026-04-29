@@ -1,0 +1,101 @@
+<mxfile host="app.diagrams.net" agent="heddle-docs" version="22.0.0">
+  <diagram name="data-flow" id="data-flow">
+    <mxGraphModel dx="1100" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="500" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Heddle Pipeline Data Flow" style="text;html=1;fontSize=18;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="350" y="10" width="300" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Input -->
+        <mxCell id="input" value="Input&#xa;(text, file, object)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="130" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Pipeline Config -->
+        <mxCell id="config" value="Pipeline YAML&#xa;steps, model tiers,&#xa;silo rules" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="40" y="250" width="130" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Worker 1 -->
+        <mxCell id="step1" value="Step 1: Worker A&#xa;(e.g. Extractor)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="240" y="100" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Checkpoint -->
+        <mxCell id="cp1" value="Checkpoint" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="260" y="210" width="100" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Worker 2 -->
+        <mxCell id="step2" value="Step 2: Worker B&#xa;(e.g. Analyzer)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="450" y="100" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Checkpoint 2 -->
+        <mxCell id="cp2" value="Checkpoint" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="470" y="210" width="100" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Worker 3 -->
+        <mxCell id="step3" value="Step 3: Worker C&#xa;(e.g. Validator)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="660" y="100" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Output -->
+        <mxCell id="output" value="Output&#xa;(structured result)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="870" y="100" width="130" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Silo boundary -->
+        <mxCell id="silo-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#b85450;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="640" y="80" width="180" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="silo-label" value="Knowledge Silo&#xa;(restricted context)" style="text;html=1;fontSize=10;fontStyle=2;align=center;fontColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="660" y="180" width="140" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- LLM Backend -->
+        <mxCell id="llm" value="LLM Backend&#xa;Anthropic / Ollama" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="470" y="320" width="120" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows -->
+        <mxCell id="e1" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="input" target="step1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="step1" target="step2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="step2" target="step3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="step3" target="output">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-cp1" style="endArrow=classic;html=1;rounded=0;dashed=1;strokeColor=#999999;" edge="1" parent="1" source="step1" target="cp1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-cp2" style="endArrow=classic;html=1;rounded=0;dashed=1;strokeColor=#999999;" edge="1" parent="1" source="step2" target="cp2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-config" style="endArrow=classic;html=1;rounded=0;dashed=1;strokeColor=#d6b656;" edge="1" parent="1" source="config" target="step1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-llm1" style="endArrow=classic;startArrow=classic;html=1;rounded=0;dashed=1;strokeColor=#9673a6;" edge="1" parent="1" source="step1" target="llm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-llm2" style="endArrow=classic;startArrow=classic;html=1;rounded=0;dashed=1;strokeColor=#9673a6;" edge="1" parent="1" source="step2" target="llm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-llm3" style="endArrow=classic;startArrow=classic;html=1;rounded=0;dashed=1;strokeColor=#9673a6;" edge="1" parent="1" source="step3" target="llm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

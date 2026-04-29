@@ -1,0 +1,97 @@
+<mxfile host="app.diagrams.net" agent="heddle-docs" version="22.0.0">
+  <diagram name="nats-topology" id="nats-topo">
+    <mxGraphModel dx="1000" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="NATS Messaging Topology" style="text;html=1;fontSize=18;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="300" y="10" width="300" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- NATS Server -->
+        <mxCell id="nats" value="NATS Server" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="400" y="200" width="120" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Orchestrator -->
+        <mxCell id="orch" value="Orchestrator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="60" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Workers -->
+        <mxCell id="w1" value="Worker A" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="50" y="120" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w2" value="Worker B" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="180" y="120" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w3" value="Worker C" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="640" y="120" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w4" value="Worker D" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="770" y="120" width="100" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- MCP Gateway -->
+        <mxCell id="mcp" value="MCP Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="330" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Workshop -->
+        <mxCell id="workshop" value="Workshop UI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="750" y="330" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Subject labels -->
+        <mxCell id="subj1" value="heddle.pipeline.{id}.step" style="text;html=1;fontSize=10;fontStyle=2;align=center;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="200" y="200" width="170" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="subj2" value="heddle.worker.{name}.result" style="text;html=1;fontSize=10;fontStyle=2;align=center;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="560" y="200" width="170" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Connections -->
+        <mxCell id="e-orch-nats" style="endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="orch" target="nats">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-w1" style="endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="w1" target="nats">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-w2" style="endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="w2" target="nats">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-w3" style="endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="w3" target="nats">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-w4" style="endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="w4" target="nats">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-mcp" style="endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="mcp" target="nats">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-workshop" style="endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="workshop" target="nats">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Claude Desktop -->
+        <mxCell id="claude" value="Claude Desktop" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="40" y="430" width="140" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="e-claude-mcp" style="endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="claude" target="mcp">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Browser -->
+        <mxCell id="browser" value="Browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="750" y="430" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="e-browser-ws" style="endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="browser" target="workshop">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
