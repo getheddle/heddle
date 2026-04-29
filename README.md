@@ -179,6 +179,13 @@ Start here:
 | **[CLI Reference](docs/CLI_REFERENCE.md)** | All 17 commands with every flag and default |
 | **[Workers Reference](docs/workers-reference.md)** | 6 shipped workers with I/O schemas and examples |
 
+Tutorials (step-by-step, phased examples in the repo):
+
+| Tutorial | Description |
+|----------|-------------|
+| **[Document Intake](docs/tutorials/document-intake.md)** | Build a public comment pipeline: CSV reader, classifier, entity extractor, bias audit — in three phases |
+| **[Research Review](docs/tutorials/research-review.md)** | Build a paper review pipeline: claim extraction, methodology review, blind adversarial audit — in three phases |
+
 Go deeper:
 
 | Guide | Description |
@@ -186,6 +193,7 @@ Go deeper:
 | [RAG Pipeline](docs/rag-howto.md) | Social media stream analysis end-to-end |
 | [Multi-Agent Councils](docs/council-howto.md) | Structured deliberation with multiple LLM agents |
 | [Council showcases](examples/) | Three runnable demos: [Town Hall](examples/town-hall/) (audience interjections), [Debate Arena](examples/debate-arena/) (round-robin tournament with judges), [Blind Taste Test](examples/blind-taste-test/) (anonymous LLM evaluation) |
+| [Batch Processing](docs/batch-processing.md) | Process many items: worker loops, manual chains, NATS submit loops |
 | [Building Workflows](docs/building-workflows.md) | Custom steps, pipelines, tools, knowledge |
 | [Workshop](docs/workshop.md) | Web UI architecture and enhancement guide |
 | [Architecture](docs/ARCHITECTURE.md) | System design, message flow, NATS subjects |
