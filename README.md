@@ -236,6 +236,15 @@ contributions: typed messages, stateless workers, validated contracts, tests.
 [MPL 2.0](LICENSE) — Modified source files must remain open; unmodified files
 can be combined with proprietary code. Alternative licensing available for
 organizations with copyleft constraints.
-Contact: <admin@irantransitionproject.org>
+Contact: <admin@getheddle.dev>
 
 *For governance, succession, and contributor rights, see [GOVERNANCE.md](GOVERNANCE.md).*
+
+---
+
+## Built with Heddle
+
+- **[Baft](https://github.com/IranTransitionProject/baft)** — Multi-agent analytical engine for the [Iran Transition Project](https://irantransitionproject.org). 13 specialized workers, tiered orchestration, blind audit pipeline.
+- **[Docman](https://github.com/IranTransitionProject/docman)** — Document processing pipeline: PDF/DOCX extraction, LLM classification, DuckDB persistence, vector search.
+
+*Building something with Heddle? Open a discussion — we'd like to hear about it.*
