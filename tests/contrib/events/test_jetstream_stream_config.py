@@ -7,6 +7,13 @@ rejection streams keep age-based retention with discard-old.
 Pure unit tests — a fake JetStreamContext captures the StreamConfig
 passed to ``add_stream``; no live NATS required (the integration tests
 in test_jetstream_event_log.py cover behavior against a real server).
+
+Durations are asserted in **seconds** here, matching
+``nats.js.api.StreamConfig``'s declared field units — the field itself
+converts to nanoseconds only in ``as_dict()`` (at server-publish time),
+not at construction. Asserting nanoseconds here would enshrine the
+double-conversion bug this module's ``ensure_*_stream`` helpers used to
+have before they delegated to ``heddle.bus.jetstream.ensure_stream``.
 """
 
 from __future__ import annotations
@@ -15,8 +22,6 @@ import pytest
 from nats.js.api import DiscardPolicy, StreamConfig
 
 from heddle.contrib.events.jetstream import stream_config
-
-_NS = 1_000_000_000
 
 
 class _CapturingJS:
@@ -38,7 +43,7 @@ async def test_event_stream_is_source_of_truth() -> None:
     assert cfg.max_age == 0, "event log must never age out — it is the source of truth"
     assert cfg.max_msgs is None, "unbounded message count (nats-py None sentinel)"
     assert cfg.discard == DiscardPolicy.NEW, "reject new writes when full, never drop old events"
-    assert cfg.duplicate_window == 10 * 60 * _NS, "10m opportunistic dedup window"
+    assert cfg.duplicate_window == 10 * 60, "10m opportunistic dedup window, in seconds"
 
 
 @pytest.mark.asyncio
@@ -48,7 +53,7 @@ async def test_command_stream_keeps_age_retention_discard_old() -> None:
 
     cfg = js.configs[0]
     assert cfg.discard == DiscardPolicy.OLD
-    assert cfg.max_age == 7 * 24 * 3600 * _NS
+    assert cfg.max_age == 7 * 24 * 3600
 
 
 @pytest.mark.asyncio
@@ -58,4 +63,4 @@ async def test_rejection_stream_keeps_age_retention_discard_old() -> None:
 
     cfg = js.configs[0]
     assert cfg.discard == DiscardPolicy.OLD
-    assert cfg.max_age == 30 * 24 * 3600 * _NS
+    assert cfg.max_age == 30 * 24 * 3600

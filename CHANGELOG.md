@@ -14,6 +14,19 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ### Fixed
 
+- **`ensure_event_stream`/`ensure_command_stream`/`ensure_rejection_stream`
+  no longer double-convert `max_age`/`duplicate_window` to nanoseconds.**
+  `contrib/events/jetstream/stream_config.py`'s hand-rolled `_ensure_stream`
+  pre-multiplied both durations by `1_000_000_000` before constructing
+  `nats.js.api.StreamConfig`, whose own `as_dict()` converts (seconds →
+  nanoseconds) again at server-publish time — an event stream's 10-minute
+  duplicate window was actually sent to NATS as `600 * 1e9` **seconds**, and
+  a command/rejection stream's age-based retention was similarly inflated by
+  a billion. Found while delegating stream creation to
+  `heddle.bus.jetstream.ensure_stream` (wire-envelope S3b) for its
+  seconds-based contract. `tests/contrib/events/test_jetstream_stream_config.py`
+  now asserts on `StreamConfig`'s declared seconds units instead of the
+  pre-converted nanosecond values that enshrined the bug.
 - **Forged-issuer provenance on framework-only events now raises
   `AggregateInvariantError`** instead of `CorruptAggregateAlert`. An
   `InternalFinalized` whose `issued_by` does not start with
@@ -136,6 +149,29 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ### Added
 
+- **`heddle.contrib.events`' JetStream backing specializes over the
+  generic `heddle.bus.jetstream` primitives** (`clean-slate`, wire-envelope
+  S3b). `JetStreamEventLog.append`/`load` and `JetStreamRejectionLog.append`/
+  `load` delegate their publish/CAS/pull-consumer mechanics to
+  `bus.jetstream.publish`/`pull` instead of hand-rolling
+  `Nats-Expected-Last-Subject-Sequence`/fetch/unsubscribe loops;
+  `WrongLastSequenceError` translates to the existing `ConcurrencyError`.
+  `JetStreamEventLog.append` now also sets `msg_id` from the event body's
+  `event_id` (UUIDv7) so JetStream's server-side `Nats-Msg-Id` dedup is
+  actually wired up, closing a gap the wire-contract docstring already
+  described but the implementation never used;
+  `JetStreamRejectionLog.append` does the same with `rejection_id`.
+  `contrib/events/jetstream/stream_config.py`'s duplicate subject-builder
+  functions (`event_subject`/`event_subject_prefix`/etc., diverged from the
+  canonical `heddle.contrib.events.subjects` module) are removed in favor of
+  importing from `subjects.py` directly; stream creation delegates to
+  `bus.jetstream.ensure_stream`. Justification: (i) the JetStream
+  primitive logic was duplicated (and, per the Fixed entry above, subtly
+  wrong) between `bus/jetstream.py` and `contrib/events/jetstream/`; this
+  collapses it to one implementation; (ii) core↛contrib direction preserved
+  — `bus/jetstream.py` still doesn't import contrib; (iii) no ABC or wire-
+  shape change, reviewer-verifiable by diffing each file against its
+  generic-primitive call.
 - **`Event`, `Command`, and `Rejection` now ride the `WireEnvelope`**
   (`clean-slate`, wire-envelope S3a). Renamed from `EventEnvelope` /
   `CommandMessage` / `RejectionEnvelope`; registered as `events.Event` /

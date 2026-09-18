@@ -1,8 +1,9 @@
 """JetStreamRejectionLog — production :class:`RejectionLog` over JetStream.
 
 Smaller scope than :class:`JetStreamEventLog`: no CAS, no per-
-aggregate ordering. Append is a simple publish; load is a one-shot
-pull subscription with the appropriate subject filter.
+aggregate ordering. Append/load delegate to the generic
+:func:`heddle.bus.jetstream.publish` / :func:`heddle.bus.jetstream.pull`
+primitives — this module owns only subject naming.
 
 Subjects: ``heddle.rejections.{aggregate_type}.{aggregate_id}.{command_type}``
 Stream:   ``HEDDLE_REJECTIONS_{TYPE_UPPER}``
@@ -12,12 +13,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import nats.errors
-
-from heddle.contrib.events.jetstream.stream_config import (
-    rejection_subject,
-)
+from heddle.bus.jetstream import publish as js_publish
+from heddle.bus.jetstream import pull as js_pull
 from heddle.contrib.events.rejection_log import Rejection, RejectionLog
+from heddle.contrib.events.subjects import rejection_subject
 from heddle.core.envelope import WireEnvelope, unwrap
 
 if TYPE_CHECKING:
@@ -46,7 +45,12 @@ class JetStreamRejectionLog(RejectionLog):
             body.command.aggregate_id,
             body.command.command_type,
         )
-        await self._js.publish(subject, envelope.model_dump_json().encode())
+        await js_publish(
+            self._js,
+            subject,
+            envelope.model_dump_json().encode(),
+            msg_id=body.rejection_id,
+        )
 
     async def load(
         self, aggregate_type: str, aggregate_id: str | None = None
@@ -57,17 +61,6 @@ class JetStreamRejectionLog(RejectionLog):
         else:
             subject = f"heddle.rejections.{aggregate_type}.{aggregate_id}.>"
 
-        sub = await self._js.pull_subscribe(subject=subject, durable=None)
-        try:
-            while True:
-                try:
-                    msgs = await sub.fetch(batch=64, timeout=0.25)
-                except nats.errors.TimeoutError:
-                    return
-                if not msgs:
-                    return
-                for msg in msgs:
-                    await msg.ack()
-                    yield WireEnvelope.model_validate_json(msg.data)
-        finally:
-            await sub.unsubscribe()
+        async for msg in js_pull(self._js, subject=subject, durable=None):
+            await msg.ack()
+            yield WireEnvelope.model_validate_json(msg.data)
