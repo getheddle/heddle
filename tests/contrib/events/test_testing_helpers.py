@@ -3,16 +3,14 @@
 The fakes here register at module import; the registry_isolation
 fixture does NOT cover them (it snapshots after import). These
 tests verify their public registration is stable and the factories
-produce valid envelopes.
+produce valid bodies.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 import pytest
 
-from heddle.contrib.events.envelopes import CommandMessage, EventEnvelope
+from heddle.contrib.events.envelopes import Command, Event
 from heddle.contrib.events.errors import CommandRejected
 from heddle.contrib.events.registry import get_aggregate_class
 from heddle.contrib.events.testing import (
@@ -25,7 +23,7 @@ from heddle.contrib.events.testing import (
 
 def test_make_event_defaults() -> None:
     env = make_event()
-    assert isinstance(env, EventEnvelope)
+    assert isinstance(env, Event)
     assert env.aggregate_type == "FakeInterval"
     assert env.aggregate_id == "test-id"
     assert env.event_type == "ThingHappened"
@@ -34,7 +32,6 @@ def test_make_event_defaults() -> None:
 
 
 def test_make_event_overrides() -> None:
-    when = datetime(2026, 1, 1, tzinfo=UTC)
     env = make_event(
         aggregate_type="Job",
         aggregate_id="39174-004",
@@ -42,8 +39,6 @@ def test_make_event_overrides() -> None:
         aggregate_version=7,
         payload={"a": 1},
         issued_by="framework:cascade",
-        occurred_at=when,
-        recorded_at=when,
     )
     assert env.aggregate_type == "Job"
     assert env.aggregate_id == "39174-004"
@@ -51,13 +46,11 @@ def test_make_event_overrides() -> None:
     assert env.aggregate_version == 7
     assert env.payload == {"a": 1}
     assert env.metadata.issued_by == "framework:cascade"
-    assert env.occurred_at == when
-    assert env.recorded_at == when
 
 
 def test_make_command_defaults() -> None:
     cmd = make_command()
-    assert isinstance(cmd, CommandMessage)
+    assert isinstance(cmd, Command)
     assert cmd.aggregate_type == "FakeInterval"
     assert cmd.command_type == "DoThing"
     assert cmd.expected_aggregate_version is None

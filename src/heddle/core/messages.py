@@ -11,7 +11,7 @@ Message flow:
     Orchestrator  ──TaskMessage──>  Router  ──TaskMessage──>  Worker
     Worker  ──TaskResult──>  Orchestrator
 
-The event-sourcing wire envelopes (``EventEnvelope``, ``CommandMessage``,
+The event-sourcing wire bodies (``Event``, ``Command``,
 and their metadata) live in :mod:`heddle.contrib.events.envelopes` —
 distinct from the router-dispatched worker envelopes above because they
 target aggregates by natural identity and CAS rather than worker classes.

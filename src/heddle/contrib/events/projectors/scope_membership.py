@@ -22,7 +22,7 @@ from heddle.contrib.events.dispatcher import Projector
 from heddle.contrib.events.registry import is_root_type
 
 if TYPE_CHECKING:
-    from heddle.contrib.events.envelopes import EventEnvelope
+    from heddle.contrib.events.envelopes import Event
 
 CHILD_MEMBERSHIP_KEY = "_child_membership"
 """Reserved payload key.
@@ -46,7 +46,7 @@ class ScopeMembershipProjector(Projector):
         self._membership: dict[tuple[str, str], dict[str, set[str]]] = {}
         self._lock = threading.Lock()
 
-    async def project(self, envelope: EventEnvelope) -> None:
+    async def project(self, envelope: Event) -> None:
         """Update the membership view from a root-aggregate event."""
         if not is_root_type(envelope.aggregate_type):
             return

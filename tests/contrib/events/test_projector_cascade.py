@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -11,7 +10,7 @@ from heddle.contrib.events.aggregate import IntervalAggregate, RootAggregate
 from heddle.contrib.events.command_handler import CommandHandler
 from heddle.contrib.events.envelopes import (
     CommandMetadata,
-    EventEnvelope,
+    Event,
     EventMetadata,
 )
 from heddle.contrib.events.event_log import InMemoryEventLog
@@ -24,8 +23,15 @@ from heddle.contrib.events.projectors import (
 )
 from heddle.contrib.events.registry import register_aggregate
 from heddle.contrib.events.rejection_log import InMemoryRejectionLog
+from heddle.core.envelope import unwrap
 
 pytestmark = pytest.mark.usefixtures("registry_isolation")
+
+
+def _unwrap_event(envelope: Any) -> Event:
+    body = unwrap(envelope)
+    assert isinstance(body, Event)
+    return body
 
 
 def _make_classes():
@@ -54,10 +60,7 @@ def _make_classes():
     return _Root, _Child
 
 
-def _root_finalized_envelope(
-    *, root_id: str = "root-1", event_id: str | None = None
-) -> EventEnvelope:
-    now = datetime.now(UTC)
+def _root_finalized_envelope(*, root_id: str = "root-1", event_id: str | None = None) -> Event:
     kwargs: dict[str, Any] = {
         "aggregate_type": "CRoot",
         "aggregate_id": root_id,
@@ -65,12 +68,10 @@ def _root_finalized_envelope(
         "event_type": "InternalFinalized",
         "payload": {},
         "metadata": EventMetadata(issued_by="framework:horizon"),
-        "occurred_at": now,
-        "recorded_at": now,
     }
     if event_id is not None:
         kwargs["event_id"] = event_id
-    return EventEnvelope(**kwargs)
+    return Event(**kwargs)
 
 
 @pytest.fixture
@@ -91,22 +92,20 @@ async def test_cascade_finalizes_registered_children(wiring) -> None:
     # Membership pre-populated for the root.
     for child_id in ("c-1", "c-2"):
         await m.project(
-            EventEnvelope(
+            Event(
                 aggregate_type="CRoot",
                 aggregate_id="root-1",
                 aggregate_version=1,
                 event_type="ChildAdded",
                 payload={CHILD_MEMBERSHIP_KEY: {"add": [{"type": "CChild", "id": child_id}]}},
                 metadata=EventMetadata(issued_by="user:badge:test"),
-                occurred_at=datetime.now(UTC),
-                recorded_at=datetime.now(UTC),
             )
         )
 
     await c.project(_root_finalized_envelope())
 
     for child_id in ("c-1", "c-2"):
-        events = [ev async for ev in el.load("CChild", child_id)]
+        events = [_unwrap_event(ev) async for ev in el.load("CChild", child_id)]
         finalized = [ev for ev in events if ev.event_type == "InternalFinalized"]
         assert len(finalized) == 1, f"child {child_id} missing InternalFinalized"
         assert finalized[0].metadata.issued_by == CASCADE_ISSUED_BY
@@ -136,15 +135,13 @@ async def test_cascade_is_idempotent(wiring) -> None:
     el, _rl, _h, m, c = wiring
 
     await m.project(
-        EventEnvelope(
+        Event(
             aggregate_type="CRoot",
             aggregate_id="root-1",
             aggregate_version=1,
             event_type="ChildAdded",
             payload={CHILD_MEMBERSHIP_KEY: {"add": [{"type": "CChild", "id": "c-1"}]}},
             metadata=EventMetadata(issued_by="user:badge:test"),
-            occurred_at=datetime.now(UTC),
-            recorded_at=datetime.now(UTC),
         )
     )
 
@@ -152,7 +149,7 @@ async def test_cascade_is_idempotent(wiring) -> None:
     await c.project(root_ev)
     await c.project(root_ev)
 
-    events = [ev async for ev in el.load("CChild", "c-1")]
+    events = [_unwrap_event(ev) async for ev in el.load("CChild", "c-1")]
     finalized = [ev for ev in events if ev.event_type == "InternalFinalized"]
     assert len(finalized) == 1
 
@@ -165,35 +162,32 @@ async def test_command_rejected_swallowed(wiring) -> None:
 
     # Register a child and finalize it directly via the handler first.
     await m.project(
-        EventEnvelope(
+        Event(
             aggregate_type="CRoot",
             aggregate_id="root-1",
             aggregate_version=1,
             event_type="ChildAdded",
             payload={CHILD_MEMBERSHIP_KEY: {"add": [{"type": "CChild", "id": "c-1"}]}},
             metadata=EventMetadata(issued_by="user:badge:test"),
-            occurred_at=datetime.now(UTC),
-            recorded_at=datetime.now(UTC),
         )
     )
     # Pre-finalize the child via direct cascade-shaped command.
-    from heddle.contrib.events.envelopes import CommandMessage
+    from heddle.contrib.events.envelopes import Command
 
     await c._handler.handle(
-        CommandMessage(
+        Command(
             aggregate_type="CChild",
             aggregate_id="c-1",
             command_type="InternalFinalize",
             payload={},
             metadata=CommandMetadata(issued_by="framework:cascade"),
-            issued_at=datetime.now(UTC),
         )
     )
 
     # Now cascade on the root — the child rejects; we expect no raise.
     await c.project(_root_finalized_envelope())
 
-    events = [ev async for ev in el.load("CChild", "c-1")]
+    events = [_unwrap_event(ev) async for ev in el.load("CChild", "c-1")]
     finalized = [ev for ev in events if ev.event_type == "InternalFinalized"]
     # Only one InternalFinalized (from the pre-finalize call), not a
     # second from the swallowed cascade attempt.
@@ -204,33 +198,29 @@ async def test_command_rejected_swallowed(wiring) -> None:
 async def test_non_internal_finalized_event_ignored(wiring) -> None:
     el, _rl, _h, m, c = wiring
     await m.project(
-        EventEnvelope(
+        Event(
             aggregate_type="CRoot",
             aggregate_id="root-1",
             aggregate_version=1,
             event_type="ChildAdded",
             payload={CHILD_MEMBERSHIP_KEY: {"add": [{"type": "CChild", "id": "c-1"}]}},
             metadata=EventMetadata(issued_by="user:badge:test"),
-            occurred_at=datetime.now(UTC),
-            recorded_at=datetime.now(UTC),
         )
     )
 
     # An unrelated event on the root must NOT trigger cascade.
     await c.project(
-        EventEnvelope(
+        Event(
             aggregate_type="CRoot",
             aggregate_id="root-1",
             aggregate_version=2,
             event_type="ChildAdded",
             payload={},
             metadata=EventMetadata(issued_by="user:badge:test"),
-            occurred_at=datetime.now(UTC),
-            recorded_at=datetime.now(UTC),
         )
     )
 
-    events = [ev async for ev in el.load("CChild", "c-1")]
+    events = [_unwrap_event(ev) async for ev in el.load("CChild", "c-1")]
     assert events == []
 
 
@@ -248,15 +238,13 @@ async def test_lease_preempts_cascade(wiring) -> None:
 
     # Register a child + pre-claim its lease as if P3 already won.
     await m.project(
-        EventEnvelope(
+        Event(
             aggregate_type="CRoot",
             aggregate_id="root-1",
             aggregate_version=1,
             event_type="ChildLinked",
             payload={CHILD_MEMBERSHIP_KEY: {"add": [{"type": "CChild", "id": "c-1"}]}},
             metadata=EventMetadata(issued_by="user:badge:t"),
-            occurred_at=datetime.now(UTC),
-            recorded_at=datetime.now(UTC),
         )
     )
     await kv.set_if_not_exists(lease_key("CChild", "c-1"), "framework:horizon:xyz", ttl_seconds=30)
@@ -264,7 +252,7 @@ async def test_lease_preempts_cascade(wiring) -> None:
     await c_with_lease.project(_root_finalized_envelope())
 
     # No event landed for CChild — cascade was preempted at the lease.
-    events = [ev async for ev in el.load("CChild", "c-1")]
+    events = [_unwrap_event(ev) async for ev in el.load("CChild", "c-1")]
     assert events == []
 
 
@@ -278,21 +266,19 @@ async def test_lease_claim_then_publish(wiring) -> None:
     c_with_lease = CascadeProjector(m, h, kv=kv)
 
     await m.project(
-        EventEnvelope(
+        Event(
             aggregate_type="CRoot",
             aggregate_id="root-1",
             aggregate_version=1,
             event_type="ChildLinked",
             payload={CHILD_MEMBERSHIP_KEY: {"add": [{"type": "CChild", "id": "c-1"}]}},
             metadata=EventMetadata(issued_by="user:badge:t"),
-            occurred_at=datetime.now(UTC),
-            recorded_at=datetime.now(UTC),
         )
     )
 
     await c_with_lease.project(_root_finalized_envelope())
 
-    events = [ev async for ev in el.load("CChild", "c-1")]
+    events = [_unwrap_event(ev) async for ev in el.load("CChild", "c-1")]
     assert len(events) == 1
     assert events[0].event_type == "InternalFinalized"
 
@@ -303,15 +289,13 @@ async def test_non_root_internal_finalized_ignored(wiring) -> None:
     # CChild is an IntervalAggregate, not a Root. Even if it finalizes,
     # cascade must NOT fire for it.
     await c.project(
-        EventEnvelope(
+        Event(
             aggregate_type="CChild",
             aggregate_id="c-1",
             aggregate_version=1,
             event_type="InternalFinalized",
             payload={},
             metadata=EventMetadata(issued_by="framework:horizon"),
-            occurred_at=datetime.now(UTC),
-            recorded_at=datetime.now(UTC),
         )
     )
     # Nothing should have been emitted.

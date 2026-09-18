@@ -28,8 +28,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from heddle.contrib.events.envelopes import CommandMessage, EventEnvelope
-from heddle.contrib.events.rejection_log import RejectionEnvelope
 from heddle.core.messages import (
     CheckpointState,
     OrchestratorGoal,
@@ -42,14 +40,18 @@ from heddle.core.messages import (
 # the board because the envelope shape hasn't broken backwards-
 # compatibility.  Bump to ``schemas/v2/`` when a model gains a breaking
 # field change; never overwrite a published v1 schema in place.
+#
+# ``heddle.contrib.events`` bodies (Event/Command/Rejection) are
+# intentionally NOT exported here — they now ride WireEnvelope
+# (wire-envelope S3a) and get their schema export as part of the S4
+# base+bodies redesign (wire_envelope + 6 bodies), not as standalone
+# schemas. Their stale event_envelope/command_message/rejection_envelope
+# schema files were removed with the S3a reshape.
 _EXPORTS: list[tuple[str, type]] = [
     ("task_message", TaskMessage),
     ("task_result", TaskResult),
     ("orchestrator_goal", OrchestratorGoal),
     ("checkpoint_state", CheckpointState),
-    ("event_envelope", EventEnvelope),
-    ("command_message", CommandMessage),
-    ("rejection_envelope", RejectionEnvelope),
 ]
 
 _OUTPUT_DIR = Path(__file__).resolve().parents[1] / "schemas" / "v1"

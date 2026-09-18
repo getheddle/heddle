@@ -34,7 +34,7 @@ from heddle.contrib.events.errors import (
 from heddle.contrib.events.issuer_conventions import is_framework_issuer
 
 if TYPE_CHECKING:
-    from heddle.contrib.events.envelopes import EventEnvelope, EventMetadata
+    from heddle.contrib.events.envelopes import Event, EventMetadata
 
 
 PROCESSED_COMMAND_RING_SIZE: int = 512
@@ -107,7 +107,7 @@ class Aggregate(ABC):  # noqa: B024 - construction blocked via runtime check in 
 
     # ---- replay + state ---------------------------------------------------
 
-    def apply(self, envelope: EventEnvelope) -> None:
+    def apply(self, envelope: Event) -> None:
         """Apply an event to mutate aggregate state.
 
         Called by :class:`CommandHandler` post-append (live path) and

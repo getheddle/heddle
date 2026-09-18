@@ -3,27 +3,30 @@
 Per v7 §4.6, every command goes through nine steps:
 
 1. Look up aggregate class via the registry.
-2. Load events from EventLog and replay through ``apply()``
-   (Sprint 3 adds a KeyValueStore snapshot fast path).
+2. Load events from EventLog and replay through ``apply()`` (a
+   KeyValueStore snapshot fast path short-circuits full replay).
 3. Check ``has_processed(command_id)`` — dedup buffer.
 4. Validate ``expected_aggregate_version`` if not None.
 5. Look up ``handle_<command_type_snake>`` on the aggregate.
 6. Invoke handler -> ``(event_type, event_payload)``.
 7. On :class:`CommandRejected`: append a
-   :class:`RejectionEnvelope` to RejectionLog and re-raise.
-8. Construct :class:`EventEnvelope` (new event_id, version=current+1,
-   propagated correlation_id + command_id).
-9. Append with CAS, then ``apply()`` to the in-memory aggregate and
-   ``mark_processed(command_id)``. Return the envelope.
+   :class:`Rejection` to RejectionLog and re-raise.
+8. Construct :class:`Event` (new event_id, version=current+1,
+   propagated correlation_id + command_id), wrap it in a
+   ``WireEnvelope``.
+9. Append the frame with CAS, then ``apply()`` the body to the
+   in-memory aggregate and ``mark_processed(command_id)``. Return the
+   body.
 
-Sprint 2 ships the base class. Sprint 3 adds a JetStream-backed
-subclass plus the snapshot fast path. Sprint 4a's PFObservers use
-``CommandHandler`` directly to ingest PF-sourced commands.
+``handle()`` takes and returns bare bodies (``Command`` in, ``Event``
+out) — commands aren't durably logged in-process, and callers here
+only ever need event identity/metadata, never envelope-level
+``occurred_at``/``recorded_at``. Only the durable log traffics in
+``WireEnvelope`` frames; see :mod:`heddle.contrib.events.event_log`.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from heddle.contrib.events.aggregate import Aggregate, snake_case
@@ -31,7 +34,7 @@ from heddle.contrib.events.cache import AggregateCache, CacheKey
 from heddle.contrib.events.dedup_publisher import DedupPublisher, NullDedupPublisher
 from heddle.contrib.events.dedup_subscriber import DedupSubscriber, NullDedupSubscriber
 from heddle.contrib.events.envelopes import (
-    EventEnvelope,
+    Event,
     EventMetadata,
 )
 from heddle.contrib.events.errors import (
@@ -39,12 +42,13 @@ from heddle.contrib.events.errors import (
     ConcurrencyError,
 )
 from heddle.contrib.events.registry import get_aggregate_class
-from heddle.contrib.events.rejection_log import RejectionEnvelope
+from heddle.contrib.events.rejection_log import Rejection
 from heddle.contrib.events.sli import get_recorder, time_observation
 from heddle.contrib.events.snapshot_store import SNAPSHOT_EVERY_N, SnapshotStore
+from heddle.core.envelope import unwrap, wrap
 
 if TYPE_CHECKING:
-    from heddle.contrib.events.envelopes import CommandMessage
+    from heddle.contrib.events.envelopes import Command
     from heddle.contrib.events.event_log import EventLog
     from heddle.contrib.events.rejection_log import RejectionLog
 
@@ -52,7 +56,7 @@ if TYPE_CHECKING:
 class CommandHandler:
     """Orchestrate command processing through the aggregate model.
 
-    Sprint 3 adds process-local caching (T2), snapshot persistence (T3),
+    Supports process-local caching (T2), snapshot persistence (T3),
     and cross-process dedup via published ``mark_processed`` events
     (T4). All three are optional via dependency injection — pass
     ``cache=AggregateCache(max_size=0)`` to disable caching; pass
@@ -90,7 +94,7 @@ class CommandHandler:
         agg_type, agg_id = key
         await self._dedup_subscriber.unsubscribe(agg_type, agg_id)
 
-    async def handle(self, cmd: CommandMessage) -> EventEnvelope:
+    async def handle(self, cmd: Command) -> Event:
         """Process a command and produce the resulting event.
 
         Raises:
@@ -102,9 +106,9 @@ class CommandHandler:
         with time_observation() as elapsed:
             outcome = "error"
             try:
-                envelope = await self._handle_impl(cmd)
+                event = await self._handle_impl(cmd)
                 outcome = "success"
-                return envelope
+                return event
             except CommandRejected:
                 outcome = "rejected"
                 raise
@@ -119,7 +123,7 @@ class CommandHandler:
                     duration_seconds=elapsed(),
                 )
 
-    async def _handle_impl(self, cmd: CommandMessage) -> EventEnvelope:
+    async def _handle_impl(self, cmd: Command) -> Event:
         cls = get_aggregate_class(cmd.aggregate_type)
         aggregate = await self._load_or_create(cls, cmd.aggregate_id)
 
@@ -157,19 +161,16 @@ class CommandHandler:
             event_type, event_payload = handler(cmd.payload, cmd.metadata)
         except CommandRejected as rej:
             await self._rejection_log.append(
-                RejectionEnvelope(
-                    command=cmd,
-                    reason=rej.reason,
-                    detail=rej.detail,
-                    rejected_at=datetime.now(UTC),
+                wrap(
+                    "events.Rejection",
+                    Rejection(command=cmd, reason=rej.reason, detail=rej.detail),
                 )
             )
             raise
 
-        # ---- 8. Build envelope. --------------------------------------------
+        # ---- 8. Build event body. -------------------------------------------
         current_version = aggregate.aggregate_version
-        now = datetime.now(UTC)
-        envelope = EventEnvelope(
+        event = Event(
             aggregate_type=cmd.aggregate_type,
             aggregate_id=cmd.aggregate_id,
             aggregate_version=current_version + 1,
@@ -181,13 +182,11 @@ class CommandHandler:
                 correlation_id=cmd.metadata.correlation_id,
                 issued_by=cmd.metadata.issued_by,
             ),
-            occurred_at=now,
-            recorded_at=now,
         )
 
         # ---- 9. Append with CAS, then apply + mark_processed. --------------
-        await self._event_log.append(envelope, expected_version=current_version)
-        aggregate.apply(envelope)
+        await self._event_log.append(wrap("events.Event", event), expected_version=current_version)
+        aggregate.apply(event)
         aggregate.mark_processed(cmd.command_id)
 
         # ---- 10. Cross-process dedup announcement. ------------------------
@@ -201,7 +200,7 @@ class CommandHandler:
         ):
             await self._snapshot_store.save(aggregate)
 
-        return envelope
+        return event
 
     async def _load_or_create(self, cls: type[Aggregate], aggregate_id: str) -> Aggregate:
         """Rebuild aggregate, preferring cache > snapshot > event replay.
@@ -234,7 +233,9 @@ class CommandHandler:
         async for envelope in self._event_log.load(
             cls.aggregate_type, aggregate_id, from_version=from_version
         ):
-            aggregate.apply(envelope)
+            body = unwrap(envelope)
+            assert isinstance(body, Event)
+            aggregate.apply(body)
 
         await self._cache.put(key, aggregate)
         await self._dedup_subscriber.subscribe(cls.aggregate_type, aggregate_id, self._cache)
@@ -242,14 +243,16 @@ class CommandHandler:
 
     async def _find_event_by_command_id(
         self, aggregate_type: str, aggregate_id: str, command_id: str
-    ) -> EventEnvelope | None:
+    ) -> Event | None:
         """Locate a previously-produced event by command_id.
 
-        Sprint 2 implementation: linear scan over the aggregate's
-        event log. Sprint 3 swaps this for a KeyValueStore secondary
-        index so dedup-replay stays O(1).
+        Linear scan over the aggregate's event log. A future pass may
+        swap this for a KeyValueStore secondary index so dedup-replay
+        stays O(1).
         """
-        async for ev in self._event_log.load(aggregate_type, aggregate_id):
-            if ev.metadata.command_id == command_id:
-                return ev
+        async for envelope in self._event_log.load(aggregate_type, aggregate_id):
+            body = unwrap(envelope)
+            assert isinstance(body, Event)
+            if body.metadata.command_id == command_id:
+                return body
         return None

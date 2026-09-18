@@ -2,28 +2,23 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 import pytest
 
 from heddle.contrib.events.aggregate import IntervalAggregate
-from heddle.contrib.events.envelopes import EventEnvelope, EventMetadata
+from heddle.contrib.events.envelopes import Event, EventMetadata
 from heddle.contrib.events.registry import register_aggregate
 
 pytestmark = pytest.mark.usefixtures("registry_isolation")
 
 
-def _internal_finalized_envelope(version: int) -> EventEnvelope:
-    now = datetime.now(UTC)
-    return EventEnvelope(
+def _internal_finalized_envelope(version: int) -> Event:
+    return Event(
         aggregate_type="IsoInterval",
         aggregate_id="i-1",
         aggregate_version=version,
         event_type="InternalFinalized",
         payload={},
         metadata=EventMetadata(issued_by="framework:cascade"),
-        occurred_at=now,
-        recorded_at=now,
     )
 
 

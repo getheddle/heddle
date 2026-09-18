@@ -7,13 +7,12 @@ legitimate ``framework:`` issuer MUST be accepted.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
 from heddle.contrib.events.aggregate import Aggregate
-from heddle.contrib.events.envelopes import EventEnvelope, EventMetadata
+from heddle.contrib.events.envelopes import Event, EventMetadata
 from heddle.contrib.events.errors import AggregateInvariantError
 from heddle.contrib.events.registry import register_aggregate
 
@@ -31,17 +30,14 @@ def _make_fake_class() -> type[Aggregate]:
     return _Fake
 
 
-def _internal_finalized(*, issued_by: str) -> EventEnvelope:
-    now = datetime.now(UTC)
-    return EventEnvelope(
+def _internal_finalized(*, issued_by: str) -> Event:
+    return Event(
         aggregate_type="Fake",
         aggregate_id="agg-1",
         aggregate_version=1,
         event_type="InternalFinalized",
         payload={},
         metadata=EventMetadata(issued_by=issued_by),
-        occurred_at=now,
-        recorded_at=now,
     )
 
 

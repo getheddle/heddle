@@ -26,20 +26,22 @@ import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from heddle.contrib.events.envelopes import Event
 from heddle.contrib.events.sli import get_recorder, time_observation
+from heddle.core.envelope import unwrap
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-    from heddle.contrib.events.envelopes import EventEnvelope
     from heddle.contrib.events.event_log import EventLog
+    from heddle.core.envelope import WireEnvelope
 
 
 _log = logging.getLogger(__name__)
 
 
 class Projector(ABC):
-    """A consumer of :class:`EventEnvelope` from the dispatcher.
+    """A consumer of :class:`Event` bodies from the dispatcher.
 
     Projectors are NOT aggregates — they don't have state subject to
     ``apply()`` discipline. Their job is to react to events:
@@ -52,8 +54,8 @@ class Projector(ABC):
     """
 
     @abstractmethod
-    async def project(self, envelope: EventEnvelope) -> None:
-        """Consume a single event envelope. Implementations MUST be idempotent."""
+    async def project(self, envelope: Event) -> None:
+        """Consume a single event body. Implementations MUST be idempotent."""
 
 
 class EventDispatcher:
@@ -101,19 +103,21 @@ class EventDispatcher:
     async def _consume(
         self,
         aggregate_type: str,
-        iterator: AsyncIterator[EventEnvelope],
+        iterator: AsyncIterator[WireEnvelope],
     ) -> None:
         try:
             async for envelope in iterator:
+                body = unwrap(envelope)
+                assert isinstance(body, Event)
                 with time_observation() as elapsed:
                     for projector in self._projectors:
                         try:
-                            await projector.project(envelope)
+                            await projector.project(body)
                         except Exception:
                             _log.exception(
                                 "projector %s failed on event %s; continuing",
                                 type(projector).__name__,
-                                envelope.event_id,
+                                body.event_id,
                             )
                 get_recorder().observe_dispatcher_fan_out(
                     aggregate_type=aggregate_type,

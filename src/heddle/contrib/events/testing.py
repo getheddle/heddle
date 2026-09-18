@@ -17,14 +17,13 @@ teardown so the fakes registered here don't pollute test isolation.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 from heddle.contrib.events.aggregate import IntervalAggregate, RootAggregate
 from heddle.contrib.events.envelopes import (
-    CommandMessage,
+    Command,
     CommandMetadata,
-    EventEnvelope,
+    Event,
     EventMetadata,
 )
 from heddle.contrib.events.errors import CommandRejected
@@ -42,12 +41,14 @@ def make_event(
     issued_by: str = "user:badge:test",
     command_id: str | None = None,
     correlation_id: str | None = None,
-    occurred_at: datetime | None = None,
-    recorded_at: datetime | None = None,
-) -> EventEnvelope:
-    """Construct an :class:`EventEnvelope` with sensible test defaults."""
-    now = datetime.now(UTC)
-    return EventEnvelope(
+) -> Event:
+    """Construct an :class:`Event` body with sensible test defaults.
+
+    Returns the bare body — no envelope timestamps. Use
+    ``heddle.core.envelope.wrap("events.Event", make_event(...))`` to
+    build the wire frame (e.g. to feed an ``EventLog``).
+    """
+    return Event(
         aggregate_type=aggregate_type,
         aggregate_id=aggregate_id,
         aggregate_version=aggregate_version,
@@ -59,8 +60,6 @@ def make_event(
             correlation_id=correlation_id,
             issued_by=issued_by,
         ),
-        occurred_at=occurred_at or now,
-        recorded_at=recorded_at or now,
     )
 
 
@@ -73,11 +72,10 @@ def make_command(
     payload: dict[str, Any] | None = None,
     issued_by: str = "user:badge:test",
     correlation_id: str | None = None,
-    issued_at: datetime | None = None,
     expected_aggregate_version: int | None = None,
     command_id: str | None = None,
-) -> CommandMessage:
-    """Construct a :class:`CommandMessage` with sensible test defaults."""
+) -> Command:
+    """Construct a :class:`Command` body with sensible test defaults."""
     kwargs: dict[str, Any] = {
         "aggregate_type": aggregate_type,
         "aggregate_id": aggregate_id,
@@ -85,12 +83,11 @@ def make_command(
         "command_version": command_version,
         "payload": payload or {},
         "metadata": CommandMetadata(correlation_id=correlation_id, issued_by=issued_by),
-        "issued_at": issued_at or datetime.now(UTC),
         "expected_aggregate_version": expected_aggregate_version,
     }
     if command_id is not None:
         kwargs["command_id"] = command_id
-    return CommandMessage(**kwargs)
+    return Command(**kwargs)
 
 
 # Reusable fake aggregates ----------------------------------------------------

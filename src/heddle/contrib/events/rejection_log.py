@@ -1,7 +1,7 @@
-"""RejectionLog ABC, in-memory implementation, and the ``RejectionEnvelope``.
+"""RejectionLog ABC, in-memory implementation, and the ``Rejection`` body.
 
-When a command is rejected by aggregate validation, the rejection
-envelope is appended to :class:`RejectionLog`. Distinct from
+When a command is rejected by aggregate validation, a rejection is
+appended to :class:`RejectionLog`. Distinct from
 :class:`heddle.contrib.events.event_log.EventLog`:
 
 - No CAS — rejections aren't versioned per-aggregate.
@@ -9,23 +9,29 @@ envelope is appended to :class:`RejectionLog`. Distinct from
 - A separate Sprint 3 ``JetStreamRejectionLog`` will use
   ``HEDDLE_REJECTIONS_{TYPE}`` streams so rejections can be queried
   independently and don't pollute the events stream.
+
+``Rejection`` rides :class:`heddle.core.envelope.WireEnvelope` as
+``events.Rejection`` (wire-envelope S3a); the log stores and yields
+the frame so ``recorded_at`` is preserved for audit ordering.
 """
 
 from __future__ import annotations
 
 import threading
 from abc import ABC, abstractmethod
-from datetime import datetime  # noqa: TC003 - Pydantic field type, used at runtime
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
 from heddle.contrib.events.envelopes import (
-    CommandMessage,  # noqa: TC001 - Pydantic field type, used at runtime
+    Command,  # noqa: TC001 - Pydantic field type, used at runtime
 )
+from heddle.core.envelope import register_payload_type, unwrap
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+    from heddle.core.envelope import WireEnvelope
 
 
 def _uuid7() -> str:
@@ -35,14 +41,14 @@ def _uuid7() -> str:
     return str(uuid_utils.uuid7())
 
 
-class RejectionEnvelope(BaseModel):
-    """The envelope written to :class:`RejectionLog` when a command is rejected."""
+class Rejection(BaseModel):
+    """The body written to :class:`RejectionLog` when a command is rejected."""
 
     rejection_id: str = Field(
         default_factory=_uuid7,
         description="UUIDv7. Globally unique rejection identifier.",
     )
-    command: CommandMessage = Field(..., description="The full command that was rejected.")
+    command: Command = Field(..., description="The full command that was rejected.")
     reason: str = Field(
         ...,
         description=(
@@ -54,21 +60,24 @@ class RejectionEnvelope(BaseModel):
         default="",
         description="Human-readable diagnostic detail. May be empty.",
     )
-    rejected_at: datetime = Field(..., description="When the rejection was recorded.")
+    # No rejected_at: the WireEnvelope carries occurred_at/recorded_at.
+
+
+register_payload_type("events.Rejection", Rejection)
 
 
 class RejectionLog(ABC):
     """Append-only audit stream of rejected commands."""
 
     @abstractmethod
-    async def append(self, envelope: RejectionEnvelope) -> None:
-        """Append a rejection envelope to the log."""
+    async def append(self, envelope: WireEnvelope) -> None:
+        """Append a rejection frame to the log."""
 
     @abstractmethod
     def load(
         self, aggregate_type: str, aggregate_id: str | None = None
-    ) -> AsyncIterator[RejectionEnvelope]:
-        """Stream rejections in append-order, optionally filtered by id.
+    ) -> AsyncIterator[WireEnvelope]:
+        """Stream rejection frames in append-order, optionally filtered by id.
 
         There is no per-aggregate ordering for rejections; consumers
         get append-order on the underlying log.
@@ -79,23 +88,25 @@ class InMemoryRejectionLog(RejectionLog):
     """Thread-safe in-memory RejectionLog for tests."""
 
     def __init__(self) -> None:
-        self._rejections: list[RejectionEnvelope] = []
+        self._rejections: list[WireEnvelope] = []
         self._lock = threading.Lock()
 
-    async def append(self, envelope: RejectionEnvelope) -> None:
-        """Append a rejection envelope under the internal lock."""
+    async def append(self, envelope: WireEnvelope) -> None:
+        """Append a rejection frame under the internal lock."""
         with self._lock:
             self._rejections.append(envelope)
 
     async def load(
         self, aggregate_type: str, aggregate_id: str | None = None
-    ) -> AsyncIterator[RejectionEnvelope]:
-        """Yield rejections matching the optional aggregate filter, in append-order."""
+    ) -> AsyncIterator[WireEnvelope]:
+        """Yield rejection frames matching the optional aggregate filter, in append-order."""
         with self._lock:
             snapshot = list(self._rejections)
-        for rej in snapshot:
+        for envelope in snapshot:
+            rej = unwrap(envelope)
+            assert isinstance(rej, Rejection)
             if rej.command.aggregate_type != aggregate_type:
                 continue
             if aggregate_id is not None and rej.command.aggregate_id != aggregate_id:
                 continue
-            yield rej
+            yield envelope

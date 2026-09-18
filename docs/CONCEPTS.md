@@ -336,8 +336,10 @@ Sprint 2 ships `InMemoryEventLog`; Sprint 3 swaps in
 `RejectionLog` is the parallel append-only audit stream for
 rejected commands. No CAS, no per-aggregate ordering. The Sprint 3
 JetStream version uses `HEDDLE_REJECTIONS_{TYPE}` streams so
-rejections can be queried independently. `RejectionEnvelope` is
-exported to `schemas/v1/rejection_envelope.schema.json`.
+rejections can be queried independently. `Event` / `Command` /
+`Rejection` ride `WireEnvelope` as `events.Event` / `events.Command` /
+`events.Rejection` (wire-envelope S3a); their schema export as
+base+bodies is pending (S4).
 
 ## CommandHandler flow
 
@@ -357,9 +359,9 @@ v7 §4.6:
    `AttributeError` if missing.
 6. Handler returns `(event_type, event_payload)` or raises
    `CommandRejected`.
-7. On `CommandRejected`: append `RejectionEnvelope` to the
+7. On `CommandRejected`: append `Rejection` to the
    `RejectionLog`, re-raise.
-8. Build `EventEnvelope` (new event_id, version=current+1,
+8. Build `Event` (new event_id, version=current+1,
    propagating `command_id` / `correlation_id` / `issued_by` from
    the command).
 9. `event_log.append(envelope, expected_version=current_version)`,
@@ -542,9 +544,9 @@ timers cleanly on dispatcher stop.
 
 | Subject pattern | Used for | Transport |
 |---|---|---|
-| `heddle.events.{type}.{id}.{event_type}` | EventEnvelope publish | JetStream (`HEDDLE_EVENTS_{TYPE}`) |
-| `heddle.commands.{type}.{id}.{command_type}` | CommandMessage publish | JetStream (`HEDDLE_COMMANDS_{TYPE}`) |
-| `heddle.rejections.{type}.{id}.{command_type}` | RejectionEnvelope publish | JetStream (`HEDDLE_REJECTIONS_{TYPE}`) |
+| `heddle.events.{type}.{id}.{event_type}` | Event publish | JetStream (`HEDDLE_EVENTS_{TYPE}`) |
+| `heddle.commands.{type}.{id}.{command_type}` | Command publish | JetStream (`HEDDLE_COMMANDS_{TYPE}`) |
+| `heddle.rejections.{type}.{id}.{command_type}` | Rejection publish | JetStream (`HEDDLE_REJECTIONS_{TYPE}`) |
 | `heddle.dedup.{type}.{id}` | mark_processed publish | NATS core (ephemeral) |
 | `heddle:events:snapshot:{type}:{id}` | Aggregate snapshot blob | Valkey KV (string) |
 | `heddle:events:horizon:{type}:{id}` | Finalization lease | Valkey KV (SET NX EX) |

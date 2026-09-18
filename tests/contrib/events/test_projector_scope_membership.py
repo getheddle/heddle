@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 import pytest
 
 from heddle.contrib.events.aggregate import IntervalAggregate, RootAggregate
-from heddle.contrib.events.envelopes import EventEnvelope, EventMetadata
+from heddle.contrib.events.envelopes import Event, EventMetadata
 from heddle.contrib.events.projectors import (
     CHILD_MEMBERSHIP_KEY,
     ScopeMembershipProjector,
@@ -17,17 +15,14 @@ from heddle.contrib.events.registry import register_aggregate
 pytestmark = pytest.mark.usefixtures("registry_isolation")
 
 
-def _ev(*, agg_type: str, agg_id: str = "r-1", payload: dict | None = None) -> EventEnvelope:
-    now = datetime.now(UTC)
-    return EventEnvelope(
+def _ev(*, agg_type: str, agg_id: str = "r-1", payload: dict | None = None) -> Event:
+    return Event(
         aggregate_type=agg_type,
         aggregate_id=agg_id,
         aggregate_version=1,
         event_type="ChildAdded",
         payload=payload or {},
         metadata=EventMetadata(issued_by="user:badge:test"),
-        occurred_at=now,
-        recorded_at=now,
     )
 
 

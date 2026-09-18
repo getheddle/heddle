@@ -29,20 +29,19 @@ via the horizon timeout.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from hashlib import sha256
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 from heddle.contrib.events.dispatcher import Projector
-from heddle.contrib.events.envelopes import CommandMessage, CommandMetadata
+from heddle.contrib.events.envelopes import Command, CommandMetadata
 from heddle.contrib.events.errors import CommandRejected, ConcurrencyError
 from heddle.contrib.events.lease import finalization_lease
 from heddle.contrib.events.registry import is_root_type
 
 if TYPE_CHECKING:
     from heddle.contrib.events.command_handler import CommandHandler
-    from heddle.contrib.events.envelopes import EventEnvelope
+    from heddle.contrib.events.envelopes import Event
     from heddle.contrib.events.projectors.scope_membership import (
         ScopeMembershipProjector,
     )
@@ -77,7 +76,7 @@ class CascadeProjector(Projector):
         self._handler = command_handler
         self._kv = kv
 
-    async def project(self, envelope: EventEnvelope) -> None:
+    async def project(self, envelope: Event) -> None:
         """Emit cascade commands when a root aggregate finalizes."""
         if envelope.event_type != "InternalFinalized":
             return
@@ -91,11 +90,11 @@ class CascadeProjector(Projector):
 
     async def _cascade_one(
         self,
-        envelope: EventEnvelope,
+        envelope: Event,
         child_type: str,
         child_id: str,
     ) -> None:
-        cmd = CommandMessage(
+        cmd = Command(
             command_id=deterministic_cascade_id(envelope.aggregate_id, child_id, envelope.event_id),
             aggregate_type=child_type,
             aggregate_id=child_id,
@@ -105,7 +104,6 @@ class CascadeProjector(Projector):
                 correlation_id=envelope.metadata.correlation_id or envelope.event_id,
                 issued_by=CASCADE_ISSUED_BY,
             ),
-            issued_at=datetime.now(UTC),
             expected_aggregate_version=None,
         )
 
@@ -119,7 +117,7 @@ class CascadeProjector(Projector):
                 return  # P3 (or another P2 instance) already claimed.
             await self._try_handle(cmd)
 
-    async def _try_handle(self, cmd: CommandMessage) -> None:
+    async def _try_handle(self, cmd: Command) -> None:
         try:
             await self._handler.handle(cmd)
         except CommandRejected:
