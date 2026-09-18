@@ -1,21 +1,26 @@
-"""Event-sourcing wire envelopes for ``heddle.contrib.events``.
+"""Event-sourcing wire bodies for ``heddle.contrib.events``.
 
 Canonical wire format for the event-sourcing layer
-(see ``heddle-contrib-events-m2-architecture-v7.md`` §4.1).
+(see ``heddle-contrib-events-m2-architecture-v7.md`` §4.1). Ride
+:class:`heddle.core.envelope.WireEnvelope` as ``events.Event`` /
+``events.Command`` bodies (wire-envelope S3a) — the frame carries
+``occurred_at``/``recorded_at``; these bodies carry no timestamps of
+their own.
 
 Distinct from :mod:`heddle.core.messages`:
 
 - ``TaskMessage`` / ``TaskResult`` (in ``heddle.core.messages``) carry
   router-dispatched WORKER tasks and results.
-- ``EventEnvelope`` / ``CommandMessage`` (here) carry AGGREGATE
-  state-change events and the commands that produce them — targeted by
-  natural identity + CAS rather than worker class.
+- ``Event`` / ``Command`` (here) carry AGGREGATE state-change events
+  and the commands that produce them — targeted by natural identity +
+  CAS rather than worker class.
 
 Issuer convention: every event and command carries
 ``metadata.issued_by`` with a reserved prefix. See
 :mod:`heddle.contrib.events.issuer_conventions`.
 
 See Also:
+    heddle.core.envelope — WireEnvelope base, wrap()/unwrap(), the payload-type registry
     heddle.contrib.events.subjects — NATS subject helpers for these envelopes
     heddle.contrib.events.issuer_conventions — reserved ``issued_by`` prefixes
     heddle.core.messages — router-dispatched worker message envelopes
@@ -23,10 +28,11 @@ See Also:
 
 from __future__ import annotations
 
-from datetime import datetime  # noqa: TC003 - Pydantic field type, used at runtime
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+from heddle.core.envelope import register_payload_type
 
 
 def _uuid7() -> str:
@@ -62,8 +68,8 @@ class EventMetadata(BaseModel):
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
-class EventEnvelope(BaseModel):
-    """Canonical event envelope for heddle.contrib.events.
+class Event(BaseModel):
+    """Canonical event body for heddle.contrib.events. Rides ``WireEnvelope``.
 
     Persisted in JetStream ``HEDDLE_EVENTS_{TYPE}`` streams. Replayed by
     aggregates to reconstruct state. See architecture v7 §4.1.
@@ -71,9 +77,10 @@ class EventEnvelope(BaseModel):
     Ordering authority:
       - ``aggregate_version``: authoritative for in-aggregate ordering;
         CAS field on ``EventLog.append()``.
-      - ``recorded_at``: authoritative for cross-aggregate log ordering.
-      - ``occurred_at``: for domain queries only — never for ordering
-        computation.
+      - the enclosing envelope's ``recorded_at``: authoritative for
+        cross-aggregate log ordering.
+      - the enclosing envelope's ``occurred_at``: for domain queries
+        only — never for ordering computation.
     """
 
     event_id: str = Field(
@@ -93,8 +100,10 @@ class EventEnvelope(BaseModel):
     event_version: int = 1
     payload: dict[str, Any] = Field(default_factory=dict)
     metadata: EventMetadata
-    occurred_at: datetime
-    recorded_at: datetime
+    # No occurred_at/recorded_at: the WireEnvelope carries both.
+
+
+register_payload_type("events.Event", Event)
 
 
 class CommandMetadata(BaseModel):
@@ -115,12 +124,12 @@ class CommandMetadata(BaseModel):
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
-class CommandMessage(BaseModel):
-    """Canonical command envelope for heddle.contrib.events.
+class Command(BaseModel):
+    """Canonical command body for heddle.contrib.events. Not itself durably logged.
 
     Published to JetStream ``HEDDLE_COMMANDS_{TYPE}`` streams. Consumed by
     ``CommandHandler`` (Sprint 2/3). Distinct from :class:`TaskMessage`:
-    ``CommandMessage`` targets an aggregate by natural identity and CAS;
+    ``Command`` targets an aggregate by natural identity and CAS;
     ``TaskMessage`` targets a worker class via router rules.
 
     ``expected_aggregate_version`` is the optimistic concurrency token.
@@ -141,5 +150,9 @@ class CommandMessage(BaseModel):
     command_version: int = 1
     payload: dict[str, Any] = Field(default_factory=dict)
     metadata: CommandMetadata
-    issued_at: datetime
     expected_aggregate_version: int | None = None
+    # No issued_at: when a command rides the WireEnvelope, the frame
+    # carries occurred_at/recorded_at.
+
+
+register_payload_type("events.Command", Command)

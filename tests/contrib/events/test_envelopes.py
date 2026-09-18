@@ -1,14 +1,12 @@
-"""Tests for EventEnvelope / CommandMessage wire envelopes (Sprint 1)."""
-
-from datetime import UTC, datetime
+"""Tests for Event / Command wire bodies (wire-envelope S3a)."""
 
 import pytest
 from pydantic import ValidationError
 
 from heddle.contrib.events.envelopes import (
-    CommandMessage,
+    Command,
     CommandMetadata,
-    EventEnvelope,
+    Event,
     EventMetadata,
 )
 
@@ -20,8 +18,6 @@ def _event_kwargs(**overrides):
         "aggregate_version": 1,
         "event_type": "JobClockedIn",
         "metadata": EventMetadata(issued_by="user:badge:206"),
-        "occurred_at": datetime(2026, 5, 16, 12, 0, 0, tzinfo=UTC),
-        "recorded_at": datetime(2026, 5, 16, 12, 0, 1, tzinfo=UTC),
     }
     base.update(overrides)
     return base
@@ -33,46 +29,45 @@ def _command_kwargs(**overrides):
         "aggregate_id": "39174-004",
         "command_type": "JobClockIn",
         "metadata": CommandMetadata(issued_by="user:badge:206"),
-        "issued_at": datetime(2026, 5, 16, 12, 0, 0, tzinfo=UTC),
     }
     base.update(overrides)
     return base
 
 
-def test_event_envelope_round_trip():
-    env = EventEnvelope(**_event_kwargs(payload={"badge": "206"}))
-    restored = EventEnvelope.model_validate_json(env.model_dump_json())
+def test_event_round_trip():
+    env = Event(**_event_kwargs(payload={"badge": "206"}))
+    restored = Event.model_validate_json(env.model_dump_json())
     assert restored == env
 
 
-def test_event_envelope_requires_issued_by():
+def test_event_requires_issued_by():
     with pytest.raises(ValidationError):
         EventMetadata()  # type: ignore[call-arg]
 
 
-def test_event_envelope_event_id_defaults_to_uuid7():
-    e1 = EventEnvelope(**_event_kwargs())
-    e2 = EventEnvelope(**_event_kwargs())
+def test_event_event_id_defaults_to_uuid7():
+    e1 = Event(**_event_kwargs())
+    e2 = Event(**_event_kwargs())
     assert e1.event_id != e2.event_id
     # UUIDv7 is time-ordered — second id should sort >= first lexically.
     assert e2.event_id >= e1.event_id
 
 
-def test_event_envelope_aggregate_version_minimum():
+def test_event_aggregate_version_minimum():
     with pytest.raises(ValidationError):
-        EventEnvelope(**_event_kwargs(aggregate_version=0))
+        Event(**_event_kwargs(aggregate_version=0))
 
 
-def test_command_message_round_trip():
-    cmd = CommandMessage(**_command_kwargs(payload={"badge": "206"}))
-    restored = CommandMessage.model_validate_json(cmd.model_dump_json())
+def test_command_round_trip():
+    cmd = Command(**_command_kwargs(payload={"badge": "206"}))
+    restored = Command.model_validate_json(cmd.model_dump_json())
     assert restored == cmd
 
 
-def test_command_message_expected_aggregate_version_optional():
-    cmd = CommandMessage(**_command_kwargs(expected_aggregate_version=None))
+def test_command_expected_aggregate_version_optional():
+    cmd = Command(**_command_kwargs(expected_aggregate_version=None))
     assert cmd.expected_aggregate_version is None
-    cmd_with_cas = CommandMessage(**_command_kwargs(expected_aggregate_version=7))
+    cmd_with_cas = Command(**_command_kwargs(expected_aggregate_version=7))
     assert cmd_with_cas.expected_aggregate_version == 7
 
 

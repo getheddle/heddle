@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -11,8 +10,9 @@ from heddle.contrib.events.aggregate import IntervalAggregate
 from heddle.contrib.events.cache import AggregateCache
 from heddle.contrib.events.command_handler import CommandHandler
 from heddle.contrib.events.envelopes import (
-    CommandMessage,
+    Command,
     CommandMetadata,
+    Event,
     EventMetadata,
 )
 from heddle.contrib.events.errors import (
@@ -21,8 +21,9 @@ from heddle.contrib.events.errors import (
 )
 from heddle.contrib.events.event_log import InMemoryEventLog
 from heddle.contrib.events.registry import register_aggregate
-from heddle.contrib.events.rejection_log import InMemoryRejectionLog
+from heddle.contrib.events.rejection_log import InMemoryRejectionLog, Rejection
 from heddle.contrib.events.snapshot_store import SnapshotStore
+from heddle.core.envelope import unwrap
 from heddle.core.kvstore import InMemoryKeyValueStore
 
 pytestmark = pytest.mark.usefixtures("registry_isolation")
@@ -38,19 +39,30 @@ def _cmd(
     correlation_id: str | None = "corr-1",
     expected_aggregate_version: int | None = None,
     command_id: str | None = None,
-) -> CommandMessage:
+) -> Command:
     kwargs: dict[str, Any] = {
         "aggregate_type": aggregate_type,
         "aggregate_id": aggregate_id,
         "command_type": command_type,
         "payload": payload or {},
         "metadata": CommandMetadata(issued_by=issued_by, correlation_id=correlation_id),
-        "issued_at": datetime.now(UTC),
         "expected_aggregate_version": expected_aggregate_version,
     }
     if command_id is not None:
         kwargs["command_id"] = command_id
-    return CommandMessage(**kwargs)
+    return Command(**kwargs)
+
+
+def _event(envelope: Any) -> Event:
+    body = unwrap(envelope)
+    assert isinstance(body, Event)
+    return body
+
+
+def _rejection(envelope: Any) -> Rejection:
+    body = unwrap(envelope)
+    assert isinstance(body, Rejection)
+    return body
 
 
 def _make_fake_class():
@@ -94,7 +106,7 @@ async def test_happy_path(handler) -> None:
     assert env.metadata.correlation_id == "corr-1"
     assert env.metadata.issued_by == "user:badge:206"
     # Event landed in the log.
-    events = [ev async for ev in el.load("FakeI", "a-1")]
+    events = [_event(ev) async for ev in el.load("FakeI", "a-1")]
     assert len(events) == 1
     assert events[0].event_id == env.event_id
 
@@ -142,7 +154,7 @@ async def test_command_rejected_logged_and_reraised(handler) -> None:
         await h.handle(_cmd(payload={"forbidden": True}))
     assert excinfo.value.reason == "FORBIDDEN"
 
-    rejections = [r async for r in rl.load("FakeI")]
+    rejections = [_rejection(r) async for r in rl.load("FakeI")]
     assert len(rejections) == 1
     assert rejections[0].reason == "FORBIDDEN"
     assert rejections[0].detail == "payload had forbidden flag"

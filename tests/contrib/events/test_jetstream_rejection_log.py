@@ -7,13 +7,13 @@ docstring for the rationale and how to run.
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
-from heddle.contrib.events.envelopes import CommandMessage, CommandMetadata
-from heddle.contrib.events.rejection_log import RejectionEnvelope
+from heddle.contrib.events.envelopes import Command, CommandMetadata
+from heddle.contrib.events.rejection_log import Rejection
+from heddle.core.envelope import WireEnvelope, unwrap, wrap
 
 NATS_URL = os.environ.get("NATS_URL")
 
@@ -23,21 +23,26 @@ pytestmark = [
 ]
 
 
-def _rejection(*, aggregate_id: str = "a-1", reason: str = "FORBIDDEN") -> RejectionEnvelope:
-    return RejectionEnvelope(
-        command=CommandMessage(
+def _rejection(*, aggregate_id: str = "a-1", reason: str = "FORBIDDEN") -> WireEnvelope:
+    body = Rejection(
+        command=Command(
             aggregate_type="JsRjT",
             aggregate_id=aggregate_id,
             command_type="DoThing",
             payload={},
             metadata=CommandMetadata(issued_by="user:badge:test"),
-            issued_at=datetime.now(UTC),
             expected_aggregate_version=None,
         ),
         reason=reason,
         detail="integration test",
-        rejected_at=datetime.now(UTC),
     )
+    return wrap("events.Rejection", body)
+
+
+def _body(envelope: WireEnvelope) -> Rejection:
+    body = unwrap(envelope)
+    assert isinstance(body, Rejection)
+    return body
 
 
 @pytest.fixture
@@ -62,7 +67,7 @@ async def rejection_log(js_connection: Any) -> Any:
 @pytest.mark.asyncio
 async def test_append_then_load_roundtrip(rejection_log: Any) -> None:
     await rejection_log.append(_rejection())
-    loaded = [r async for r in rejection_log.load("JsRjT")]
+    loaded = [_body(r) async for r in rejection_log.load("JsRjT")]
     assert any(r.reason == "FORBIDDEN" for r in loaded)
 
 
@@ -70,5 +75,5 @@ async def test_append_then_load_roundtrip(rejection_log: Any) -> None:
 async def test_filter_by_aggregate_id(rejection_log: Any) -> None:
     await rejection_log.append(_rejection(aggregate_id="a-1"))
     await rejection_log.append(_rejection(aggregate_id="a-2"))
-    loaded = [r async for r in rejection_log.load("JsRjT", "a-1")]
+    loaded = [_body(r) async for r in rejection_log.load("JsRjT", "a-1")]
     assert all(r.command.aggregate_id == "a-1" for r in loaded)

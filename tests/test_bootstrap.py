@@ -8,6 +8,8 @@ registers the shipped body types.
 
 from __future__ import annotations
 
+from heddle.contrib.events.envelopes import Command, Event
+from heddle.contrib.events.rejection_log import Rejection
 from heddle.core.envelope import get_payload_model
 from heddle.core.messages import OrchestratorGoal
 
@@ -16,3 +18,11 @@ def test_bootstrap_registers_core_payload_types() -> None:
     import heddle.bootstrap  # noqa: F401 — import runs the registration side effect
 
     assert get_payload_model("core.OrchestratorGoal") is OrchestratorGoal
+
+
+def test_bootstrap_registers_contrib_events_payload_types() -> None:
+    import heddle.bootstrap  # noqa: F401 — import runs the registration side effect
+
+    assert get_payload_model("events.Event") is Event
+    assert get_payload_model("events.Command") is Command
+    assert get_payload_model("events.Rejection") is Rejection

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
-from heddle.contrib.events.envelopes import EventEnvelope, EventMetadata
+from heddle.contrib.events.envelopes import Event, EventMetadata
 from heddle.contrib.events.errors import ConcurrencyError
 from heddle.contrib.events.event_log import InMemoryEventLog
+from heddle.core.envelope import WireEnvelope, unwrap, wrap
 
 
 def _ev(
@@ -19,18 +19,22 @@ def _ev(
     aggregate_id: str = "a-1",
     version: int,
     payload: dict[str, Any] | None = None,
-) -> EventEnvelope:
-    now = datetime.now(UTC)
-    return EventEnvelope(
+) -> WireEnvelope:
+    body = Event(
         aggregate_type=aggregate_type,
         aggregate_id=aggregate_id,
         aggregate_version=version,
         event_type="ThingHappened",
         payload=payload or {},
         metadata=EventMetadata(issued_by="user:badge:test"),
-        occurred_at=now,
-        recorded_at=now,
     )
+    return wrap("events.Event", body)
+
+
+def _v(envelope: WireEnvelope) -> int:
+    body = unwrap(envelope)
+    assert isinstance(body, Event)
+    return body.aggregate_version
 
 
 @pytest.mark.asyncio
@@ -40,7 +44,7 @@ async def test_append_then_load_preserves_order() -> None:
         await log.append(_ev(version=v), expected_version=v - 1)
 
     loaded = [ev async for ev in log.load("FakeT", "a-1")]
-    assert [ev.aggregate_version for ev in loaded] == [1, 2, 3]
+    assert [_v(ev) for ev in loaded] == [1, 2, 3]
 
 
 @pytest.mark.asyncio
@@ -59,7 +63,7 @@ async def test_expected_version_none_accepts_mid_stream_append() -> None:
     await log.append(_ev(version=1), expected_version=None)
     await log.append(_ev(version=2), expected_version=None)
     loaded = [ev async for ev in log.load("FakeT", "a-1")]
-    assert [ev.aggregate_version for ev in loaded] == [1, 2]
+    assert [_v(ev) for ev in loaded] == [1, 2]
 
 
 @pytest.mark.asyncio
@@ -95,7 +99,7 @@ async def test_load_from_version_filters() -> None:
         await log.append(_ev(version=v), expected_version=v - 1)
 
     loaded = [ev async for ev in log.load("FakeT", "a-1", from_version=2)]
-    assert [ev.aggregate_version for ev in loaded] == [3, 4]
+    assert [_v(ev) for ev in loaded] == [3, 4]
 
 
 @pytest.mark.asyncio
@@ -139,7 +143,7 @@ async def test_subscribe_returns_after_registration() -> None:
     # Drain and confirm an event published immediately after registration is delivered.
     await log.append(_ev(version=1), expected_version=0)
     first = await asyncio.wait_for(iterator.__anext__(), timeout=1.0)
-    assert first.aggregate_version == 1
+    assert _v(first) == 1
     # Cleanup.
     await iterator.aclose()
 
@@ -153,7 +157,7 @@ async def test_subscribe_yields_events_appended_after() -> None:
 
     async def consumer() -> None:
         async for ev in iterator:
-            seen.append(ev.aggregate_version)
+            seen.append(_v(ev))
             if len(seen) >= 2:
                 return
 
@@ -174,7 +178,7 @@ async def test_subscribe_does_not_yield_prior_events() -> None:
 
     async def consumer() -> None:
         async for ev in iterator:
-            seen.append(ev.aggregate_version)
+            seen.append(_v(ev))
             return
 
     task = asyncio.create_task(consumer())

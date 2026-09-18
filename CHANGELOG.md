@@ -136,6 +136,32 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ### Added
 
+- **`Event`, `Command`, and `Rejection` now ride the `WireEnvelope`**
+  (`clean-slate`, wire-envelope S3a). Renamed from `EventEnvelope` /
+  `CommandMessage` / `RejectionEnvelope`; registered as `events.Event` /
+  `events.Command` / `events.Rejection` in `heddle.bootstrap`. Each body
+  drops its own timestamp field (`occurred_at`/`recorded_at` on `Event`,
+  `issued_at` on `Command`, `rejected_at` on `Rejection`) — the enclosing
+  frame now carries `occurred_at`/`recorded_at`. `EventLog`/`RejectionLog`
+  (and their in-memory + JetStream implementations) traffic in the
+  `WireEnvelope` frame, preserving envelope timestamps for the audit-grade
+  log; `Aggregate.apply()`, `Projector.project()`, and
+  `CommandHandler.handle()` still take/return bare bodies, unwrapped at the
+  two internal seams (`CommandHandler._load_or_create`/
+  `_find_event_by_command_id`, `EventDispatcher._consume`). No JetStream
+  command-transport/consumer-loop is added — `CommandHandler.handle()`
+  remains in-process-only, deferred pending a separate architecture
+  decision on ack/nak/DLQ semantics. `tools/export_schemas.py` drops the
+  three now-stale per-class schema exports (`event_envelope`/
+  `command_message`/`rejection_envelope.schema.json`, removed from
+  `schemas/v1/`); the base+bodies schema export redesign stays S4.
+  Justification: (i) with S0–S2b's `WireEnvelope` shipped, `contrib.events`'
+  own hand-rolled envelope-plus-timestamps shape is the last redundant
+  parallel frame in the framework; (ii) composition mirrors the
+  `core.TaskMessage`-style discriminator convention already established;
+  (iii) additive rename + reshape with no ABC surface change beyond the
+  frame/body split, reviewer-verifiable by grepping `Event`/`Command`/
+  `Rejection` construction sites.
 - **`TaskMessage` and `TaskResult` now ride the `WireEnvelope`** (`clean-slate`,
   wire-envelope S2b). The task/result subjects (`heddle.tasks.*`,
   `heddle.results.*`) carry `core.TaskMessage`/`core.TaskResult` bodies; the

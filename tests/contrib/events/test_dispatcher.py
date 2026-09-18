@@ -3,27 +3,25 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
 
 import pytest
 
 from heddle.contrib.events.dispatcher import EventDispatcher, Projector
-from heddle.contrib.events.envelopes import EventEnvelope, EventMetadata
+from heddle.contrib.events.envelopes import Event, EventMetadata
 from heddle.contrib.events.event_log import InMemoryEventLog
+from heddle.core.envelope import WireEnvelope, wrap
 
 
-def _ev(*, agg_type: str = "FakeT", agg_id: str = "a-1", version: int = 1) -> EventEnvelope:
-    now = datetime.now(UTC)
-    return EventEnvelope(
+def _ev(*, agg_type: str = "FakeT", agg_id: str = "a-1", version: int = 1) -> WireEnvelope:
+    body = Event(
         aggregate_type=agg_type,
         aggregate_id=agg_id,
         aggregate_version=version,
         event_type="ThingHappened",
         payload={},
         metadata=EventMetadata(issued_by="user:badge:test"),
-        occurred_at=now,
-        recorded_at=now,
     )
+    return wrap("events.Event", body)
 
 
 class _RecorderProjector(Projector):
@@ -31,14 +29,14 @@ class _RecorderProjector(Projector):
         self.name = name
         self.seen: list[tuple[str, str, int]] = []
 
-    async def project(self, envelope: EventEnvelope) -> None:
+    async def project(self, envelope: Event) -> None:
         self.seen.append(
             (envelope.aggregate_type, envelope.aggregate_id, envelope.aggregate_version)
         )
 
 
 class _BoomProjector(Projector):
-    async def project(self, envelope: EventEnvelope) -> None:
+    async def project(self, envelope: Event) -> None:
         raise RuntimeError("intentional projector failure")
 
 
@@ -67,7 +65,7 @@ async def test_multiple_projectors_in_registration_order() -> None:
         def __init__(self, name: str) -> None:
             self.name = name
 
-        async def project(self, envelope: EventEnvelope) -> None:
+        async def project(self, envelope: Event) -> None:
             order.append(self.name)
 
     t1 = _Tracer("t1")

@@ -39,18 +39,25 @@ from typing import TYPE_CHECKING, cast
 import nats.errors
 from nats.js.errors import APIError
 
-from heddle.contrib.events.envelopes import EventEnvelope
+from heddle.contrib.events.envelopes import Event
 from heddle.contrib.events.errors import ConcurrencyError
 from heddle.contrib.events.event_log import EventLog
 from heddle.contrib.events.jetstream.stream_config import (
     event_subject,
     event_subject_prefix,
 )
+from heddle.core.envelope import WireEnvelope, unwrap
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from nats.js import JetStreamContext
+
+
+def _body(envelope: WireEnvelope) -> Event:
+    body = unwrap(envelope)
+    assert isinstance(body, Event)
+    return body
 
 
 # JetStream returns this APIError code on Nats-Expected-Last-* mismatch.
@@ -68,9 +75,10 @@ class JetStreamEventLog(EventLog):
     def __init__(self, js: JetStreamContext) -> None:
         self._js = js
 
-    async def append(self, envelope: EventEnvelope, expected_version: int | None) -> None:
-        """Publish ``envelope`` with optional CAS on ``aggregate_version``."""
-        subject = event_subject(envelope.aggregate_type, envelope.aggregate_id, envelope.event_type)
+    async def append(self, envelope: WireEnvelope, expected_version: int | None) -> None:
+        """Publish the ``envelope`` frame with optional CAS on ``aggregate_version``."""
+        body = _body(envelope)
+        subject = event_subject(body.aggregate_type, body.aggregate_id, body.event_type)
         payload = envelope.model_dump_json().encode()
         headers: dict[str, str] = {}
         if expected_version is not None:
@@ -80,8 +88,8 @@ class JetStreamEventLog(EventLog):
         except APIError as exc:
             if exc.err_code == _WRONG_LAST_SEQ_ERROR_CODE:
                 raise ConcurrencyError(
-                    f"append for {envelope.aggregate_type}:"
-                    f"{envelope.aggregate_id} expected_version="
+                    f"append for {body.aggregate_type}:"
+                    f"{body.aggregate_id} expected_version="
                     f"{expected_version} but JetStream rejected with "
                     f"wrong-last-sequence ({exc.description})"
                 ) from exc
@@ -92,8 +100,8 @@ class JetStreamEventLog(EventLog):
         aggregate_type: str,
         aggregate_id: str,
         from_version: int = 0,
-    ) -> AsyncIterator[EventEnvelope]:
-        """Stream events for one aggregate ordered by ``aggregate_version``.
+    ) -> AsyncIterator[WireEnvelope]:
+        """Stream event frames for one aggregate ordered by ``aggregate_version``.
 
         Implemented as a one-shot pull subscription with subject filter
         on ``heddle.events.{type}.{id}.>``. The subscription is torn
@@ -114,14 +122,14 @@ class JetStreamEventLog(EventLog):
                 for msg in msgs:
                     await msg.ack()  # type: ignore[reportUnknownMemberType]
                     data = cast("bytes", msg.data)  # type: ignore[reportUnknownMemberType]
-                    envelope = EventEnvelope.model_validate_json(data)
-                    if envelope.aggregate_version > from_version:
+                    envelope = WireEnvelope.model_validate_json(data)
+                    if _body(envelope).aggregate_version > from_version:
                         yield envelope
         finally:
             await sub.unsubscribe()
 
-    async def subscribe(self, aggregate_type: str) -> AsyncIterator[EventEnvelope]:
-        """Return an async iterator of newly-appended events for ``aggregate_type``.
+    async def subscribe(self, aggregate_type: str) -> AsyncIterator[WireEnvelope]:
+        """Return an async iterator of newly-appended event frames for ``aggregate_type``.
 
         The underlying push subscription is established BEFORE this
         method returns — callers may publish immediately afterwards
@@ -132,13 +140,13 @@ class JetStreamEventLog(EventLog):
         )
         return self._iterate_subscription(sub)
 
-    async def _iterate_subscription(self, sub: object) -> AsyncIterator[EventEnvelope]:
+    async def _iterate_subscription(self, sub: object) -> AsyncIterator[WireEnvelope]:
         try:
             while True:
                 msg = await sub.next_msg(timeout=None)  # type: ignore[attr-defined]
                 await msg.ack()  # type: ignore[reportUnknownMemberType]
                 data = cast("bytes", msg.data)  # type: ignore[reportUnknownMemberType]
-                yield EventEnvelope.model_validate_json(data)
+                yield WireEnvelope.model_validate_json(data)
         finally:
             with contextlib.suppress(Exception):
                 await sub.unsubscribe()  # type: ignore[attr-defined]

@@ -6,7 +6,6 @@ framework-only event types, dedup buffer, and snapshot round-trip.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -16,7 +15,7 @@ from heddle.contrib.events.aggregate import (
     Aggregate,
     snake_case,
 )
-from heddle.contrib.events.envelopes import EventEnvelope, EventMetadata
+from heddle.contrib.events.envelopes import Event, EventMetadata
 from heddle.contrib.events.errors import (
     AggregateInvariantError,
     UnknownEventVersionError,
@@ -59,17 +58,14 @@ def _envelope(
     aggregate_type: str = "Fake",
     aggregate_id: str = "agg-1",
     payload: dict[str, Any] | None = None,
-) -> EventEnvelope:
-    now = datetime.now(UTC)
-    return EventEnvelope(
+) -> Event:
+    return Event(
         aggregate_type=aggregate_type,
         aggregate_id=aggregate_id,
         aggregate_version=aggregate_version,
         event_type=event_type,
         payload=payload or {},
         metadata=EventMetadata(issued_by=issued_by),
-        occurred_at=now,
-        recorded_at=now,
     )
 
 

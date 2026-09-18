@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -29,7 +28,7 @@ from heddle.contrib.events.dedup_subscriber import (
     NatsDedupSubscriber,
     NullDedupSubscriber,
 )
-from heddle.contrib.events.envelopes import CommandMessage, CommandMetadata
+from heddle.contrib.events.envelopes import Command, CommandMetadata
 from heddle.contrib.events.event_log import InMemoryEventLog
 from heddle.contrib.events.registry import register_aggregate
 from heddle.contrib.events.rejection_log import InMemoryRejectionLog
@@ -92,14 +91,13 @@ def _make_class():
     return _HybridT
 
 
-def _cmd(*, command_id: str, expected_aggregate_version: int | None = None) -> CommandMessage:
-    return CommandMessage(
+def _cmd(*, command_id: str, expected_aggregate_version: int | None = None) -> Command:
+    return Command(
         aggregate_type="HybridT",
         aggregate_id="a-1",
         command_type="DoThing",
         payload={},
         metadata=CommandMetadata(issued_by="user:badge:1"),
-        issued_at=datetime.now(UTC),
         expected_aggregate_version=expected_aggregate_version,
         command_id=command_id,
     )

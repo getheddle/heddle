@@ -7,23 +7,29 @@ fire within test time without slowing the suite.
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
 from heddle.contrib.events.aggregate import IntervalAggregate
 from heddle.contrib.events.command_handler import CommandHandler
-from heddle.contrib.events.envelopes import EventEnvelope, EventMetadata
+from heddle.contrib.events.envelopes import Event, EventMetadata
 from heddle.contrib.events.event_log import InMemoryEventLog
 from heddle.contrib.events.lease import lease_key
 from heddle.contrib.events.projectors import FinalizationHorizonProjector
 from heddle.contrib.events.projectors.finalization_horizon import HORIZON_ISSUED_BY
 from heddle.contrib.events.registry import register_aggregate
 from heddle.contrib.events.rejection_log import InMemoryRejectionLog
+from heddle.core.envelope import unwrap, wrap
 from heddle.core.kvstore import InMemoryKeyValueStore
 
 pytestmark = pytest.mark.usefixtures("registry_isolation")
+
+
+def _unwrap_event(envelope: Any) -> Event:
+    body = unwrap(envelope)
+    assert isinstance(body, Event)
+    return body
 
 
 def _make_fast_horizon_class():
@@ -56,17 +62,14 @@ def _seed_event(
     version: int = 1,
     event_type: str = "Seeded",
     issued_by: str = "user:badge:1",
-) -> EventEnvelope:
-    now = datetime.now(UTC)
-    return EventEnvelope(
+) -> Event:
+    return Event(
         aggregate_type=aggregate_type,
         aggregate_id=aggregate_id,
         aggregate_version=version,
         event_type=event_type,
         payload={},
         metadata=EventMetadata(issued_by=issued_by),
-        occurred_at=now,
-        recorded_at=now,
     )
 
 
@@ -83,14 +86,14 @@ async def test_horizon_fires_internal_finalize() -> None:
 
     # Seed the aggregate by appending an event and projecting it.
     seed = _seed_event(version=1)
-    await el.append(seed, expected_version=0)
+    await el.append(wrap("events.Event", seed), expected_version=0)
     await p3.project(seed)
 
     # Wait past the horizon plus a small slack for the publish round-trip.
     await asyncio.sleep(0.35)
     await p3.shutdown()
 
-    events = [ev async for ev in el.load("FastHorizonT", "a-1")]
+    events = [_unwrap_event(ev) async for ev in el.load("FastHorizonT", "a-1")]
     finalized = [ev for ev in events if ev.event_type == "InternalFinalized"]
     assert len(finalized) == 1
     assert finalized[0].metadata.issued_by == HORIZON_ISSUED_BY
@@ -109,7 +112,7 @@ async def test_organic_finalize_cancels_horizon_timer() -> None:
     p3 = FinalizationHorizonProjector(kv, handler)
 
     seed = _seed_event(version=1)
-    await el.append(seed, expected_version=0)
+    await el.append(wrap("events.Event", seed), expected_version=0)
     await p3.project(seed)
 
     # Synthesise the "organic finalize" observation.
@@ -124,7 +127,7 @@ async def test_organic_finalize_cancels_horizon_timer() -> None:
     # No fresh InternalFinalized published by the horizon (the only
     # one in the log is the synthesised cascade observation, which we
     # never appended — verify by listing what's actually in the log).
-    events = [ev async for ev in el.load("FastHorizonT", "a-1")]
+    events = [_unwrap_event(ev) async for ev in el.load("FastHorizonT", "a-1")]
     assert all(ev.event_type != "InternalFinalized" for ev in events)
 
 
@@ -145,12 +148,12 @@ async def test_lease_contention_horizon_preempted() -> None:
     )
 
     seed = _seed_event(version=1)
-    await el.append(seed, expected_version=0)
+    await el.append(wrap("events.Event", seed), expected_version=0)
     await p3.project(seed)
     await asyncio.sleep(0.35)
     await p3.shutdown()
 
-    events = [ev async for ev in el.load("FastHorizonT", "a-1")]
+    events = [_unwrap_event(ev) async for ev in el.load("FastHorizonT", "a-1")]
     assert all(ev.event_type != "InternalFinalized" for ev in events)
 
 
@@ -165,16 +168,16 @@ async def test_multiple_aggregates_have_independent_timers() -> None:
 
     seed_a = _seed_event(aggregate_id="a", version=1)
     seed_b = _seed_event(aggregate_id="b", version=1)
-    await el.append(seed_a, expected_version=0)
-    await el.append(seed_b, expected_version=0)
+    await el.append(wrap("events.Event", seed_a), expected_version=0)
+    await el.append(wrap("events.Event", seed_b), expected_version=0)
     await p3.project(seed_a)
     await p3.project(seed_b)
 
     await asyncio.sleep(0.35)
     await p3.shutdown()
 
-    a_events = [ev async for ev in el.load("FastHorizonT", "a")]
-    b_events = [ev async for ev in el.load("FastHorizonT", "b")]
+    a_events = [_unwrap_event(ev) async for ev in el.load("FastHorizonT", "a")]
+    b_events = [_unwrap_event(ev) async for ev in el.load("FastHorizonT", "b")]
     assert any(ev.event_type == "InternalFinalized" for ev in a_events)
     assert any(ev.event_type == "InternalFinalized" for ev in b_events)
 
@@ -189,13 +192,13 @@ async def test_shutdown_cancels_pending_timers() -> None:
     p3 = FinalizationHorizonProjector(kv, handler)
 
     seed = _seed_event(version=1)
-    await el.append(seed, expected_version=0)
+    await el.append(wrap("events.Event", seed), expected_version=0)
     await p3.project(seed)
     # Shut down before the horizon fires.
     await p3.shutdown()
     await asyncio.sleep(0.25)
 
-    events = [ev async for ev in el.load("FastHorizonT", "a-1")]
+    events = [_unwrap_event(ev) async for ev in el.load("FastHorizonT", "a-1")]
     assert all(ev.event_type != "InternalFinalized" for ev in events)
 
 

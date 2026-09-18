@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -11,7 +10,7 @@ import pytest
 from heddle.contrib.events.aggregate import IntervalAggregate
 from heddle.contrib.events.command_handler import CommandHandler
 from heddle.contrib.events.envelopes import (
-    CommandMessage,
+    Command,
     CommandMetadata,
     EventMetadata,
 )
@@ -73,19 +72,18 @@ def _make_fake_class():
     return _Sli
 
 
-def _cmd(*, command_id: str | None = None, forbidden: bool = False) -> CommandMessage:
+def _cmd(*, command_id: str | None = None, forbidden: bool = False) -> Command:
     kwargs: dict[str, Any] = {
         "aggregate_type": "SliT",
         "aggregate_id": "a-1",
         "command_type": "DoThing",
         "payload": {"forbidden": True} if forbidden else {},
         "metadata": CommandMetadata(issued_by="user:badge:t"),
-        "issued_at": datetime.now(UTC),
         "expected_aggregate_version": None,
     }
     if command_id is not None:
         kwargs["command_id"] = command_id
-    return CommandMessage(**kwargs)
+    return Command(**kwargs)
 
 
 def test_default_recorder_is_null() -> None:
@@ -148,10 +146,10 @@ async def test_dispatcher_fan_out_observed(recorder: _CapturingRecorder) -> None
     """End-to-end through the dispatcher; the fan-out histogram fires
     once per event dispatched."""
     from heddle.contrib.events.dispatcher import EventDispatcher, Projector
-    from heddle.contrib.events.envelopes import EventEnvelope
+    from heddle.contrib.events.envelopes import Event
 
     class _Noop(Projector):
-        async def project(self, _ev: EventEnvelope) -> None:
+        async def project(self, _ev: Event) -> None:
             return
 
     _make_fake_class()

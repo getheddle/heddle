@@ -24,18 +24,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from heddle.contrib.events.dispatcher import Projector
-from heddle.contrib.events.envelopes import CommandMessage, CommandMetadata
+from heddle.contrib.events.envelopes import Command, CommandMetadata
 from heddle.contrib.events.errors import CommandRejected, ConcurrencyError
 from heddle.contrib.events.lease import finalization_lease
 from heddle.contrib.events.registry import get_aggregate_class
 
 if TYPE_CHECKING:
     from heddle.contrib.events.command_handler import CommandHandler
-    from heddle.contrib.events.envelopes import EventEnvelope
+    from heddle.contrib.events.envelopes import Event
     from heddle.core.kvstore import KeyValueStore
 
 
@@ -76,7 +75,7 @@ class FinalizationHorizonProjector(Projector):
         self._timers: dict[tuple[str, str], asyncio.Task[None]] = {}
         self._lock = asyncio.Lock()
 
-    async def project(self, envelope: EventEnvelope) -> None:
+    async def project(self, envelope: Event) -> None:
         """Start/cancel horizon timers based on observed events.
 
         - ``InternalFinalized``: cancel the timer (the aggregate
@@ -128,7 +127,7 @@ class FinalizationHorizonProjector(Projector):
                 )
                 return
 
-            cmd = CommandMessage(
+            cmd = Command(
                 aggregate_type=aggregate_type,
                 aggregate_id=aggregate_id,
                 command_type="InternalFinalize",
@@ -137,7 +136,6 @@ class FinalizationHorizonProjector(Projector):
                     correlation_id=None,
                     issued_by=HORIZON_ISSUED_BY,
                 ),
-                issued_at=datetime.now(UTC),
                 expected_aggregate_version=None,
             )
             try:
