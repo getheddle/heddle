@@ -1,5 +1,11 @@
 """JetStreamEventLog — production :class:`EventLog` backed by NATS JetStream.
 
+A thin specialization over the generic primitives in
+:mod:`heddle.bus.jetstream`: this module owns subject/stream naming and
+the domain error translation; :func:`heddle.bus.jetstream.publish` /
+:func:`heddle.bus.jetstream.pull` own the actual dedup/CAS/pull-consumer
+mechanics.
+
 Subject convention:
     ``heddle.events.{aggregate_type}.{aggregate_id}.{event_type}``
 
@@ -8,14 +14,16 @@ Streams (one per aggregate_type):
 
 CAS append
 ----------
-The ``Nats-Expected-Last-Subject-Sequence`` header is set to the
-``expected_version`` argument (the aggregate version BEFORE this event).
-JetStream rejects publishes whose stream-side last sequence for the
-subject differs from the header value — that rejection is translated
-into :class:`ConcurrencyError`.
-
-``expected_version=None`` skips the CAS header. Used by PF observers
+``expected_version`` (the aggregate version BEFORE this event) is
+passed through as ``bus.jetstream.publish``'s
+``expected_last_subject_sequence``. A :class:`WrongLastSequenceError`
+from that CAS check is translated into :class:`ConcurrencyError`.
+``expected_version=None`` skips the CAS check. Used by PF observers
 that ingest from an external source-of-truth.
+
+The event body's ``event_id`` (a UUIDv7) is passed as the publish's
+``msg_id``, enabling JetStream's server-side ``Nats-Msg-Id`` dedup
+within the event stream's duplicate window.
 
 Load
 ----
@@ -28,7 +36,9 @@ Subscribe
 A push subscription with a durable consumer name keyed on the
 aggregate_type. Returns an async iterator whose underlying subscription
 is already registered when ``subscribe()`` returns, per the Sprint 3
-R4 contract.
+R4 contract. No generic push-subscribe primitive exists in
+``bus.jetstream`` (only the pull-consumer path is generic), so this
+method talks to the JetStream client directly.
 """
 
 from __future__ import annotations
@@ -36,16 +46,13 @@ from __future__ import annotations
 import contextlib
 from typing import TYPE_CHECKING, cast
 
-import nats.errors
-from nats.js.errors import APIError
-
+from heddle.bus.jetstream import WrongLastSequenceError
+from heddle.bus.jetstream import publish as js_publish
+from heddle.bus.jetstream import pull as js_pull
 from heddle.contrib.events.envelopes import Event
 from heddle.contrib.events.errors import ConcurrencyError
 from heddle.contrib.events.event_log import EventLog
-from heddle.contrib.events.jetstream.stream_config import (
-    event_subject,
-    event_subject_prefix,
-)
+from heddle.contrib.events.subjects import event_subject, event_subject_filter
 from heddle.core.envelope import WireEnvelope, unwrap
 
 if TYPE_CHECKING:
@@ -58,10 +65,6 @@ def _body(envelope: WireEnvelope) -> Event:
     body = unwrap(envelope)
     assert isinstance(body, Event)
     return body
-
-
-# JetStream returns this APIError code on Nats-Expected-Last-* mismatch.
-_WRONG_LAST_SEQ_ERROR_CODE: int = 10071
 
 
 class JetStreamEventLog(EventLog):
@@ -80,20 +83,21 @@ class JetStreamEventLog(EventLog):
         body = _body(envelope)
         subject = event_subject(body.aggregate_type, body.aggregate_id, body.event_type)
         payload = envelope.model_dump_json().encode()
-        headers: dict[str, str] = {}
-        if expected_version is not None:
-            headers["Nats-Expected-Last-Subject-Sequence"] = str(expected_version)
         try:
-            await self._js.publish(subject, payload, headers=headers or None)
-        except APIError as exc:
-            if exc.err_code == _WRONG_LAST_SEQ_ERROR_CODE:
-                raise ConcurrencyError(
-                    f"append for {body.aggregate_type}:"
-                    f"{body.aggregate_id} expected_version="
-                    f"{expected_version} but JetStream rejected with "
-                    f"wrong-last-sequence ({exc.description})"
-                ) from exc
-            raise
+            await js_publish(
+                self._js,
+                subject,
+                payload,
+                msg_id=body.event_id,
+                expected_last_subject_sequence=expected_version,
+            )
+        except WrongLastSequenceError as exc:
+            raise ConcurrencyError(
+                f"append for {body.aggregate_type}:"
+                f"{body.aggregate_id} expected_version="
+                f"{expected_version} but JetStream rejected with "
+                f"wrong-last-sequence ({exc.description})"
+            ) from exc
 
     async def load(
         self,
@@ -103,30 +107,19 @@ class JetStreamEventLog(EventLog):
     ) -> AsyncIterator[WireEnvelope]:
         """Stream event frames for one aggregate ordered by ``aggregate_version``.
 
-        Implemented as a one-shot pull subscription with subject filter
-        on ``heddle.events.{type}.{id}.>``. The subscription is torn
-        down when iteration ends.
+        Delegates the pull-consumer loop to :func:`heddle.bus.jetstream.pull`
+        with subject filter ``heddle.events.{type}.{id}.>``.
         """
-        sub = await self._js.pull_subscribe(
+        async for msg in js_pull(
+            self._js,
             subject=f"heddle.events.{aggregate_type}.{aggregate_id}.>",
             durable=None,
-        )
-        try:
-            while True:
-                try:
-                    msgs = await sub.fetch(batch=64, timeout=0.25)
-                except nats.errors.TimeoutError:
-                    return
-                if not msgs:
-                    return
-                for msg in msgs:
-                    await msg.ack()  # type: ignore[reportUnknownMemberType]
-                    data = cast("bytes", msg.data)  # type: ignore[reportUnknownMemberType]
-                    envelope = WireEnvelope.model_validate_json(data)
-                    if _body(envelope).aggregate_version > from_version:
-                        yield envelope
-        finally:
-            await sub.unsubscribe()
+        ):
+            await msg.ack()  # type: ignore[reportUnknownMemberType]
+            data = cast("bytes", msg.data)  # type: ignore[reportUnknownMemberType]
+            envelope = WireEnvelope.model_validate_json(data)
+            if _body(envelope).aggregate_version > from_version:
+                yield envelope
 
     async def subscribe(self, aggregate_type: str) -> AsyncIterator[WireEnvelope]:
         """Return an async iterator of newly-appended event frames for ``aggregate_type``.
@@ -136,7 +129,7 @@ class JetStreamEventLog(EventLog):
         and be sure of delivery.
         """
         sub = await self._js.subscribe(
-            subject=event_subject_prefix(aggregate_type),
+            subject=event_subject_filter(aggregate_type),
         )
         return self._iterate_subscription(sub)
 
