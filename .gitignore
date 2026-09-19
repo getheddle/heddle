@@ -18,8 +18,8 @@ site/
 # Environment
 .env
 
-# Local-only design + agent session prompts (queued future work).
-# See "Session-starter queue" in CLAUDE.md for the convention.
+# Session-starters (briefs, cycles, feedback) live at the workspace root,
+# not in this repo. Kept ignored so a stray local copy is never committed.
 session-starters/
 
 # Local-only Claude Code prompt scratchpad (queued before being

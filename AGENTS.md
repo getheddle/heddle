@@ -103,6 +103,9 @@ uv run heddle new worker                                        # scaffold a wor
 HEDDLE_PIPELINE_VERBOSE=1 uv run heddle pipeline ...            # full pipeline payload logging (legacy alias: HEDDLE_TRACE)
 ```
 
+Manage Python dependencies with `uv` (`uv sync`, `uv run`); do not
+`pip install` into the environment.
+
 The toolkit's `/heddle-preflight` skill runs the standard pre-commit
 subset and reports pass/fail.
 
@@ -123,7 +126,9 @@ Before committing a structural change:
 
 - Have you read `docs/DESIGN_INVARIANTS.md` for the area you're touching?
 - Have you run `/heddle-preflight` (or its commands manually)?
-- If you touched `core/messages.py` or `schemas/v1/*`, have you run
+- If you touched wire models (`core/messages.py`, `core/envelope.py`,
+  `contrib/events/`) or `schemas/v1/*`, have you run
+  `uv run python tools/export_schemas.py --check` (CI enforces it) and
   `/heddle-contract-sync` from `../heddle-sdk/`?
 - For non-trivial changes: did you spawn `heddle-architect` to surface
   the design plan first?

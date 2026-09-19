@@ -22,13 +22,5 @@ inside this repo, not the repo itself.
 - Prefer invoking `/heddle-orient` over silently re-reading docs at the
   start of a session.
 
-## Session-starter queue
-
-`session-starters/` (gitignored) holds the user's queue of design-chat
-starters and Claude Code prompts. One file per queued session,
-sortable-letter-prefixed (`A-…`, `B-…`). Read for context when the user
-references "the next session" or a specific letter; never commit; never
-echo contents into commit messages verbatim.
-
 If anything in this file conflicts with `AGENTS.md`, follow `AGENTS.md`
 and the current user request.
