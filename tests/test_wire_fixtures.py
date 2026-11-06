@@ -18,6 +18,7 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 from pydantic import ValidationError
 
+import heddle.core.envelope as envelope_module
 import heddle.core.messages  # noqa: F401 — registers core payload types
 from heddle.core.envelope import WireEnvelope, get_payload_model, parse
 
@@ -56,11 +57,29 @@ def test_manifest_lists_every_fixture_file_exactly_once() -> None:
 
 
 def test_manifest_payload_types_match_runtime_registry_and_schemas() -> None:
+    manifest_types = set(MANIFEST["payload_types"])
+    # Every registered core body is in the manifest (and nothing else is):
+    # a new core.* type cannot ship without fixtures coverage.
+    registry = envelope_module._PAYLOAD_REGISTRY  # pyright: ignore[reportPrivateUsage]
+    core_registered = {pt for pt in registry if pt.startswith("core.")}
+    assert core_registered == manifest_types
+    # Every exported body schema is listed in the manifest.
+    annotated = {
+        json.loads(p.read_text(encoding="utf-8")).get("x-heddle-payload-type")
+        for p in SCHEMAS.glob("*.schema.json")
+    } - {None}
+    assert annotated == manifest_types
     for payload_type, schema_file in MANIFEST["payload_types"].items():
         model = get_payload_model(payload_type)
         schema = json.loads((SCHEMAS / schema_file).read_text(encoding="utf-8"))
         assert schema["title"] == model.__name__
         assert schema["x-heddle-payload-type"] == payload_type
+
+
+def test_every_schema_declares_draft_2020_12() -> None:
+    for path in SCHEMAS.glob("*.schema.json"):
+        schema = json.loads(path.read_text(encoding="utf-8"))
+        assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema", path.name
 
 
 def test_date_time_format_is_enforced() -> None:

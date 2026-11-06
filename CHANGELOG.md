@@ -170,9 +170,11 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
   exported as `additionalProperties: false` with a `^_` `patternProperties`
   carve-out, matching the runtime: unknown keys are rejected unless they are
   Middleware-Lane keys. Each core body schema (`task_message`, `task_result`,
-  `orchestrator_goal`) now carries `x-heddle-payload-type`.
-  `schemas/v1/fixtures/` adds 16 language-neutral valid and invalid wire
-  messages, with a `manifest.json` stating each one's expected outcome and
+  `orchestrator_goal`) now carries `x-heddle-payload-type`. Every exported
+  schema declares `$schema` (draft 2020-12), and `--check` also fails on a
+  stale `*.schema.json` that no model exports.
+  `schemas/v1/fixtures/` adds 19 language-neutral valid and invalid wire
+  messages, including fractional-second and non-UTC-offset timestamps, with a `manifest.json` stating each one's expected outcome and
   rejecting layer (`frame` / `body` / `dispatch`), and a README of
   comparison rules for SDKs. `tests/test_wire_fixtures.py` holds the
   committed schemas and `heddle.core.envelope.parse` to the same verdict on

@@ -24,6 +24,11 @@ layer.
 - `valid/`: complete wire messages that must be accepted.
 - `invalid/`: messages that must be rejected.
 
+The schemas are JSON Schema **draft 2020-12** (each declares `$schema`;
+references use `$defs`). Configure your validator or code generator for
+that draft, and turn on `format` checking: by default many validators
+treat `format: date-time` as an annotation and do not enforce it.
+
 ## What to assert
 
 **Valid fixtures**
@@ -44,6 +49,11 @@ layer.
 | `body` | The frame is valid; the body fails its model. |
 | `dispatch` | Frame valid; no body model is registered for `payload_type`. |
 
+An SDK registers exactly the `payload_types` listed in the manifest.
+Any other `payload_type` is a `dispatch` rejection, including
+`events.*` types that a Python process with `heddle.contrib.events`
+loaded would accept.
+
 Following Invariant 8, a worker or router that receives any of these on
 the bus logs a warning and skips it. It does not crash.
 
@@ -51,14 +61,19 @@ the bus logs a warning and skips it. It does not crash.
 
 - Compare JSON by value, not bytes: key order, whitespace, and string
   escaping are not significant.
-- Compare timestamps as instants. Fixtures use RFC 3339 UTC with a `Z`
-  suffix and whole seconds. Emitting `+00:00` or fractional zeros is
-  conformant if the instant is equal.
+- Compare timestamps as instants. Timestamps are RFC 3339 with a
+  timezone offset. Parsers must accept fractional seconds (the Python
+  runtime emits microseconds for generated times) and any offset, not
+  only `Z`. Emitting `+00:00` instead of `Z`, or a different number of
+  fractional digits, is conformant if the instant is equal.
 - Every fixture spells out every field, including defaults and `null`s.
   **Always emit the generated identity and time fields**: `message_id`,
   `occurred_at` and `recorded_at` on the frame, and `task_id` and
   `goal_id` on the bodies. A receiver fills a missing one with a freshly
-  generated value, so it can never round-trip. An SDK may omit fields
+  generated value, so it can never round-trip. The two frame timestamps
+  are filled together: if both are missing, both get the same fresh
+  time; if only one is present, the missing one copies it. An SDK may
+  omit fields
   whose default is static (`null`, `{}`, an enum default) only if it
   still compares equal after those defaults are filled back in.
 - Numbers: integers stay integers (`processing_time_ms`, token counts).
@@ -80,6 +95,11 @@ the bus logs a warning and skips it. It does not crash.
   Middleware Lane (`_`-prefixed keys), not in bodies.
 
 ## Not specified here
+
+- **Lenient input in the Python runtime.** The schemas are the contract.
+  Today the Python runtime also accepts some inputs the schemas reject
+  (for example a timestamp without an offset, or a numeric field sent as
+  a string). Do not rely on that: send what the schemas allow.
 
 - **Preserving unknown body keys through intermediaries.** Dropping them
   is allowed today. Requiring receivers to keep them when re-sending

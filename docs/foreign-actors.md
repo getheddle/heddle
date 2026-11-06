@@ -70,8 +70,8 @@ heddle.tasks.{worker_type}.{tier}
    origin               str | null                            │ FRAME
    correlation_id       str | null                            │
    causation_id         str | null                            │
-   occurred_at          str  (RFC 3339 UTC)                   │
-   recorded_at          str  (RFC 3339 UTC)                   │
+   occurred_at          str  (RFC 3339, with offset)          │
+   recorded_at          str  (RFC 3339, with offset)          │
    _trace_context       object  (optional, W3C headers)       │
    ─────────────────────────────────────────────────────────  ┘
    payload              TaskMessage body:                     ╮
@@ -96,7 +96,7 @@ heddle.results.{parent_task_id or "default"}
        └── WireEnvelope ─── JSON object ─────────────────────┐
                                                               │
    (same frame fields; payload_type "core.TaskResult")        │ FRAME
-   _trace_context       every `_` key from the TaskMessage    │
+   _trace_context       object  (worker span; see note below) │
    ─────────────────────────────────────────────────────────  ┘
    payload              TaskResult body:                      ╮
      task_id            str  (matches TaskMessage.task_id)    │
@@ -115,6 +115,11 @@ heddle.results.{parent_task_id or "default"}
 
 Bodies carry no timestamps; the frame's `occurred_at` / `recorded_at`
 replace the former `created_at` / `completed_at`.
+
+The Python worker sets the result frame's `_trace_context` from its own
+span (only when OpenTelemetry is enabled). It does not currently copy
+other `_` keys from the TaskMessage onto the TaskResult, so do not rely
+on them coming back.
 
 ## Generating typed wrappers in your language
 

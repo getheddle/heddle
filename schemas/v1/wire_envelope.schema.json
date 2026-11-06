@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "The generic frame all heddle messages ride. Bodies live in `payload`.",
   "patternProperties": {

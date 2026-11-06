@@ -47,10 +47,22 @@
       "description": "Failed TaskResult: output null, error set, degraded_modes in metadata."
     },
     {
+      "file": "valid/task_result_fractional_seconds.json",
+      "expect": "valid",
+      "payload_type": "core.TaskResult",
+      "description": "Timestamps with microsecond precision, which is what the Python runtime emits for generated times. Parsers must accept fractional seconds."
+    },
+    {
       "file": "valid/orchestrator_goal.json",
       "expect": "valid",
       "payload_type": "core.OrchestratorGoal",
       "description": "OrchestratorGoal with context and request_id."
+    },
+    {
+      "file": "valid/orchestrator_goal_utc_offset.json",
+      "expect": "valid",
+      "payload_type": "core.OrchestratorGoal",
+      "description": "occurred_at carries a non-UTC offset (+02:00); it is the same instant as recorded_at. Compare as instants; the Python runtime re-emits the offset as given."
     },
     {
       "file": "invalid/frame_missing_payload_type.json",

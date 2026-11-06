@@ -73,13 +73,18 @@ _PAYLOAD_TYPES: dict[type, str] = {
 
 _OUTPUT_DIR = Path(__file__).resolve().parents[1] / "schemas" / "v1"
 
+# Pydantic emits JSON Schema draft 2020-12 (``$defs``/``$ref``); state it so
+# code generators that default to draft-07 or draft-04 don't guess.
+_DIALECT = "https://json-schema.org/draft/2020-12/schema"
+
 
 def _schema(model: type) -> dict[str, Any]:
     """Return the exported JSON Schema for ``model``.
 
-    Two adjustments over raw ``model_json_schema()``, both so the exported
-    contract states what the runtime actually enforces:
+    Adjustments over raw ``model_json_schema()``, so the exported contract
+    states what the runtime actually enforces and how to read it:
 
+    - Every schema: declare its dialect (``$schema``, draft 2020-12).
     - ``WireEnvelope``: Pydantic renders ``extra="allow"`` as
       ``additionalProperties: true``, but the frame's validator rejects any
       unknown key that is not ``_``-prefixed (Middleware Lane, DESIGN_INVARIANTS
@@ -87,7 +92,7 @@ def _schema(model: type) -> dict[str, Any]:
       ``patternProperties`` carve-out.
     - Core bodies: annotate the ``payload_type`` that selects them.
     """
-    schema: dict[str, Any] = model.model_json_schema()
+    schema: dict[str, Any] = {"$schema": _DIALECT, **model.model_json_schema()}
     if model is WireEnvelope:
         schema["additionalProperties"] = False
         schema["patternProperties"] = {"^_": {}}
@@ -122,6 +127,14 @@ def _check_all() -> int:
         actual = path.read_text(encoding="utf-8") if path.exists() else ""
         if expected != actual:
             drift.append(stem)
+    # A schema file with no live model (e.g. left behind after a model was
+    # removed) would still be vendored by downstream SDKs; treat it as drift.
+    exported = {f"{stem}.schema.json" for stem, _ in _EXPORTS}
+    drift.extend(
+        f"{path.name} (stale: no model exports it; delete it)"
+        for path in sorted(_OUTPUT_DIR.glob("*.schema.json"))
+        if path.name not in exported
+    )
     if drift:
         sys.stderr.write(
             "Schema drift detected for: "

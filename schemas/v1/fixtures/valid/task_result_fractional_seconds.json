@@ -1,0 +1,26 @@
+{
+  "message_id": "0193a1b2-0000-7000-8000-000000000002",
+  "payload_type": "core.TaskResult",
+  "payload": {
+    "task_id": "6f1c2c8e-1d2a-4b5e-9f00-000000000001",
+    "parent_task_id": "goal-0001",
+    "worker_type": "summarizer",
+    "status": "completed",
+    "output": {
+      "summary": "Hi."
+    },
+    "error": null,
+    "model_used": "llama3.2:3b",
+    "token_usage": {
+      "prompt_tokens": 12,
+      "completion_tokens": 3
+    },
+    "metadata": {},
+    "processing_time_ms": 420
+  },
+  "origin": null,
+  "correlation_id": null,
+  "causation_id": null,
+  "occurred_at": "2026-01-01T12:00:00.123456Z",
+  "recorded_at": "2026-01-01T12:00:05.654321Z"
+}

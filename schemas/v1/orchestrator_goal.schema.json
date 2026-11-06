@@ -12,6 +12,7 @@
       "type": "string"
     }
   },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Top-level goal submitted to an orchestrator.\n\nPublished to: heddle.goals.incoming\nThe orchestrator (PipelineOrchestrator or OrchestratorActor) picks this up,\ndecomposes it into TaskMessages, and synthesizes results.\n\nThe context dict carries domain-specific data (e.g., file_ref for doc processing).",
   "properties": {
     "context": {
