@@ -18,7 +18,9 @@ layer.
     schema file. Each body schema also states it in `x-heddle-payload-type`.
   - `fixtures[]`: one entry per file, giving `expect` (`valid` or
     `invalid`), `payload_type`, a `description`, and, for invalid
-    fixtures, `rejected_at`.
+    fixtures, `rejected_at`. A valid fixture may list `may_drop`: dotted
+    paths (for example `payload.x_future_field`) that a receiver is
+    allowed to drop on round-trip.
 - `valid/`: complete wire messages that must be accepted.
 - `invalid/`: messages that must be rejected.
 
@@ -29,8 +31,9 @@ layer.
 1. The frame validates, then the body (`payload`) validates against the
    model selected by `payload_type`.
 2. Round-trip: deserialize, then re-serialize. The result must equal the
-   fixture by value. Every `_`-prefixed top-level key (the Middleware
-   Lane, for example `_trace_context`) must survive unchanged.
+   fixture by value, ignoring only the paths listed in `may_drop`. Every
+   `_`-prefixed top-level key (the Middleware Lane, for example
+   `_trace_context`) must survive unchanged.
 
 **Invalid fixtures.** The message must be rejected at the layer named by
 `rejected_at`:
@@ -62,11 +65,25 @@ the bus logs a warning and skips it. It does not crash.
   Values inside `input`, `output`, `metadata` and `context` are opaque
   JSON and must round-trip as given.
 
+## Versioning rules for bodies
+
+- **Receivers must accept unknown body keys.** They may drop them, and the
+  Python runtime does. An unknown body key is never a reason to reject a
+  message. This lets a newer sender add a field without breaking an older
+  receiver. The frame is different: unknown top-level keys are rejected
+  unless `_`-prefixed.
+- **Within v1, bodies grow only by optional fields with defaults.** A new
+  required field, a removed field, or a changed meaning is a breaking
+  change, and it needs a new `payload_type` rather than an edit to an
+  existing body.
+- Cross-cutting metadata (tracing and similar) belongs in the frame's
+  Middleware Lane (`_`-prefixed keys), not in bodies.
+
 ## Not specified here
 
-- **Unknown keys inside a body.** The Python runtime currently ignores
-  them, so they are dropped on round-trip. That behavior is under review,
-  and no fixture depends on it. Do not rely on it either way.
+- **Preserving unknown body keys through intermediaries.** Dropping them
+  is allowed today. Requiring receivers to keep them when re-sending
+  would be a compatible tightening that can be adopted later.
 - **`contrib.events` bodies** (`events.Event`, `events.Command`,
   `events.Rejection`). They are experimental and not part of the exported
   contract.

@@ -33,7 +33,13 @@ and the mechanism.
 Middleware Lane (DESIGN_INVARIANTS #22): `WireEnvelope` is the *one*
 underscore-key carrier. `model_config = ConfigDict(extra="allow")` preserves
 top-level `_`-prefixed middleware keys (e.g. `_trace_context`) and any
-extension keys through validation and round-trip; bodies stay strict.
+extension keys through validation and round-trip.
+
+Bodies are tolerant readers: unknown body keys are accepted and dropped
+(Pydantic's default `extra="ignore"`), so a newer sender can add a field
+without breaking an older receiver. Within a wire version, bodies grow
+only by optional fields with defaults; a new required field or a changed
+meaning needs a new `payload_type`. See `schemas/v1/fixtures/README.md`.
 """
 
 from __future__ import annotations

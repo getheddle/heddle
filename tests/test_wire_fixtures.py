@@ -78,9 +78,16 @@ def test_valid_fixture_passes_schemas_and_runtime(entry: dict[str, Any]) -> None
     envelope, body = parse(data)
     assert isinstance(body, get_payload_model(entry["payload_type"]))
     # Lossless round-trip: the frame (including Middleware-Lane `_` keys)
-    # and the typed body both re-serialize to exactly the fixture.
+    # re-serializes to exactly the fixture; the typed body re-serializes to
+    # the fixture's payload minus any `may_drop` paths (tolerant reader).
     assert envelope.model_dump(mode="json") == data
-    assert body.model_dump(mode="json") == data["payload"]
+    expected_body = dict(data["payload"])
+    for path in entry.get("may_drop", []):
+        layer, _, key = path.partition(".")
+        assert layer == "payload", f"unsupported may_drop path {path!r}"
+        assert key in expected_body, f"may_drop names absent key {path!r}"
+        del expected_body[key]
+    assert body.model_dump(mode="json") == expected_body
 
 
 @pytest.mark.parametrize("entry", INVALID, ids=_ids(INVALID))

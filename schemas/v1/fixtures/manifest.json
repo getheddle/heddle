@@ -26,6 +26,15 @@
       "description": "Underscore-prefixed frame keys (_trace_context and an arbitrary _x_custom) must survive round-trip unchanged (DESIGN_INVARIANTS #22)."
     },
     {
+      "file": "valid/task_message_unknown_body_key.json",
+      "expect": "valid",
+      "payload_type": "core.TaskMessage",
+      "may_drop": [
+        "payload.x_future_field"
+      ],
+      "description": "A body key unknown to this receiver (e.g. added by a newer sender) is accepted. A receiver may drop it on re-serialization; it must not reject the message."
+    },
+    {
       "file": "valid/task_result_completed.json",
       "expect": "valid",
       "payload_type": "core.TaskResult",

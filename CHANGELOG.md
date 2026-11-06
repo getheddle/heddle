@@ -177,7 +177,12 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
   comparison rules for SDKs. `tests/test_wire_fixtures.py` holds the
   committed schemas and `heddle.core.envelope.parse` to the same verdict on
   every fixture, and checks lossless round-trip, including `_` keys. The
-  `contrib.events` bodies are deliberately not exported (heddle#55).
+  `contrib.events` bodies are deliberately not exported (heddle#55). The
+  fixtures also pin the body versioning rule: receivers must accept unknown
+  body keys and may drop them (tolerant reader), and within v1 bodies grow
+  only by optional fields with defaults. A breaking body change needs a new
+  `payload_type`. The `heddle.core.envelope` docstring that claimed bodies
+  "stay strict" is corrected.
   `jsonschema` and `rfc3339-validator` are added to the `dev` extra.
 - **`heddle.contrib.events`' JetStream backing specializes over the
   generic `heddle.bus.jetstream` primitives** (`clean-slate`, wire-envelope
