@@ -18,9 +18,15 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 from pydantic import ValidationError
 
-import heddle.core.envelope as envelope_module
-import heddle.core.messages  # noqa: F401 — registers core payload types
-from heddle.core.envelope import WireEnvelope, get_payload_model, parse
+from heddle.core.envelope import (
+    _PAYLOAD_REGISTRY,  # pyright: ignore[reportPrivateUsage] — enumerate registered types
+    WireEnvelope,
+    get_payload_model,
+    parse,
+)
+
+# Importing the body models also registers their payload types.
+from heddle.core.messages import OrchestratorGoal, TaskMessage, TaskResult
 
 SCHEMAS = Path(__file__).resolve().parents[1] / "schemas" / "v1"
 FIXTURES = SCHEMAS / "fixtures"
@@ -60,9 +66,13 @@ def test_manifest_payload_types_match_runtime_registry_and_schemas() -> None:
     manifest_types = set(MANIFEST["payload_types"])
     # Every registered core body is in the manifest (and nothing else is):
     # a new core.* type cannot ship without fixtures coverage.
-    registry = envelope_module._PAYLOAD_REGISTRY  # pyright: ignore[reportPrivateUsage]
-    core_registered = {pt for pt in registry if pt.startswith("core.")}
+    core_registered = {pt for pt in _PAYLOAD_REGISTRY if pt.startswith("core.")}
     assert core_registered == manifest_types
+    assert {pt: get_payload_model(pt) for pt in manifest_types} == {
+        "core.TaskMessage": TaskMessage,
+        "core.TaskResult": TaskResult,
+        "core.OrchestratorGoal": OrchestratorGoal,
+    }
     # Every exported body schema is listed in the manifest.
     annotated = {
         json.loads(p.read_text(encoding="utf-8")).get("x-heddle-payload-type")
