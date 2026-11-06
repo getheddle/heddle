@@ -168,9 +168,9 @@ an SDK claims conformance only when it passes every fixture in
 `schemas/v1/fixtures/`.
 
 !!! warning "SDK status"
-    As of heddle v0.10.0 the reference SDKs in `heddle-sdk` still speak
-    the pre-`WireEnvelope` flat format and are **not** wire-compatible
-    with this release. Migration is tracked in
+    Since the `WireEnvelope` reshape (on `main`; first released in
+    v0.10.0), the reference SDKs in `heddle-sdk` still speak the
+    pre-`WireEnvelope` flat format and are **not** wire-compatible with it. Migration is tracked in
     [heddle-sdk#4](https://github.com/getheddle/heddle-sdk/issues/4) and
     [heddle-sdk#5](https://github.com/getheddle/heddle-sdk/issues/5).
 

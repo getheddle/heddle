@@ -71,6 +71,13 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
   heddle-sdk#4/#5 land. `docs/foreign-actors.md` is rewritten for the
   frame/body layout and states that SDK status. `docs/gateway-actors.md`'s
   webhook sketch now wraps the goal in its envelope.
+- **`heddle.contrib.events` is experimental.** It ships in this release
+  with its delivery guarantees unproven: acknowledge-before-process on
+  subscription, and sequence/CAS scope across aggregates. Its bodies are
+  not part of the exported wire contract (heddle#55).
+- **Release-gate note: CI does not exercise a live NATS/JetStream broker.**
+  Integration tests are excluded from CI, so green CI does not certify
+  broker restart, redelivery, or cross-language behavior.
 - **`heddle.contrib.events.event_log.EventLog.subscribe` signature
   (R4).** Now `async def` returning `AsyncIterator` — the
   underlying subscription is registered BEFORE the method returns,

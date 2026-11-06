@@ -52,8 +52,12 @@ the bus logs a warning and skips it. It does not crash.
   suffix and whole seconds. Emitting `+00:00` or fractional zeros is
   conformant if the instant is equal.
 - Every fixture spells out every field, including defaults and `null`s.
-  An SDK that omits default-valued or null fields on output must still
-  compare equal after filling those defaults back in.
+  **Always emit the generated identity and time fields**: `message_id`,
+  `occurred_at` and `recorded_at` on the frame, and `task_id` and
+  `goal_id` on the bodies. A receiver fills a missing one with a freshly
+  generated value, so it can never round-trip. An SDK may omit fields
+  whose default is static (`null`, `{}`, an enum default) only if it
+  still compares equal after those defaults are filled back in.
 - Numbers: integers stay integers (`processing_time_ms`, token counts).
   Values inside `input`, `output`, `metadata` and `context` are opaque
   JSON and must round-trip as given.
