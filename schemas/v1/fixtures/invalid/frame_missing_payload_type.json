@@ -1,0 +1,20 @@
+{
+  "message_id": "0193a1b2-0000-7000-8000-000000000001",
+  "payload": {
+    "task_id": "6f1c2c8e-1d2a-4b5e-9f00-000000000001",
+    "parent_task_id": null,
+    "worker_type": "summarizer",
+    "input": {
+      "text": "Hello, world."
+    },
+    "model_tier": "standard",
+    "priority": "normal",
+    "request_id": null,
+    "metadata": {}
+  },
+  "origin": null,
+  "correlation_id": null,
+  "causation_id": null,
+  "occurred_at": "2026-01-01T12:00:00Z",
+  "recorded_at": "2026-01-01T12:00:00Z"
+}

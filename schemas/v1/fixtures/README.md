@@ -1,0 +1,70 @@
+# Wire conformance fixtures (v1)
+
+Language-neutral examples of heddle wire messages, valid and invalid.
+An SDK in any language proves it speaks the v1 wire contract by passing
+every fixture here. Agreement with the JSON Schemas alone is not proof.
+
+The Python runtime is held to the same files by
+`tests/test_wire_fixtures.py`: for every fixture, the committed schemas
+and `heddle.core.envelope.parse` must give the same verdict at the same
+layer.
+
+## Layout
+
+- `manifest.json` is the index. Drive your tests from it rather than from
+  directory listings.
+  - `frame_schema`: the frame schema file (`wire_envelope.schema.json`).
+  - `payload_types`: maps each `payload_type` discriminator to its body
+    schema file. Each body schema also states it in `x-heddle-payload-type`.
+  - `fixtures[]`: one entry per file, giving `expect` (`valid` or
+    `invalid`), `payload_type`, a `description`, and, for invalid
+    fixtures, `rejected_at`.
+- `valid/`: complete wire messages that must be accepted.
+- `invalid/`: messages that must be rejected.
+
+## What to assert
+
+**Valid fixtures**
+
+1. The frame validates, then the body (`payload`) validates against the
+   model selected by `payload_type`.
+2. Round-trip: deserialize, then re-serialize. The result must equal the
+   fixture by value. Every `_`-prefixed top-level key (the Middleware
+   Lane, for example `_trace_context`) must survive unchanged.
+
+**Invalid fixtures.** The message must be rejected at the layer named by
+`rejected_at`:
+
+| `rejected_at` | Meaning |
+|---|---|
+| `frame` | The frame itself is invalid (missing or ill-typed field, unknown non-`_` key, bad timestamp). |
+| `body` | The frame is valid; the body fails its model. |
+| `dispatch` | Frame valid; no body model is registered for `payload_type`. |
+
+Following Invariant 8, a worker or router that receives any of these on
+the bus logs a warning and skips it. It does not crash.
+
+## Comparison rules
+
+- Compare JSON by value, not bytes: key order, whitespace, and string
+  escaping are not significant.
+- Compare timestamps as instants. Fixtures use RFC 3339 UTC with a `Z`
+  suffix and whole seconds. Emitting `+00:00` or fractional zeros is
+  conformant if the instant is equal.
+- Every fixture spells out every field, including defaults and `null`s.
+  An SDK that omits default-valued or null fields on output must still
+  compare equal after filling those defaults back in.
+- Numbers: integers stay integers (`processing_time_ms`, token counts).
+  Values inside `input`, `output`, `metadata` and `context` are opaque
+  JSON and must round-trip as given.
+
+## Not specified here
+
+- **Unknown keys inside a body.** The Python runtime currently ignores
+  them, so they are dropped on round-trip. That behavior is under review,
+  and no fixture depends on it. Do not rely on it either way.
+- **`contrib.events` bodies** (`events.Event`, `events.Command`,
+  `events.Rejection`). They are experimental and not part of the exported
+  contract.
+- Transport: NATS subjects and queue groups are in
+  `docs/foreign-actors.md`.

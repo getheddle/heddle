@@ -98,5 +98,6 @@
     "status"
   ],
   "title": "TaskResult",
-  "type": "object"
+  "type": "object",
+  "x-heddle-payload-type": "core.TaskResult"
 }

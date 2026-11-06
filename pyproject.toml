@@ -120,6 +120,8 @@ dev = [
     "mkdocs-material>=9.7.6",           # Needed for docs build
     "mkdocstrings[python]>=0.24",
     "deepeval>=3.8.0",         # LLM output quality evaluation
+    "jsonschema>=4.23",        # Wire-fixture conformance tests (schemas/v1/fixtures)
+    "rfc3339-validator>=0.1.4", # Enables jsonschema date-time format checking
 ]
 
 [project.scripts]

@@ -63,6 +63,14 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ### Changed
 
+- **Breaking wire change (pre-1.0, in place under `schemas/v1/`).** The
+  frame/body split from wire-envelope S1–S3b is now the exported contract:
+  every bus message is a `WireEnvelope` frame with a typed body in
+  `payload`. The reference SDKs in `heddle-sdk` still speak the previous
+  flat format and are not wire-compatible with this release until
+  heddle-sdk#4/#5 land. `docs/foreign-actors.md` is rewritten for the
+  frame/body layout and states that SDK status. `docs/gateway-actors.md`'s
+  webhook sketch now wraps the goal in its envelope.
 - **`heddle.contrib.events.event_log.EventLog.subscribe` signature
   (R4).** Now `async def` returning `AsyncIterator` — the
   underlying subscription is registered BEFORE the method returns,
@@ -149,6 +157,21 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ### Added
 
+- **Wire-envelope S4: frame schema export and cross-language conformance
+  fixtures** (heddle#54). `tools/export_schemas.py` now also exports
+  `schemas/v1/wire_envelope.schema.json`, the `WireEnvelope` frame. It is
+  exported as `additionalProperties: false` with a `^_` `patternProperties`
+  carve-out, matching the runtime: unknown keys are rejected unless they are
+  Middleware-Lane keys. Each core body schema (`task_message`, `task_result`,
+  `orchestrator_goal`) now carries `x-heddle-payload-type`.
+  `schemas/v1/fixtures/` adds 16 language-neutral valid and invalid wire
+  messages, with a `manifest.json` stating each one's expected outcome and
+  rejecting layer (`frame` / `body` / `dispatch`), and a README of
+  comparison rules for SDKs. `tests/test_wire_fixtures.py` holds the
+  committed schemas and `heddle.core.envelope.parse` to the same verdict on
+  every fixture, and checks lossless round-trip, including `_` keys. The
+  `contrib.events` bodies are deliberately not exported (heddle#55).
+  `jsonschema` and `rfc3339-validator` are added to the `dev` extra.
 - **`heddle.contrib.events`' JetStream backing specializes over the
   generic `heddle.bus.jetstream` primitives** (`clean-slate`, wire-envelope
   S3b). `JetStreamEventLog.append`/`load` and `JetStreamRejectionLog.append`/

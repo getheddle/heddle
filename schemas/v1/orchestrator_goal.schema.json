@@ -48,5 +48,6 @@
     "instruction"
   ],
   "title": "OrchestratorGoal",
-  "type": "object"
+  "type": "object",
+  "x-heddle-payload-type": "core.OrchestratorGoal"
 }

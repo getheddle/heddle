@@ -1,0 +1,12 @@
+{
+  "message_id": "0193a1b2-0000-7000-8000-000000000001",
+  "payload_type": "core.Unknown",
+  "payload": {
+    "anything": 1
+  },
+  "origin": null,
+  "correlation_id": null,
+  "causation_id": null,
+  "occurred_at": "2026-01-01T12:00:00Z",
+  "recorded_at": "2026-01-01T12:00:00Z"
+}

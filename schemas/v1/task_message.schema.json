@@ -80,5 +80,6 @@
     "input"
   ],
   "title": "TaskMessage",
-  "type": "object"
+  "type": "object",
+  "x-heddle-payload-type": "core.TaskMessage"
 }

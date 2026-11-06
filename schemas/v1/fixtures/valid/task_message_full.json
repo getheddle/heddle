@@ -1,0 +1,33 @@
+{
+  "message_id": "0193a1b2-0000-7000-8000-000000000001",
+  "payload_type": "core.TaskMessage",
+  "payload": {
+    "task_id": "6f1c2c8e-1d2a-4b5e-9f00-000000000001",
+    "parent_task_id": "goal-0001",
+    "worker_type": "summarizer",
+    "input": {
+      "text": "Ünïcödé ✓",
+      "max_words": 50,
+      "nested": {
+        "list": [
+          1,
+          2.5,
+          true,
+          null
+        ]
+      }
+    },
+    "model_tier": "frontier",
+    "priority": "high",
+    "request_id": "req-0001",
+    "metadata": {
+      "stage": "summarize",
+      "attempt": 1
+    }
+  },
+  "origin": "pipeline:doc",
+  "correlation_id": "req-0001",
+  "causation_id": "0193a1b2-0000-7000-8000-000000000000",
+  "occurred_at": "2026-01-01T12:00:00Z",
+  "recorded_at": "2026-01-01T12:00:00Z"
+}

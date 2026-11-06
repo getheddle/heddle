@@ -1,8 +1,11 @@
 """Export Heddle's wire-format Pydantic models to JSON Schema.
 
-The canonical message envelopes — ``TaskMessage``, ``TaskResult``,
-``OrchestratorGoal``, ``CheckpointState`` — live as Pydantic models in
-``heddle.core.messages``.  Foreign-language SDKs (.NET, Swift, etc.) and
+Every cross-actor message is a ``WireEnvelope`` frame
+(``heddle.core.envelope``) whose ``payload`` holds a typed *body*,
+selected by ``payload_type``.  This script exports the frame schema
+(``wire_envelope.schema.json``) and one self-contained schema per core
+body — ``TaskMessage``, ``TaskResult``, ``OrchestratorGoal`` — plus the
+standalone ``CheckpointState``.  Foreign-language SDKs (.NET, Swift, JVM) and
 external integrations don't speak Pydantic; they need JSON Schema in a
 stable on-disk location to feed into off-the-shelf code generators
 (``quicktype``, ``NJsonSchema``, ``datamodel-code-generator``).
@@ -28,6 +31,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from heddle.core.envelope import WireEnvelope
 from heddle.core.messages import (
     CheckpointState,
     OrchestratorGoal,
@@ -36,31 +40,66 @@ from heddle.core.messages import (
 )
 
 # Each entry: (filename stem, Pydantic model class).  ``filename`` is the
-# basename inside ``schemas/v1/``; ``schema_version`` is currently 1 across
-# the board because the envelope shape hasn't broken backwards-
-# compatibility.  Bump to ``schemas/v2/`` when a model gains a breaking
-# field change; never overwrite a published v1 schema in place.
+# basename inside ``schemas/v1/``.
+#
+# Versioning (pre-1.0): ``v1`` names the current wire contract, not a
+# frozen published artifact.  The wire-envelope reshape (S1-S4) changed
+# these schemas in place under the clean-slate rule in
+# ``heddle-workspace/anchors/AGENTIC-DEV.md``; the CHANGELOG marks the
+# release as a breaking wire change.  After 1.0, a breaking field change
+# moves to ``schemas/v2/`` instead of overwriting ``v1``.
 #
 # ``heddle.contrib.events`` bodies (Event/Command/Rejection) are
-# intentionally NOT exported here — they now ride WireEnvelope
-# (wire-envelope S3a) and get their schema export as part of the S4
-# base+bodies redesign (wire_envelope + 6 bodies), not as standalone
-# schemas. Their stale event_envelope/command_message/rejection_envelope
-# schema files were removed with the S3a reshape.
+# intentionally NOT exported: ``contrib.events`` is frozen and
+# experimental, and S4 is scoped to the frame plus core bodies (heddle#54,
+# heddle#55).
 _EXPORTS: list[tuple[str, type]] = [
+    ("wire_envelope", WireEnvelope),
     ("task_message", TaskMessage),
     ("task_result", TaskResult),
     ("orchestrator_goal", OrchestratorGoal),
     ("checkpoint_state", CheckpointState),
 ]
 
+# Body model -> ``payload_type`` discriminator, recorded in each body
+# schema as ``x-heddle-payload-type`` so SDKs can map discriminator to
+# schema without a side table.  Must match the ``register_payload_type``
+# calls in ``heddle.core.messages`` (asserted in tests).
+_PAYLOAD_TYPES: dict[type, str] = {
+    TaskMessage: "core.TaskMessage",
+    TaskResult: "core.TaskResult",
+    OrchestratorGoal: "core.OrchestratorGoal",
+}
+
 _OUTPUT_DIR = Path(__file__).resolve().parents[1] / "schemas" / "v1"
 
 
-def _render(model: type) -> str:
-    """Render a model's JSON Schema with stable sort + trailing newline."""
+def _schema(model: type) -> dict[str, Any]:
+    """Return the exported JSON Schema for ``model``.
+
+    Two adjustments over raw ``model_json_schema()``, both so the exported
+    contract states what the runtime actually enforces:
+
+    - ``WireEnvelope``: Pydantic renders ``extra="allow"`` as
+      ``additionalProperties: true``, but the frame's validator rejects any
+      unknown key that is not ``_``-prefixed (Middleware Lane, DESIGN_INVARIANTS
+      #22).  Export that as ``additionalProperties: false`` plus a ``^_``
+      ``patternProperties`` carve-out.
+    - Core bodies: annotate the ``payload_type`` that selects them.
+    """
     schema: dict[str, Any] = model.model_json_schema()
-    return json.dumps(schema, indent=2, sort_keys=True) + "\n"
+    if model is WireEnvelope:
+        schema["additionalProperties"] = False
+        schema["patternProperties"] = {"^_": {}}
+    payload_type = _PAYLOAD_TYPES.get(model)
+    if payload_type is not None:
+        schema["x-heddle-payload-type"] = payload_type
+    return schema
+
+
+def _render(model: type) -> str:
+    """Render a model's exported JSON Schema with stable sort + trailing newline."""
+    return json.dumps(_schema(model), indent=2, sort_keys=True) + "\n"
 
 
 def _write_all() -> list[Path]:

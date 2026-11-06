@@ -1,0 +1,117 @@
+{
+  "description": "Language-neutral wire conformance fixtures for the heddle v1 wire contract. See README.md.",
+  "frame_schema": "wire_envelope.schema.json",
+  "payload_types": {
+    "core.TaskMessage": "task_message.schema.json",
+    "core.TaskResult": "task_result.schema.json",
+    "core.OrchestratorGoal": "orchestrator_goal.schema.json"
+  },
+  "fixtures": [
+    {
+      "file": "valid/task_message_minimal_defaults.json",
+      "expect": "valid",
+      "payload_type": "core.TaskMessage",
+      "description": "TaskMessage with every default written out explicitly."
+    },
+    {
+      "file": "valid/task_message_full.json",
+      "expect": "valid",
+      "payload_type": "core.TaskMessage",
+      "description": "Every TaskMessage field set; non-ASCII text and mixed JSON value types in input."
+    },
+    {
+      "file": "valid/task_message_middleware_lane.json",
+      "expect": "valid",
+      "payload_type": "core.TaskMessage",
+      "description": "Underscore-prefixed frame keys (_trace_context and an arbitrary _x_custom) must survive round-trip unchanged (DESIGN_INVARIANTS #22)."
+    },
+    {
+      "file": "valid/task_result_completed.json",
+      "expect": "valid",
+      "payload_type": "core.TaskResult",
+      "description": "Successful TaskResult; occurred_at and recorded_at differ."
+    },
+    {
+      "file": "valid/task_result_failed.json",
+      "expect": "valid",
+      "payload_type": "core.TaskResult",
+      "description": "Failed TaskResult: output null, error set, degraded_modes in metadata."
+    },
+    {
+      "file": "valid/orchestrator_goal.json",
+      "expect": "valid",
+      "payload_type": "core.OrchestratorGoal",
+      "description": "OrchestratorGoal with context and request_id."
+    },
+    {
+      "file": "invalid/frame_missing_payload_type.json",
+      "expect": "invalid",
+      "rejected_at": "frame",
+      "payload_type": null,
+      "description": "payload_type is required."
+    },
+    {
+      "file": "invalid/frame_payload_not_object.json",
+      "expect": "invalid",
+      "rejected_at": "frame",
+      "payload_type": "core.TaskMessage",
+      "description": "payload must be a JSON object."
+    },
+    {
+      "file": "invalid/frame_unknown_key.json",
+      "expect": "invalid",
+      "rejected_at": "frame",
+      "payload_type": "core.TaskMessage",
+      "description": "A top-level key that is neither declared nor _-prefixed is rejected (catches misspelled fields)."
+    },
+    {
+      "file": "invalid/frame_bad_timestamp.json",
+      "expect": "invalid",
+      "rejected_at": "frame",
+      "payload_type": "core.TaskMessage",
+      "description": "occurred_at must be an RFC 3339 date-time."
+    },
+    {
+      "file": "invalid/body_task_message_missing_worker_type.json",
+      "expect": "invalid",
+      "rejected_at": "body",
+      "payload_type": "core.TaskMessage",
+      "description": "TaskMessage.worker_type is required."
+    },
+    {
+      "file": "invalid/body_task_message_input_not_object.json",
+      "expect": "invalid",
+      "rejected_at": "body",
+      "payload_type": "core.TaskMessage",
+      "description": "TaskMessage.input must be a JSON object."
+    },
+    {
+      "file": "invalid/body_task_message_bad_model_tier.json",
+      "expect": "invalid",
+      "rejected_at": "body",
+      "payload_type": "core.TaskMessage",
+      "description": "model_tier must be one of local, standard, frontier."
+    },
+    {
+      "file": "invalid/body_task_result_bad_status.json",
+      "expect": "invalid",
+      "rejected_at": "body",
+      "payload_type": "core.TaskResult",
+      "description": "status must be one of pending, processing, completed, failed."
+    },
+    {
+      "file": "invalid/body_orchestrator_goal_missing_instruction.json",
+      "expect": "invalid",
+      "rejected_at": "body",
+      "payload_type": "core.OrchestratorGoal",
+      "description": "OrchestratorGoal.instruction is required."
+    },
+    {
+      "file": "invalid/dispatch_unregistered_payload_type.json",
+      "expect": "invalid",
+      "rejected_at": "dispatch",
+      "payload_type": "core.Unknown",
+      "description": "A frame-valid message whose payload_type has no registered body is rejected at dispatch (Python: KeyError from get_payload_model)."
+    }
+  ]
+}
