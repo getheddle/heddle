@@ -330,14 +330,17 @@ class TaskRouter:
                 tier=tier.value,
                 subject=subject,
             )
-            # Forward the inbound frame as-is: the router moves one message
-            # one hop, so it keeps message_id, origin, correlation_id,
-            # causation_id, both timestamps, every `_` Middleware-Lane key
-            # (DESIGN_INVARIANTS #22) and the body exactly as received,
-            # including body keys this version does not know. Only
-            # `_trace_context` is re-injected, when tracing is active, so the
-            # worker span parents under the router span.
+            # Forward the inbound frame: the router moves one message one
+            # hop, so it keeps message_id, origin, correlation_id,
+            # causation_id, both timestamps and every `_` Middleware-Lane key
+            # (DESIGN_INVARIANTS #22). The body is the validated task merged
+            # over the inbound body: known fields are normalised (and an id
+            # `parse` generated, e.g. a missing task_id, is the one the worker
+            # sees), while body keys this version does not know are kept.
+            # Only `_trace_context` is re-injected, when tracing is active,
+            # so the worker span parents under the router span.
             outgoing = envelope.model_dump(mode="json")
+            outgoing["payload"] = {**envelope.payload, **task.model_dump(mode="json")}
             inject_trace_context(outgoing)
             await self.bus.publish(subject, outgoing)
 

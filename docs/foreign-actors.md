@@ -118,10 +118,10 @@ replace the former `created_at` / `completed_at`.
 
 The worker copies every `_` key from the TaskMessage frame onto the
 TaskResult frame (DESIGN_INVARIANTS #22). When OpenTelemetry is enabled,
-`_trace_context` is then replaced with the worker's own span, so a
-consumer-side span parents under it. The router forwards a task's frame
-unchanged, so `_` keys, `origin`, `correlation_id` and `causation_id`
-reach the worker as the producer sent them.
+`_trace_context` is then replaced with the span the worker's actor opened
+for the message, so a consumer-side span parents under it. The router
+forwards a task's frame, so `_` keys, `origin`, `correlation_id` and
+`causation_id` reach the worker as the producer sent them.
 
 ## Generating typed wrappers in your language
 

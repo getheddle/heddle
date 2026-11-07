@@ -8,8 +8,11 @@ These tests pin the two shapes of hop:
 - **Respond** (a worker, or an orchestrator finishing a goal): a new message
   caused by an inbound one carries the inbound ``_`` keys on its frame.
 
-Tracing is not active in these tests, so ``inject_trace_context`` is a no-op
-and an inbound ``_trace_context`` must pass through untouched.
+An earlier test may leave an OpenTelemetry provider installed, in which case
+``inject_trace_context`` legitimately replaces ``_trace_context`` with the
+current span. Assertions on ``_trace_context`` therefore check only that the
+trace id survives (the span id may change); every other ``_`` key must match
+exactly.
 """
 
 from __future__ import annotations
@@ -45,6 +48,19 @@ LANE: dict[str, Any] = {
 
 def _frame(payload_type: str, body: Any, **frame: Any) -> dict[str, Any]:
     return wrap(payload_type, body, **LANE, **frame).model_dump(mode="json")
+
+
+def _trace_id(trace_context: dict[str, str]) -> str:
+    return trace_context["traceparent"].split("-")[1]
+
+
+def _assert_lane(published: dict[str, Any]) -> None:
+    lane = {k: v for k, v in published.items() if k.startswith("_")}
+    assert set(lane) == set(LANE)
+    assert {k: v for k, v in lane.items() if k != "_trace_context"} == {
+        k: v for k, v in LANE.items() if k != "_trace_context"
+    }
+    assert _trace_id(lane["_trace_context"]) == _trace_id(LANE["_trace_context"])
 
 
 def _write(tmp_path, name: str, config: dict[str, Any]) -> str:
@@ -90,9 +106,31 @@ async def test_router_forwards_the_inbound_frame_unchanged(tmp_path) -> None:
     await router.route(data)
     forwarded = await sub.__anext__()
 
-    # Identity, causation, timestamps, every `_` key, and the body as
-    # received (including a body key this version does not know).
-    assert forwarded == data
+    # Identity, causation, timestamps and the body (including a body key this
+    # version does not know) are unchanged; every `_` key travels.
+    _assert_lane(forwarded)
+    strip = lambda d: {k: v for k, v in d.items() if k != "_trace_context"}  # noqa: E731
+    assert strip(forwarded) == strip(data)
+
+
+@pytest.mark.asyncio
+async def test_router_forwards_the_task_id_parse_generated(tmp_path) -> None:
+    rules = _write(tmp_path, "rules.yaml", {"rate_limits": {"local": {"max_concurrent": 10}}})
+    bus = InMemoryBus()
+    router = TaskRouter(rules, bus)
+    await bus.connect()
+    sub = await bus.subscribe("heddle.tasks.summarizer.local")
+
+    data = _frame(
+        "core.TaskMessage",
+        TaskMessage(worker_type="summarizer", input={}, model_tier=ModelTier.LOCAL),
+    )
+    del data["payload"]["task_id"]  # a producer that left it to the receiver
+
+    await router.route(data)
+    forwarded = await sub.__anext__()
+
+    assert forwarded["payload"]["task_id"]  # filled, so router and worker agree
 
 
 # --- respond: worker -------------------------------------------------------
@@ -132,7 +170,7 @@ async def test_worker_result_carries_inbound_lane(tmp_path, task_input, status) 
 
     published = worker.publish.call_args[0][1]
     assert TaskResult(**published["payload"]).status == status
-    assert {k: v for k, v in published.items() if k.startswith("_")} == LANE
+    _assert_lane(published)
 
 
 @pytest.mark.asyncio
@@ -168,7 +206,7 @@ async def test_orchestrator_final_result_carries_goal_lane() -> None:
 
         result = await sub.__anext__()
         assert result["payload"]["status"] == TaskStatus.FAILED.value
-        assert {k: v for k, v in result.items() if k.startswith("_")} == LANE
+        _assert_lane(result)
     finally:
         os.unlink(config_path)
 
@@ -198,7 +236,7 @@ async def test_pipeline_final_result_carries_goal_lane(tmp_path) -> None:
 
     result = await sub.__anext__()
     assert result["payload"]["status"] == TaskStatus.FAILED.value
-    assert {k: v for k, v in result.items() if k.startswith("_")} == LANE
+    _assert_lane(result)
 
 
 @pytest.mark.asyncio
@@ -217,6 +255,6 @@ async def test_council_publish_result_carries_lane() -> None:
         await orch._publish_council_result(goal, TaskStatus.FAILED, error="x", lane=dict(LANE))
 
         published = orch.publish.call_args[0][1]
-        assert {k: v for k, v in published.items() if k.startswith("_")} == LANE
+        _assert_lane(published)
     finally:
         os.unlink(fh.name)
