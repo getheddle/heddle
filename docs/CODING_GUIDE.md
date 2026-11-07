@@ -647,6 +647,9 @@ id is in the explicit baseline at `.github/pip-audit-ignore.txt`.
   `github-actions` ecosystems. The `uv` PRs update `uv.lock`. Reviewers
   must remove the corresponding lines from `pip-audit-ignore.txt` when the
   bump lands.
+- Dependabot security updates are also enabled in the repository
+  settings. They open a PR as soon as an advisory affects a locked
+  package, without waiting for the weekly run. Review them the same way.
 - Adding an id to the baseline without an accompanying tracking note
   (issue link, PR number, or "next Dependabot cycle") is grounds to block
   the PR. The baseline is not a snooze button.

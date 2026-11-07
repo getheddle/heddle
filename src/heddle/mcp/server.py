@@ -280,13 +280,13 @@ def _build_annotations(heddle_meta: dict[str, Any]) -> Any:
 
     kwargs: dict[str, Any] = {}
     if destructive:
-        kwargs["destructiveHint"] = True
+        kwargs["destructive_hint"] = True
     if read_only:
-        kwargs["readOnlyHint"] = True
+        kwargs["read_only_hint"] = True
     if long_running:
         # Eval runs create new DB entries — not idempotent, closed world.
-        kwargs["idempotentHint"] = False
-        kwargs["openWorldHint"] = False
+        kwargs["idempotent_hint"] = False
+        kwargs["open_world_hint"] = False
     return ToolAnnotations(**kwargs)
 
 
