@@ -223,8 +223,9 @@ Go deeper:
 | Orchestration | Complete | Goal decomposition, pipelines, scheduling |
 | RAG pipeline | Complete | Ingest, chunk, embed, search (DuckDB + LanceDB) |
 | Workshop web UI | Complete | Test bench, eval runner, pipeline editor |
-| MCP gateway | Complete | FastMCP 3.x, session tools, workshop tools |
+| MCP gateway | Complete | FastMCP 4.x, session tools, workshop tools |
 | Multi-agent deliberation | Complete | Council framework, ChatBridge adapters, 3 protocols |
+| Event sourcing (`heddle.contrib.events`) | Experimental, frozen | Delivery guarantees unproven; not part of the exported wire contract ([details](docs/CONCEPTS.md#experimental-heddlecontribevents)) |
 | Tests | Comprehensive | 91%+ coverage (CI gate, no infrastructure needed) |
 
 ---

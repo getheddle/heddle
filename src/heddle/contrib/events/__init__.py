@@ -1,5 +1,12 @@
 """heddle.contrib.events — event-sourcing patterns on top of Heddle.
 
+**Status: experimental and frozen** (heddle#55). The package ships but
+gets no new features, and its API may change. Its delivery guarantees
+(acknowledge-before-process on subscriptions, sequence/CAS scope across
+aggregates) have not been validated against a live JetStream broker, and
+its ``events.*`` bodies are not part of the exported wire contract
+(``schemas/v1/``) or the language SDKs.
+
 Wire-contract layer:
 
 - :mod:`heddle.contrib.events.envelopes` — ``Event`` / ``Command`` and
