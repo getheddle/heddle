@@ -45,7 +45,7 @@ treat `format: date-time` as an annotation and do not enforce it.
 
 | `rejected_at` | Meaning |
 |---|---|
-| `frame` | The frame itself is invalid (missing or ill-typed field, unknown non-`_` key, bad timestamp). |
+| `frame` | The message text is not I-JSON (see below), or the frame itself is invalid (missing or ill-typed field, unknown non-`_` key, bad timestamp). |
 | `body` | The frame is valid; the body fails its model. |
 | `dispatch` | Frame valid; no body model is registered for `payload_type`. |
 
@@ -56,6 +56,30 @@ loaded would accept.
 
 Following Invariant 8, a worker or router that receives any of these on
 the bus logs a warning and skips it. It does not crash.
+
+## Message text is I-JSON
+
+Wire message text MUST be I-JSON ([RFC 7493](https://www.rfc-editor.org/rfc/rfc7493)):
+
+- **Member names are unique** within every object, at every depth (the frame,
+  the body, and opaque values such as `input` or a lane key's value).
+- **Numbers are finite**: no `NaN`, `Infinity` or `-Infinity`, and no number
+  that overflows an IEEE 754 double (for example `1e400`).
+
+A message that breaks either rule is rejected at the `frame` layer, before any
+schema runs. JSON parsers disagree on repeated names: some keep the first value,
+some the last, some reject. A message that two receivers read differently, such
+as one with two `payload_type` members, is a correctness and security hazard,
+so no receiver may pick a winner. Python's standard `json` module accepts both
+violations, so heddle decodes bus messages with
+`heddle.core.wire_json.loads`.
+
+JSON Schema cannot express this rule, because a validator sees only the decoded
+value. The fixtures that pin it (`frame_repeated_member_name`,
+`frame_repeated_member_name_nested`, `frame_non_finite_number`) are therefore
+checked against the decoder, not the frame schema. Their files are deliberately
+not valid I-JSON, and a lenient JSON library will read them without complaint.
+Load fixtures with your SDK's strict wire decoder.
 
 ## Comparison rules
 

@@ -14,6 +14,20 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ### Changed
 
+- **Wire message text must be I-JSON (RFC 7493).** A message whose JSON
+  repeats a member name in any object, at any depth, or contains `NaN`,
+  `Infinity` or a number that overflows a double, is now malformed. The NATS
+  bus logs and skips it (Invariant 8) instead of letting Python's `json`
+  keep the last repeated value. Other parsers keep the first value or
+  reject, so the same message could be read differently by a Python and a
+  non-Python actor (for example, two `payload_type` members). New
+  `heddle.core.wire_json.loads` does the strict decode. Three new invalid
+  fixtures pin the rule (`frame_repeated_member_name`,
+  `frame_repeated_member_name_nested`, `frame_non_finite_number`; 27
+  fixtures in total), and `schemas/v1/fixtures/README.md` states it. The
+  exported schemas are unchanged. `heddle.contrib.events` (frozen) still
+  decodes JetStream records with Pydantic's own JSON parser.
+
 - **Raised two stated minimums to what actually resolves.** `lancedb>=0.15.0`
   is now `lancedb>=0.16.0` (`lancedb` extra and `dev`), and
   `fastapi>=0.110.0` is now `fastapi>=0.133.0` (`workshop` extra). The other
