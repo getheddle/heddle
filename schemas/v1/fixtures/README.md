@@ -65,7 +65,9 @@ the bus logs a warning and skips it. It does not crash.
   timezone offset. Parsers must accept fractional seconds (the Python
   runtime emits microseconds for generated times) and any offset, not
   only `Z`. Emitting `+00:00` instead of `Z`, or a different number of
-  fractional digits, is conformant if the instant is equal.
+  fractional digits, is conformant if the instant is equal. A leap
+  second (`:60`) is rejected, matching the Python runtime and its
+  schema validator, even though RFC 3339 allows it.
 - Every fixture spells out every field, including defaults and `null`s.
   **Always emit the generated identity and time fields**: `message_id`,
   `occurred_at` and `recorded_at` on the frame, and `task_id` and
@@ -76,7 +78,11 @@ the bus logs a warning and skips it. It does not crash.
   omit fields
   whose default is static (`null`, `{}`, an enum default) only if it
   still compares equal after those defaults are filled back in.
-- Numbers: integers stay integers (`processing_time_ms`, token counts).
+- Numbers: integer fields (`processing_time_ms`, token counts) take JSON
+  integers. As in JSON Schema's `integer`, an integral number written as
+  a float (`420.0`, `1e3`) is accepted and means the same integer; a
+  numeric string, a boolean or a fractional number is rejected. Emit
+  plain integers.
   Values inside `input`, `output`, `metadata` and `context` are opaque
   JSON and must round-trip as given.
 
@@ -96,10 +102,6 @@ the bus logs a warning and skips it. It does not crash.
 
 ## Not specified here
 
-- **Lenient input in the Python runtime.** The schemas are the contract.
-  Today the Python runtime also accepts some inputs the schemas reject
-  (for example a timestamp without an offset, or a numeric field sent as
-  a string). Do not rely on that: send what the schemas allow.
 - **Preserving unknown body keys through intermediaries.** Dropping them
   is allowed today. Requiring receivers to keep them when re-sending
   would be a compatible tightening that can be adopted later.

@@ -175,7 +175,61 @@ def test_distinct_timestamps_preserved() -> None:
     assert env.recorded_at == recorded
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-05-20T09:00:00Z",
+        "2026-05-20T09:00:00.123456+02:00",
+        datetime(2026, 5, 20, 9, 0, tzinfo=UTC),
+    ],
+    ids=["z", "offset-fraction", "aware-datetime"],
+)
+def test_timestamp_accepts_rfc3339_and_aware_datetime(value: object) -> None:
+    env = WireEnvelope.model_validate({"payload_type": "t.D", "payload": {}, "occurred_at": value})
+    assert env.occurred_at.tzinfo is not None
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-05-20T09:00:00",  # no offset
+        datetime(2026, 5, 20, 9, 0),  # naive on purpose
+        1779267600,  # epoch number
+        "1779267600",  # epoch as a string
+        "2026-05-20 09:00:00Z",  # space separator, not RFC 3339 `T`
+        None,  # explicit null is not "absent"
+    ],
+    ids=["no-offset", "naive-datetime", "epoch", "epoch-string", "space", "null"],
+)
+def test_timestamp_rejects_what_the_schema_rejects(value: object) -> None:
+    with pytest.raises(ValueError):
+        WireEnvelope.model_validate({"payload_type": "t.D", "payload": {}, "occurred_at": value})
+
+
 def test_non_dict_input_rejected_cleanly() -> None:
     """The before-validator passes non-dict input through to normal validation."""
     with pytest.raises(ValueError):
         WireEnvelope.model_validate("not a dict")
+
+
+@pytest.mark.parametrize("value", [5.0, 1e3, 7], ids=["integral-float", "exponent", "int"])
+def test_task_result_integers_accept_what_the_schema_accepts(value: object) -> None:
+    from heddle.core.messages import TaskResult
+
+    base = {"task_id": "t", "worker_type": "w", "status": "completed"}
+    result = TaskResult.model_validate({**base, "processing_time_ms": value})
+    assert result.processing_time_ms == value
+    assert isinstance(result.processing_time_ms, int)
+
+
+@pytest.mark.parametrize(
+    "value", ["5", True, 5.5, None], ids=["string", "bool", "fractional", "null"]
+)
+def test_task_result_integers_are_strict(value: object) -> None:
+    from heddle.core.messages import TaskResult
+
+    base = {"task_id": "t", "worker_type": "w", "status": "completed"}
+    with pytest.raises(ValueError):
+        TaskResult.model_validate({**base, "processing_time_ms": value})
+    with pytest.raises(ValueError):
+        TaskResult.model_validate({**base, "token_usage": {"prompt_tokens": value}})
