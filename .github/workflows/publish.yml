@@ -15,6 +15,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v7
         with:
+          version: "0.13.7"  # keep in step with ci.yml
           enable-cache: true
 
       - name: Build package

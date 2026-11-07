@@ -1,13 +1,13 @@
 # Dependabot configuration — weekly PRs for Python and Actions deps.
 #
 # See docs/CODING_GUIDE.md "Dependency security" for how this interacts
-# with the pip-audit gate in CI. As Dependabot PRs land, entries in
-# .github/pip-audit-ignore.txt should be removed once the fix version
-# is in uv.lock.
+# with the pip-audit gate in CI. Python PRs come from the `uv` ecosystem
+# and update uv.lock (and pyproject.toml where a bound must move). As
+# they land, remove the matching entries from .github/pip-audit-ignore.txt.
 
 version: 2
 updates:
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"

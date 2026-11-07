@@ -643,9 +643,10 @@ baseline at `.github/pip-audit-ignore.txt`.
 
 **Baseline maintenance:**
 
-- Dependabot (`.github/dependabot.yml`) opens weekly PRs for `pip` and
-  `github-actions`. Reviewers must remove the corresponding lines from
-  `pip-audit-ignore.txt` when the bump lands.
+- Dependabot (`.github/dependabot.yml`) opens weekly PRs for the `uv` and
+  `github-actions` ecosystems. The `uv` PRs update `uv.lock`. Reviewers
+  must remove the corresponding lines from `pip-audit-ignore.txt` when the
+  bump lands.
 - Adding an id to the baseline without an accompanying tracking note
   (issue link, PR number, or "next Dependabot cycle") is grounds to block
   the PR. The baseline is not a snooze button.

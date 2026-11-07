@@ -321,6 +321,12 @@ style = "dash"
 [tool.rumdl.MD029]
 style = "ordered"
 
+[tool.uv]
+# Floor, not an exact pin, so newer local uv still works. The exact
+# reference is the `version:` on every astral-sh/setup-uv step in
+# .github/workflows/; bump both together.
+required-version = ">=0.13.7"
+
 [tool.pyright]
 # Gated type-check surface — the four "hot path" packages per the
 # 2026-05 repository review (Phase 3 §1).  Other packages remain

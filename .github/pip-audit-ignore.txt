@@ -2,7 +2,7 @@
 #
 # (A) Fixable, pending bump — a fix IS released upstream; ignored only
 #     until Dependabot (.github/dependabot.yml) PRs the bump. Workflow:
-#       1. Dependabot opens a PR bumping the package.
+#       1. Dependabot (`uv` ecosystem) opens a PR updating uv.lock.
 #       2. PR lands → uv.lock has the fix version.
 #       3. Remove the corresponding line(s) from this file.
 #       4. CI now blocks any regression below that fix version.
