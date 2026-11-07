@@ -12,6 +12,10 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-11-07
+
+Full historical release notes: [`docs/releases/v0.12.0.md`](docs/releases/v0.12.0.md).
+
 ### Changed
 
 - **Wire message text must follow two I-JSON (RFC 7493) rules.** **Breaking
@@ -767,7 +771,8 @@ Tag dates and one-line summaries:
 
 Reconstruct details via `git log <prev-tag>..<tag>` or `git show <tag>`.
 
-[Unreleased]: https://github.com/getheddle/heddle/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/getheddle/heddle/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/getheddle/heddle/releases/tag/v0.12.0
 [0.11.0]: https://github.com/getheddle/heddle/releases/tag/v0.11.0
 [0.10.0]: https://github.com/getheddle/heddle/releases/tag/v0.10.0
 [0.9.2]: https://github.com/getheddle/heddle/releases/tag/v0.9.2
