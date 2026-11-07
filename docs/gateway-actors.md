@@ -77,6 +77,7 @@ flow into a Heddle pipeline. The gateway:
 from fastapi import FastAPI, Request
 
 from heddle.core.actor import BaseActor
+from heddle.core.envelope import wrap
 from heddle.core.messages import OrchestratorGoal
 
 
@@ -95,7 +96,10 @@ class WebhookGateway(BaseActor):
             instruction=f"Process external event: {event}",
             context={"webhook_event": event, "payload": body},
         )
-        await self.publish("heddle.goals.incoming", goal.model_dump(mode="json"))
+        await self.publish(
+            "heddle.goals.incoming",
+            wrap("core.OrchestratorGoal", goal).model_dump(mode="json"),
+        )
         return {"accepted": True, "goal_id": goal.goal_id}
 ```
 

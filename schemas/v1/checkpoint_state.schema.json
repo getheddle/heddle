@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Compressed orchestrator state for self-summarization.\n\nWhen the orchestrator's conversation history exceeds a token threshold,\nCheckpointManager compresses it into this structure and persists to Valkey.\nThe orchestrator can then \"reboot\" with a fresh context containing only\nthe checkpoint + a small recent-interactions window.\n\nSee: heddle.orchestrator.checkpoint.CheckpointManager",
   "properties": {
     "checkpoint_number": {

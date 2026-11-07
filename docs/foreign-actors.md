@@ -15,24 +15,42 @@ in a Heddle bus.
 
 ## The envelope
 
-Every message on the bus is a JSON object that carries two distinct
-things:
+Every message on the bus is a JSON object with two layers:
 
-- **Envelope fields** — routing, observability, lifecycle metadata.
-  Stable across worker types. The router and orchestrator care about
-  these.
-- **Payload** — domain-specific data, shaped by the worker's
-  `input_schema` / `output_schema`. Opaque to the framework.
+- **The frame** (`WireEnvelope`, `heddle.core.envelope`): identity,
+  timestamps, origin, causality, and a `payload_type` discriminator.
+  It is the same for every message type.
+- **The body** (in `payload`): the typed message selected by
+  `payload_type`. Core bodies are `core.TaskMessage`, `core.TaskResult`,
+  and `core.OrchestratorGoal` (Pydantic models in `heddle.core.messages`).
+  Each body carries its worker-specific data (`input` / `output`), shaped
+  by the worker's `input_schema` / `output_schema` and opaque to the
+  framework.
 
-`TaskMessage` is the request envelope. `TaskResult` is the response
-envelope. Both are Pydantic models in `heddle.core.messages` (see
-`src/heddle/core/messages.py` in the repository); the canonical JSON
-Schemas are exported to `schemas/v1/` on every commit and gated by a
-CI drift check — they are the authoritative wire contract.
+Parsing has two steps: validate the frame, then pick the body model by
+`payload_type` and validate `payload` against it. An unknown
+`payload_type` is rejected; it is not passed through.
 
-The optional `_trace_context` field is a top-level envelope extension used by
-Heddle tracing helpers to carry W3C propagation headers. Treat it as framework
-metadata and pass it through separately from worker `metadata` and `payload`.
+The canonical JSON Schemas are exported to `schemas/v1/` and gated by a
+CI drift check. They are the authoritative wire contract:
+
+| File | Describes |
+|---|---|
+| `wire_envelope.schema.json` | The frame. Unknown top-level keys are rejected unless `_`-prefixed. |
+| `task_message.schema.json` | Body for `payload_type: "core.TaskMessage"` |
+| `task_result.schema.json` | Body for `payload_type: "core.TaskResult"` |
+| `orchestrator_goal.schema.json` | Body for `payload_type: "core.OrchestratorGoal"` |
+
+Each body schema states its discriminator in `x-heddle-payload-type`.
+`schemas/v1/fixtures/` holds language-neutral valid and invalid wire
+messages, and its `manifest.json` gives the expected outcome and the
+rejecting layer for each. Run your serializer and validator against them;
+see `schemas/v1/fixtures/README.md`.
+
+**Middleware Lane.** Top-level frame keys starting with `_` (for example
+`_trace_context`, W3C propagation headers) are framework metadata. They
+are never declared in a schema, and they must survive parse and
+re-serialize unchanged. Keep them out of the body and out of `metadata`.
 
 ### TaskMessage (request)
 
@@ -45,21 +63,27 @@ heddle.tasks.{worker_type}.{tier}
        ▲
        │ (processor workers subscribe with queue group processors-{worker_type})
        │
-       └── TaskMessage  ─── JSON object ─────────────────────┐
+       └── WireEnvelope ─── JSON object ─────────────────────┐
                                                               │
-   task_id              str (UUID)                            │
-   parent_task_id       str | null  (goal_id when from orch)  │
-   worker_type          str                                   │ ENVELOPE
-   model_tier           "local" | "standard" | "frontier"     │
-   priority             "low" | "normal" | "high" | "critical"│
-   created_at           str  (ISO 8601 UTC)                   │
-   request_id           str | null                            │
-   metadata             object                                │
-   _trace_context       object | null  (W3C headers)          │
+   message_id           str (UUIDv7)                          │
+   payload_type         "core.TaskMessage"                    │
+   origin               str | null                            │ FRAME
+   correlation_id       str | null                            │
+   causation_id         str | null                            │
+   occurred_at          str  (RFC 3339, with offset)          │
+   recorded_at          str  (RFC 3339, with offset)          │
+   _trace_context       object  (optional, W3C headers)       │
    ─────────────────────────────────────────────────────────  ┘
-   payload              object  ← validated against           ╮
-                                  worker.input_schema         │ PAYLOAD
-                                                              ╯
+   payload              TaskMessage body:                     ╮
+     task_id            str (UUID)                            │
+     parent_task_id     str | null  (goal_id when from orch)  │
+     worker_type        str                                   │ BODY
+     model_tier         "local" | "standard" | "frontier"     │
+     priority           "low" | "normal" | "high" | "critical"│
+     request_id         str | null                            │
+     metadata           object                                │
+     input              object  ← validated against           │
+                                  worker.input_schema         ╯
 ```
 
 ### TaskResult (response)
@@ -69,25 +93,33 @@ heddle.results.{parent_task_id or "default"}
        ▲
        │ (orchestrator subscribed before publishing TaskMessage)
        │
-       └── TaskResult  ──── JSON object ─────────────────────┐
+       └── WireEnvelope ─── JSON object ─────────────────────┐
                                                               │
-   task_id              str  (matches TaskMessage.task_id)    │
-   parent_task_id       str | null  (matches TaskMessage)     │
-   worker_type          str                                   │ ENVELOPE
-   status               "completed" | "failed"                │
-                        | "pending" | "processing"             │
-   error                str | null                            │
-   model_used           str | null                            │
-   token_usage          object  ({"prompt_tokens": int, ...}) │
-   metadata             object                                │
-   processing_time_ms   int                                   │
-   completed_at         str  (ISO 8601 UTC)                   │
-   _trace_context       object | null  (W3C headers)          │
+   (same frame fields; payload_type "core.TaskResult")        │ FRAME
+   _trace_context       object  (worker span; see note below) │
    ─────────────────────────────────────────────────────────  ┘
-   output               object | null  ← validated against    ╮
-                                         worker.output_schema │ PAYLOAD
-                                                              ╯
+   payload              TaskResult body:                      ╮
+     task_id            str  (matches TaskMessage.task_id)    │
+     parent_task_id     str | null  (matches TaskMessage)     │
+     worker_type        str                                   │
+     status             "completed" | "failed"                │ BODY
+                        | "pending" | "processing"            │
+     error              str | null                            │
+     model_used         str | null                            │
+     token_usage        object  ({"prompt_tokens": int, ...}) │
+     metadata           object                                │
+     processing_time_ms int                                   │
+     output             object | null  ← validated against    │
+                                         worker.output_schema ╯
 ```
+
+Bodies carry no timestamps; the frame's `occurred_at` / `recorded_at`
+replace the former `created_at` / `completed_at`.
+
+The Python worker sets the result frame's `_trace_context` from its own
+span (only when OpenTelemetry is enabled). It does not currently copy
+other `_` keys from the TaskMessage onto the TaskResult, so do not rely
+on them coming back.
 
 ## Generating typed wrappers in your language
 
@@ -100,7 +132,10 @@ packaged SDK.
 
 The Pydantic-exported JSON Schemas in `schemas/v1/` plug straight into
 off-the-shelf code generators. No custom IDL or designer tool — the
-wire contract IS the schema.
+wire contract IS the schema. Generate one type for the frame
+(`wire_envelope.schema.json`) and one per body, then implement the
+two-step parse by hand: frame first, then dispatch on `payload_type`.
+The examples below generate a body type.
 
 **Swift** (idiomatic `Codable` types):
 
@@ -131,10 +166,18 @@ invocation, varying `--lang`. For Python projects that want their own
 typed view, `datamodel-code-generator` produces Pydantic models from
 the same JSON Schemas.
 
-Wire-format compatibility is guaranteed across language SDKs: every
-SDK generates types from the same `schemas/v1/*.schema.json` files,
-which are themselves generated from the canonical Pydantic models on
-every commit (CI fails on drift).
+Every SDK derives its types from the same `schemas/v1/*.schema.json`
+files, which are generated from the canonical Pydantic models (CI fails
+on drift). Schema agreement alone does not prove wire compatibility, so
+an SDK claims conformance only when it passes every fixture in
+`schemas/v1/fixtures/`.
+
+!!! warning "SDK status"
+    Since the `WireEnvelope` reshape (on `main`; first released in
+    v0.10.0), the reference SDKs in `heddle-sdk` still speak the
+    pre-`WireEnvelope` flat format and are **not** wire-compatible with it. Migration is tracked in
+    [heddle-sdk#4](https://github.com/getheddle/heddle-sdk/issues/4) and
+    [heddle-sdk#5](https://github.com/getheddle/heddle-sdk/issues/5).
 
 ## NATS subjects
 
@@ -162,7 +205,8 @@ Python framework:
    actors must achieve the same effect (clear per-task locals before
    the next `recv()` call).
 3. **Skip-and-log on malformed input** (Invariant 8). If the bytes
-   don't parse as JSON, or don't conform to `TaskMessage`, log a
+   don't parse as JSON, the frame is invalid, `payload_type` is not
+   `core.TaskMessage`, or the body doesn't conform to `TaskMessage`, log a
    warning and continue the subscription loop. Do not crash the
    process; do not retry the bad message — the publisher needs to
    fix its output.
