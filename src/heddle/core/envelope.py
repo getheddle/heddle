@@ -190,6 +190,25 @@ def wrap(payload_type: str, body: BaseModel, **frame: Any) -> WireEnvelope:
     )
 
 
+def middleware_lane(envelope: WireEnvelope) -> dict[str, Any]:
+    """Return a copy of the frame's `_`-prefixed Middleware-Lane keys.
+
+    An actor that publishes a message *because of* an inbound one (a worker's
+    `TaskResult`, an orchestrator's final result) passes these to `wrap()` so
+    the keys travel on (DESIGN_INVARIANTS #22)::
+
+        envelope, body = parse(data)
+        ...
+        wrap("core.TaskResult", result, **middleware_lane(envelope))
+
+    Call `inject_trace_context` after `wrap()` as usual: when tracing is
+    active it replaces `_trace_context` with the current span, and otherwise
+    the inbound value passes through unchanged.
+    """
+    extra = envelope.model_extra or {}
+    return {key: value for key, value in extra.items() if key.startswith("_")}
+
+
 def unwrap(envelope: WireEnvelope) -> BaseModel:
     """Validate and return the typed body for `envelope.payload_type` (step two)."""
     model = get_payload_model(envelope.payload_type)

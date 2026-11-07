@@ -12,6 +12,23 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Middleware-Lane keys now travel across hops (DESIGN_INVARIANTS #22).**
+  The router forwarded a task by rebuilding its frame, which regenerated
+  `message_id` and `recorded_at` and dropped `origin`, `correlation_id`,
+  `causation_id`, every `_` key other than a re-injected `_trace_context`
+  (all of them when tracing was off), and body keys unknown to this
+  version. It now republishes the inbound frame. The body is the validated
+  task merged over the inbound body, so known fields are normalised and body
+  keys unknown to this version are kept. When tracing is active only
+  `_trace_context` is replaced. Workers, and the orchestrator,
+  pipeline and council actors when they publish a goal's final result, now
+  copy the inbound frame's `_` keys onto the `TaskResult` frame. New helper:
+  `heddle.core.envelope.middleware_lane(envelope)`. Not yet covered: the
+  subtasks an orchestrator, pipeline or council dispatches for a goal do not
+  carry the goal's `_` keys.
+
 ## [0.10.0] — 2026-11-06
 
 Full historical release notes: [`docs/releases/v0.10.0.md`](docs/releases/v0.10.0.md).

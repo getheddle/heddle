@@ -30,7 +30,7 @@ from heddle.contrib.council.protocol import get_protocol
 from heddle.contrib.council.schemas import TranscriptEntry
 from heddle.contrib.council.transcript import TranscriptStore
 from heddle.core.actor import BaseActor
-from heddle.core.envelope import parse, wrap
+from heddle.core.envelope import middleware_lane, parse, wrap
 from heddle.core.messages import (
     OrchestratorGoal,
     TaskMessage,
@@ -91,8 +91,9 @@ class CouncilOrchestrator(BaseActor):
 
     async def handle_message(self, data: dict[str, Any]) -> None:  # noqa: PLR0915
         """Execute a council discussion for an incoming goal."""
-        _envelope, body = parse(data)
+        envelope, body = parse(data)
         goal = cast("OrchestratorGoal", body)
+        lane = middleware_lane(envelope)  # Middleware Lane travels to the result (#22)
         cfg = self.config
         topic = goal.instruction
         start = time.monotonic()
@@ -239,14 +240,14 @@ class CouncilOrchestrator(BaseActor):
             }
 
             await self._publish_council_result(
-                goal, TaskStatus.COMPLETED, output=output, elapsed=elapsed
+                goal, TaskStatus.COMPLETED, output=output, elapsed=elapsed, lane=lane
             )
 
         except Exception as e:
             elapsed = int((time.monotonic() - start) * 1000)
             log.error("council.failed", error=str(e), exc_info=True)
             await self._publish_council_result(
-                goal, TaskStatus.FAILED, error=str(e), elapsed=elapsed
+                goal, TaskStatus.FAILED, error=str(e), elapsed=elapsed, lane=lane
             )
 
     # ------------------------------------------------------------------
@@ -393,6 +394,7 @@ class CouncilOrchestrator(BaseActor):
         output: dict | None = None,
         error: str | None = None,
         elapsed: int = 0,
+        lane: dict[str, Any] | None = None,
     ) -> None:
         """Publish the final council result to the goal's result subject."""
         result = TaskResult(
@@ -407,4 +409,6 @@ class CouncilOrchestrator(BaseActor):
             processing_time_ms=elapsed,
         )
         subject = f"heddle.results.{goal.goal_id}"
-        await self.publish(subject, wrap("core.TaskResult", result).model_dump(mode="json"))
+        await self.publish(
+            subject, wrap("core.TaskResult", result, **(lane or {})).model_dump(mode="json")
+        )

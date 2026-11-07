@@ -64,7 +64,7 @@ import structlog
 import yaml
 
 from heddle.core.actor import BaseActor
-from heddle.core.envelope import parse, wrap
+from heddle.core.envelope import middleware_lane, parse, wrap
 from heddle.core.messages import (
     OrchestratorGoal,
     TaskMessage,
@@ -304,7 +304,7 @@ class OrchestratorActor(BaseActor):
         """
         # -- 1. Parse -- (two-step: unwrap the WireEnvelope, then the goal body)
         try:
-            _envelope, body = parse(data)
+            envelope, body = parse(data)
             goal = cast("OrchestratorGoal", body)
         except Exception as e:
             logger.error(
@@ -339,6 +339,7 @@ class OrchestratorActor(BaseActor):
                     goal,
                     TaskStatus.FAILED,
                     error="Decomposition produced no subtasks for this goal.",
+                    lane=middleware_lane(envelope),
                 )
                 return
 
@@ -368,6 +369,7 @@ class OrchestratorActor(BaseActor):
                         f"max_concurrent_tasks={self._max_concurrent_tasks}.  "
                         "Raise the limit or split the goal."
                     ),
+                    lane=middleware_lane(envelope),
                 )
                 return
 
@@ -451,6 +453,7 @@ class OrchestratorActor(BaseActor):
                 TaskStatus.COMPLETED,
                 output=synthesis,
                 elapsed=elapsed,
+                lane=middleware_lane(envelope),
             )
             log.info("orchestrator.goal_completed", ms=elapsed)
 
@@ -466,6 +469,7 @@ class OrchestratorActor(BaseActor):
                 TaskStatus.FAILED,
                 error=f"Orchestrator error: {e}",
                 elapsed=elapsed,
+                lane=middleware_lane(envelope),
             )
         finally:
             # Clean up goal state regardless of outcome.
@@ -715,6 +719,7 @@ class OrchestratorActor(BaseActor):
         output: dict[str, Any] | None = None,
         error: str | None = None,
         elapsed: int = 0,
+        lane: dict[str, Any] | None = None,
     ) -> None:
         """Publish the final orchestration result to ``heddle.results.{goal_id}``.
 
@@ -736,7 +741,9 @@ class OrchestratorActor(BaseActor):
             processing_time_ms=elapsed,
         )
         subject = f"heddle.results.{goal.goal_id}"
-        await self.publish(subject, wrap("core.TaskResult", result).model_dump(mode="json"))
+        await self.publish(
+            subject, wrap("core.TaskResult", result, **(lane or {})).model_dump(mode="json")
+        )
 
     # ------------------------------------------------------------------
     # Step 7: Conversation history and checkpointing

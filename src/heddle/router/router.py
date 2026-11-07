@@ -47,7 +47,7 @@ from typing import TYPE_CHECKING, Any, cast
 import structlog
 import yaml
 
-from heddle.core.envelope import parse, wrap
+from heddle.core.envelope import parse
 from heddle.core.messages import ModelTier, TaskMessage
 from heddle.tracing import extract_trace_context, get_tracer, inject_trace_context
 
@@ -281,7 +281,7 @@ class TaskRouter:
             # Step 1: Deserialize and validate the incoming message (two-step:
             # unwrap the WireEnvelope, then the TaskMessage body).
             try:
-                _envelope, body = parse(data)
+                envelope, body = parse(data)
                 task = cast("TaskMessage", body)
             except Exception as exc:
                 span.record_exception(exc)
@@ -330,7 +330,17 @@ class TaskRouter:
                 tier=tier.value,
                 subject=subject,
             )
-            outgoing = wrap("core.TaskMessage", task).model_dump(mode="json")
+            # Forward the inbound frame: the router moves one message one
+            # hop, so it keeps message_id, origin, correlation_id,
+            # causation_id, both timestamps and every `_` Middleware-Lane key
+            # (DESIGN_INVARIANTS #22). The body is the validated task merged
+            # over the inbound body: known fields are normalised (and an id
+            # `parse` generated, e.g. a missing task_id, is the one the worker
+            # sees), while body keys this version does not know are kept.
+            # Only `_trace_context` is re-injected, when tracing is active,
+            # so the worker span parents under the router span.
+            outgoing = envelope.model_dump(mode="json")
+            outgoing["payload"] = {**envelope.payload, **task.model_dump(mode="json")}
             inject_trace_context(outgoing)
             await self.bus.publish(subject, outgoing)
 

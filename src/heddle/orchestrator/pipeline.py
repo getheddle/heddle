@@ -68,7 +68,7 @@ import yaml
 
 from heddle.core.actor import BaseActor
 from heddle.core.contracts import validate_input, validate_output
-from heddle.core.envelope import parse, wrap
+from heddle.core.envelope import middleware_lane, parse, wrap
 from heddle.core.mapping import is_mapping_literal, resolve_mapping_value
 from heddle.core.messages import (
     ModelTier,
@@ -562,8 +562,9 @@ class PipelineOrchestrator(BaseActor):
 
     async def handle_message(self, data: dict[str, Any]) -> None:
         """Execute the pipeline for an incoming orchestrator goal."""
-        _envelope, body = parse(data)
+        envelope, body = parse(data)
         goal = cast("OrchestratorGoal", body)
+        lane = middleware_lane(envelope)  # Middleware Lane travels to the result (#22)
         record_orchestrator_goal_received(self.actor_id)
         stages = self.config["pipeline_stages"]
         timeout = self.config.get("timeout_seconds", 300)
@@ -649,6 +650,7 @@ class PipelineOrchestrator(BaseActor):
                 TaskStatus.FAILED,
                 error=str(e),
                 elapsed=elapsed,
+                lane=lane,
             )
             return
         except Exception as e:
@@ -663,6 +665,7 @@ class PipelineOrchestrator(BaseActor):
                 TaskStatus.FAILED,
                 error=f"Pipeline error ({type(e).__name__}): {e}",
                 elapsed=elapsed,
+                lane=lane,
             )
             return
 
@@ -696,6 +699,7 @@ class PipelineOrchestrator(BaseActor):
             output=final_output,
             elapsed=elapsed,
             timeline=timeline,
+            lane=lane,
         )
 
     # ------------------------------------------------------------------
@@ -812,6 +816,7 @@ class PipelineOrchestrator(BaseActor):
         error: str | None = None,
         elapsed: int = 0,
         timeline: list[dict[str, Any]] | None = None,
+        lane: dict[str, Any] | None = None,
     ) -> None:
         """Publish the final pipeline result back to the goal's result subject.
 
@@ -835,4 +840,6 @@ class PipelineOrchestrator(BaseActor):
             processing_time_ms=elapsed,
         )
         subject = f"heddle.results.{goal.goal_id}"
-        await self.publish(subject, wrap("core.TaskResult", result).model_dump(mode="json"))
+        await self.publish(
+            subject, wrap("core.TaskResult", result, **(lane or {})).model_dump(mode="json")
+        )
