@@ -29,14 +29,30 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 import structlog
-from pydantic import BaseModel, Field, StrictInt
+from pydantic import BaseModel, BeforeValidator, Field
 
 from heddle.core.envelope import parse, register_payload_type
 
 logger = structlog.get_logger()
+
+
+def _reject_str_and_bool(value: object) -> object:
+    """Reject the JSON types the schema's `integer` rejects but lax `int` coerces.
+
+    Lax `int` already accepts an integral float (`12.0`, `1e3`) and rejects a
+    fractional one, which is what JSON Schema's `integer` does; it would also
+    coerce `"12"` and `true`, which the schema rejects.
+    """
+    if isinstance(value, (str, bool)):
+        raise ValueError("must be a JSON integer, not a string or boolean")
+    return value
+
+
+WireInt = Annotated[int, BeforeValidator(_reject_str_and_bool)]
+"""An integer body field: matches the exported schema's ``integer``."""
 
 
 class TaskPriority(StrEnum):
@@ -132,9 +148,10 @@ class TaskResult(BaseModel):
     output: dict[str, Any] | None = None  # Structured output — must match worker's output_schema
     error: str | None = None  # Human-readable error message on failure
     model_used: str | None = None  # Actual model that processed this (e.g., "llama3.2:3b")
-    # Strict ints: a JSON string or boolean is rejected, not coerced, so the
-    # runtime accepts exactly what the exported schema's `integer` allows.
-    token_usage: dict[str, StrictInt] = Field(
+    # WireInt: a JSON string or boolean is rejected, not coerced, so the
+    # runtime accepts what the exported schema's `integer` allows (including
+    # an integral float such as 12.0, which becomes 12).
+    token_usage: dict[str, WireInt] = Field(
         default_factory=dict
     )  # {"prompt_tokens": N, "completion_tokens": N}
     # Worker-side observability that is NOT part of the worker's output
@@ -143,7 +160,7 @@ class TaskResult(BaseModel):
     # skipped at load time (F1).  Empty by default; orchestrators can
     # check it to detect "ran without resource X" without scraping logs.
     metadata: dict[str, Any] = Field(default_factory=dict)
-    processing_time_ms: StrictInt = 0  # work DURATION (kept; distinct from envelope recorded_at)
+    processing_time_ms: WireInt = 0  # work DURATION (kept; distinct from envelope recorded_at)
     # No completed_at: the WireEnvelope carries occurred_at/recorded_at.
 
 

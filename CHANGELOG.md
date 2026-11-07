@@ -26,14 +26,19 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
     absent.
   - `TaskResult.processing_time_ms` and the `token_usage` values must be
     JSON integers; numeric strings and booleans are rejected instead of
-    coerced.
+    coerced. An integral float such as `420.0` is still accepted, as the
+    schema's `integer` allows.
 
   The exported schemas are unchanged: this aligns the runtime with them. A
   producer that relied on the leniency now has its messages rejected at
   parse (workers and routers log and skip, per Invariant 8). Four new
   invalid fixtures pin this (`frame_timestamp_without_offset`,
   `frame_null_timestamp`, `frame_epoch_timestamp`,
-  `body_task_result_number_as_string`; 23 fixtures in total).
+  `body_task_result_number_as_string`) and one valid fixture pins the
+  integral-float case (24 fixtures in total). One stored-data caveat:
+  `contrib.events` replay parses stored frames without skipping, so an
+  event stored under v0.10.0 with a timestamp lacking an offset would now
+  stop replay of its aggregate. No such producer is known.
 
 ### Fixed
 

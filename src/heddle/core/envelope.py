@@ -64,7 +64,9 @@ def _now() -> datetime:
 # RFC 3339 date-time with a mandatory offset, as the frame schema's
 # `format: date-time` requires. Pydantic alone would also accept epoch numbers
 # (and numeric strings) for a datetime field.
-_RFC3339 = re.compile(r"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$")
+_RFC3339 = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})\Z"
+)
 
 
 def _rfc3339_or_datetime(value: object) -> object:

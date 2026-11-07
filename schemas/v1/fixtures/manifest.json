@@ -53,6 +53,12 @@
       "description": "Timestamps with microsecond precision, which is what the Python runtime emits for generated times. Parsers must accept fractional seconds."
     },
     {
+      "file": "valid/task_result_integral_float.json",
+      "expect": "valid",
+      "payload_type": "core.TaskResult",
+      "description": "Integer fields written as integral floats (420.0, 12.0) are accepted, as JSON Schema's integer allows; they compare equal to the integers. Emit plain integers."
+    },
+    {
       "file": "valid/orchestrator_goal.json",
       "expect": "valid",
       "payload_type": "core.OrchestratorGoal",

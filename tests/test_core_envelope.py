@@ -212,7 +212,19 @@ def test_non_dict_input_rejected_cleanly() -> None:
         WireEnvelope.model_validate("not a dict")
 
 
-@pytest.mark.parametrize("value", ["5", True, 5.0], ids=["string", "bool", "float"])
+@pytest.mark.parametrize("value", [5.0, 1e3, 7], ids=["integral-float", "exponent", "int"])
+def test_task_result_integers_accept_what_the_schema_accepts(value: object) -> None:
+    from heddle.core.messages import TaskResult
+
+    base = {"task_id": "t", "worker_type": "w", "status": "completed"}
+    result = TaskResult.model_validate({**base, "processing_time_ms": value})
+    assert result.processing_time_ms == value
+    assert isinstance(result.processing_time_ms, int)
+
+
+@pytest.mark.parametrize(
+    "value", ["5", True, 5.5, None], ids=["string", "bool", "fractional", "null"]
+)
 def test_task_result_integers_are_strict(value: object) -> None:
     from heddle.core.messages import TaskResult
 
