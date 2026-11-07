@@ -57,7 +57,6 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
   actors dispatch for a goal (orchestrator subtasks, pipeline stage tasks,
   council agent turns) also carry the goal's `_` keys, so a goal's
   Middleware-Lane key reaches every worker and comes back on every result.
-||||||| parent of 6546617 (fix(envelope): reject frames and bodies the v1 schemas reject)
 
 ## [0.10.0] — 2026-11-06
 

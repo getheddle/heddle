@@ -59,7 +59,7 @@ def _assert_lane(published: dict[str, Any], *, same_trace: bool = True) -> None:
     """Every inbound `_` key is on ``published``; non-trace keys exactly.
 
     ``same_trace=False`` is for subtasks an orchestrator dispatches from its
-    own stage/turn span: called directly (no actor dispatch span extracting
+    own dispatch/stage/turn span: called directly (no actor span extracting
     the inbound context), an installed provider gives that span a new trace.
     """
     lane = {k: v for k, v in published.items() if k.startswith("_")}

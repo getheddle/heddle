@@ -75,7 +75,7 @@ from heddle.orchestrator.checkpoint import CheckpointManager
 from heddle.orchestrator.decomposer import GoalDecomposer
 from heddle.orchestrator.stream import ResultStream
 from heddle.orchestrator.synthesizer import ResultSynthesizer
-from heddle.tracing import get_tracer, record_orchestrator_goal_received
+from heddle.tracing import get_tracer, inject_trace_context, record_orchestrator_goal_received
 
 if TYPE_CHECKING:
     from heddle.orchestrator.store import CheckpointStore
@@ -537,10 +537,12 @@ class OrchestratorActor(BaseActor):
 
         async def _publish_one(task: TaskMessage) -> None:
             goal_state.dispatched_tasks[task.task_id] = task
-            await self.publish(
-                "heddle.tasks.incoming",
-                wrap("core.TaskMessage", task, **goal_state.lane).model_dump(mode="json"),
-            )
+            # The goal's Middleware-Lane keys travel to each subtask (#22);
+            # then re-inject trace context so the worker span parents under
+            # the orchestrator's dispatch span, as in the pipeline and council.
+            msg = wrap("core.TaskMessage", task, **goal_state.lane).model_dump(mode="json")
+            inject_trace_context(msg)
+            await self.publish("heddle.tasks.incoming", msg)
             # ``decomposer_rationale`` is set by the decomposer when
             # the LLM explained why this subtask was emitted.  Logging
             # it at dispatch time gives a permanent audit trail —
