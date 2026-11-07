@@ -47,18 +47,18 @@ local = [
     "ollama>=0.6.2",           # Local model client
 ]
 docproc = [
-    "docling>=2.93.0",          # Document extraction (PDF, DOCX, etc.)
+    "docling>=2.142.0",          # Document extraction (PDF, DOCX, etc.)
 ]
 duckdb = [
-    "duckdb>=1.0.0",           # Embedded analytics database
+    "duckdb>=1.4.2",           # Embedded analytics database
 ]
 rag = [
-    "duckdb>=1.0.0",           # Vector store backend
+    "duckdb>=1.4.2",           # Vector store backend
     "requests>=2.34.0",        # Ollama HTTP calls from LLM analyzers
 ]
 lancedb = [
     "lancedb>=0.15.0",         # LanceDB embedded vector database
-    "pyarrow>=15.0.0",         # Arrow for LanceDB schema
+    "pyarrow>=23.0.1",         # Arrow for LanceDB schema
 ]
 telegram = [
     "telethon>=1.36.0",        # Telegram MTProto client for live capture
@@ -67,29 +67,29 @@ scheduler = [
     "croniter>=6.2.2",         # Cron expression parsing for scheduled dispatch
 ]
 mcp = [
-    "fastmcp>=3.1",            # FastMCP — high-level MCP server/client framework
+    "fastmcp>=4.1.2",            # FastMCP — high-level MCP server/client framework
 ]
 workshop = [
     "fastapi>=0.110.0",        # Web framework for Workshop UI
     "uvicorn>=0.27.0",         # ASGI server
     "jinja2>=3.1.6",           # Template engine
-    "python-multipart>=0.0.28", # Form handling
-    "duckdb>=1.0.0",           # Eval/version storage
+    "python-multipart>=0.0.31", # Form handling
+    "duckdb>=1.4.2",           # Eval/version storage
 ]
 mdns = [
-    "zeroconf>=0.131.0",       # mDNS/Bonjour service discovery on LAN
+    "zeroconf>=0.149.16",       # mDNS/Bonjour service discovery on LAN
 ]
 otel = [
-    "opentelemetry-api>=1.20.0",           # Tracing API (spans, context)
-    "opentelemetry-sdk>=1.41.1",           # SDK (TracerProvider, export pipeline)
-    "opentelemetry-exporter-otlp>=1.20.0", # OTLP gRPC exporter
+    "opentelemetry-api>=1.45.1",           # Tracing API (spans, context)
+    "opentelemetry-sdk>=1.45.1",           # SDK (TracerProvider, export pipeline)
+    "opentelemetry-exporter-otlp>=1.45.1", # OTLP gRPC exporter
 ]
 tui = [
     "textual>=8.2.5",                     # Terminal UI framework (Textualize)
     "nats-py>=2.7.0",                     # Direct NATS subscription for live view
 ]
 docs = [
-    "mkdocs-material>=9.7.6",           # MkDocs with Material theme
+    "mkdocs-material>=9.7.7",           # MkDocs with Material theme
     "mkdocstrings[python]>=0.24",     # Auto-generate API docs from docstrings
 ]
 eval = [
@@ -106,18 +106,18 @@ events = [
     # base WireEnvelope that contrib.events bodies ride.
 ]
 dev = [
-    "pytest>=8.0",
+    "pytest>=9.0.3",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.1.0",
     "pytest-timeout>=2.3.0",   # Per-test timeout backstop (see [tool.pytest.ini_options])
     "ruff>=0.3.0",
-    "duckdb>=1.0.0",
+    "duckdb>=1.4.2",
     "redis>=7.4.0",            # Needed for contrib/redis tests
     "croniter>=6.2.2",         # Needed for scheduler tests
-    "fastmcp>=3.1",            # Needed for MCP gateway tests
+    "fastmcp>=4.1.2",            # Needed for MCP gateway tests
     "lancedb>=0.15.0",         # Needed for contrib/lancedb tests
-    "pyarrow>=15.0.0",         # Needed for LanceDB
-    "mkdocs-material>=9.7.6",           # Needed for docs build
+    "pyarrow>=23.0.1",         # Needed for LanceDB
+    "mkdocs-material>=9.7.7",           # Needed for docs build
     "mkdocstrings[python]>=0.24",
     "deepeval>=3.8.0",         # LLM output quality evaluation
     "jsonschema>=4.23",        # Wire-fixture conformance tests (schemas/v1/fixtures)

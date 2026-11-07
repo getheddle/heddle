@@ -12,6 +12,20 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ## [Unreleased]
 
+### Security
+
+- **Raised minimum dependency versions so installs can't resolve releases
+  with known advisories.** `uv.lock` isn't shipped, so these floors are what
+  `pip install heddle-ai[...]` consumers actually get. New floors:
+  `docling>=2.142.0` (`docproc`; the lowest release that also allows
+  pillow 13), `fastmcp>=4.1.2` (`mcp`, `dev`; **drops fastmcp 3.x**),
+  `opentelemetry-api`/`-sdk`/`-exporter-otlp>=1.45.1` (`otel`),
+  `duckdb>=1.4.2` (`duckdb`, `rag`, `workshop`, `dev`),
+  `pyarrow>=23.0.1` (`lancedb`, `dev`), `python-multipart>=0.0.31`
+  (`workshop`), `zeroconf>=0.149.16` (`mdns`), `mkdocs-material>=9.7.7`
+  (`docs`, `dev`) and `pytest>=9.0.3` (`dev`). Locked versions are
+  unchanged.
+
 ### Fixed
 
 - **`ensure_event_stream`/`ensure_command_stream`/`ensure_rejection_stream`
