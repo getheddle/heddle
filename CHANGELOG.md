@@ -12,6 +12,10 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-11-06
+
+Full historical release notes: [`docs/releases/v0.10.0.md`](docs/releases/v0.10.0.md).
+
 ### Security
 
 - **Raised minimum dependency versions so installs can't resolve releases
@@ -684,5 +688,6 @@ Tag dates and one-line summaries:
 
 Reconstruct details via `git log <prev-tag>..<tag>` or `git show <tag>`.
 
-[Unreleased]: https://github.com/getheddle/heddle/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/getheddle/heddle/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/getheddle/heddle/releases/tag/v0.10.0
 [0.9.2]: https://github.com/getheddle/heddle/releases/tag/v0.9.2
