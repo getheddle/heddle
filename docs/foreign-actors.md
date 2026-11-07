@@ -208,7 +208,9 @@ Python framework:
    actors must achieve the same effect (clear per-task locals before
    the next `recv()` call).
 3. **Skip-and-log on malformed input** (Invariant 8). If the bytes
-   don't parse as JSON, the frame is invalid, `payload_type` is not
+   don't parse as JSON, the text is not I-JSON (a member name repeated
+   in any object, or `NaN`/`Infinity`; see
+   `schemas/v1/fixtures/README.md`), the frame is invalid, `payload_type` is not
    `core.TaskMessage`, or the body doesn't conform to `TaskMessage`, log a
    warning and continue the subscription loop. Do not crash the
    process; do not retry the bad message — the publisher needs to

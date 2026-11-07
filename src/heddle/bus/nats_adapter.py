@@ -40,6 +40,7 @@ import nats.errors
 import structlog
 
 from heddle.bus.base import MessageBus, Subscription
+from heddle.core.wire_json import loads as wire_loads
 
 if TYPE_CHECKING:
     from nats.aio.client import Client as NATSClient
@@ -153,8 +154,10 @@ class NATSSubscription(Subscription):
             self._consecutive_errors = 0
 
             try:
-                return json.loads(msg.data.decode())
-            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                # Strict I-JSON decode: a repeated member name or a non-finite
+                # number is malformed, like any other undecodable message.
+                return wire_loads(msg.data)
+            except ValueError as e:
                 logger.warning(
                     "nats.malformed_message_skipped",
                     error=str(e),
@@ -230,7 +233,9 @@ class NATSBus(MessageBus):
         persistence but is not yet configured.
         """
         nc = self._require_connected()
-        await nc.publish(subject, json.dumps(data).encode())
+        # allow_nan=False: NaN/Infinity are not JSON, and every receiver drops
+        # them (wire_json). Fail loudly at the sender instead.
+        await nc.publish(subject, json.dumps(data, allow_nan=False).encode())
 
     async def subscribe(
         self,
@@ -260,7 +265,7 @@ class NATSBus(MessageBus):
         nc = self._require_connected()
         resp = await nc.request(
             subject,
-            json.dumps(data).encode(),
+            json.dumps(data, allow_nan=False).encode(),
             timeout=timeout,
         )
-        return json.loads(resp.data.decode())
+        return wire_loads(resp.data)

@@ -242,6 +242,32 @@ async def test_subscription_skips_malformed_json():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "raw",
+    [
+        b'{"payload_type": "core.TaskMessage", "payload_type": "events.Event", "payload": {}}',
+        b'{"payload_type": "core.TaskMessage", "payload": {"input": {"k": NaN}}}',
+    ],
+)
+async def test_subscription_skips_text_that_is_not_i_json(raw: bytes):
+    """A repeated member name or a non-finite number is malformed and skipped."""
+    bad_msg = MagicMock()
+    bad_msg.data = raw
+    bad_msg.subject = "heddle.tasks.incoming"
+
+    good_payload = {"ok": True}
+    good_msg = MagicMock()
+    good_msg.data = json.dumps(good_payload).encode()
+
+    mock_nats_sub = AsyncMock()
+    mock_nats_sub.next_msg = AsyncMock(side_effect=[bad_msg, good_msg])
+
+    sub = NATSSubscription(mock_nats_sub)
+    assert await sub.__anext__() == good_payload
+    assert mock_nats_sub.next_msg.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_subscription_skips_unicode_decode_error():
     """Messages with invalid encoding are skipped; next valid message is returned."""
     bad_msg = MagicMock()
@@ -452,3 +478,13 @@ async def test_subscription_backoff_resets_on_success():
         assert sub._consecutive_errors == 0
         await sub.__anext__()  # consumes 2 more
         assert sub._consecutive_errors == 0
+
+
+@pytest.mark.asyncio
+async def test_publish_refuses_non_finite_numbers():
+    """NaN is not JSON; every receiver would drop it, so the sender fails loudly."""
+    bus = NATSBus()
+    bus._nc = AsyncMock()  # pyright: ignore[reportPrivateUsage]
+    with pytest.raises(ValueError):
+        await bus.publish("heddle.tasks.incoming", {"x": float("nan")})
+    bus._nc.publish.assert_not_awaited()  # pyright: ignore[reportPrivateUsage]

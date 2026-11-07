@@ -120,6 +120,27 @@
       "description": "Timestamps are RFC 3339 strings, not epoch numbers."
     },
     {
+      "file": "invalid/frame_repeated_member_name.json",
+      "expect": "invalid",
+      "rejected_at": "frame",
+      "payload_type": "core.TaskMessage",
+      "description": "A member name repeated in one object (here payload_type, once core.TaskMessage and once events.Event) makes the text not I-JSON. Parsers disagree on which value wins, so the message is rejected before any schema runs."
+    },
+    {
+      "file": "invalid/frame_repeated_member_name_nested.json",
+      "expect": "invalid",
+      "rejected_at": "frame",
+      "payload_type": "core.TaskMessage",
+      "description": "The I-JSON rule applies at every depth: a repeated name inside payload.input rejects the whole message at the frame layer."
+    },
+    {
+      "file": "invalid/frame_non_finite_number.json",
+      "expect": "invalid",
+      "rejected_at": "frame",
+      "payload_type": "core.TaskMessage",
+      "description": "NaN (or Infinity) is not JSON and not I-JSON; some parsers accept it anyway. The message is rejected at the frame layer."
+    },
+    {
       "file": "invalid/body_task_message_missing_worker_type.json",
       "expect": "invalid",
       "rejected_at": "body",

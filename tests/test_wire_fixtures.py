@@ -6,6 +6,12 @@ files (heddle-sdk#5).  This module proves, for every fixture, that the
 committed JSON Schemas and the Python runtime (``heddle.core.envelope.parse``)
 reach the same verdict at the same layer, and that valid fixtures
 round-trip through the runtime losslessly.
+
+Fixtures are read as wire text through ``heddle.core.wire_json.loads`` (the
+strict I-JSON decoder the bus uses). A frame-layer fixture whose text is not
+I-JSON (a repeated member name, a non-finite number) is rejected there,
+before any schema runs: JSON Schema sees only the already-decoded value and
+cannot express that rule.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from heddle.core.envelope import (
 
 # Importing the body models also registers their payload types.
 from heddle.core.messages import OrchestratorGoal, TaskMessage, TaskResult
+from heddle.core.wire_json import WireJSONError, loads
 
 SCHEMAS = Path(__file__).resolve().parents[1] / "schemas" / "v1"
 FIXTURES = SCHEMAS / "fixtures"
@@ -43,8 +50,12 @@ FRAME = _validator(MANIFEST["frame_schema"])
 BODIES = {pt: _validator(f) for pt, f in MANIFEST["payload_types"].items()}
 
 
+def _text(entry: dict[str, Any]) -> str:
+    return (FIXTURES / entry["file"]).read_text(encoding="utf-8")
+
+
 def _load(entry: dict[str, Any]) -> dict[str, Any]:
-    return json.loads((FIXTURES / entry["file"]).read_text(encoding="utf-8"))
+    return loads(_text(entry))
 
 
 def _ids(entries: list[dict[str, Any]]) -> list[str]:
@@ -121,8 +132,14 @@ def test_valid_fixture_passes_schemas_and_runtime(entry: dict[str, Any]) -> None
 
 @pytest.mark.parametrize("entry", INVALID, ids=_ids(INVALID))
 def test_invalid_fixture_rejected_at_stated_layer(entry: dict[str, Any]) -> None:
-    data = _load(entry)
     layer = entry["rejected_at"]
+    try:
+        data = _load(entry)
+    except WireJSONError:
+        # Not I-JSON: rejected while decoding the text, before the frame
+        # schema or model runs. Only frame-layer fixtures may do this.
+        assert layer == "frame"
+        return
     frame_ok = FRAME.is_valid(data)
 
     if layer == "frame":
