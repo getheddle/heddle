@@ -17,6 +17,7 @@ exactly.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 from typing import Any
@@ -54,13 +55,20 @@ def _trace_id(trace_context: dict[str, str]) -> str:
     return trace_context["traceparent"].split("-")[1]
 
 
-def _assert_lane(published: dict[str, Any]) -> None:
+def _assert_lane(published: dict[str, Any], *, same_trace: bool = True) -> None:
+    """Every inbound `_` key is on ``published``; non-trace keys exactly.
+
+    ``same_trace=False`` is for subtasks an orchestrator dispatches from its
+    own stage/turn span: called directly (no actor dispatch span extracting
+    the inbound context), an installed provider gives that span a new trace.
+    """
     lane = {k: v for k, v in published.items() if k.startswith("_")}
     assert set(lane) == set(LANE)
     assert {k: v for k, v in lane.items() if k != "_trace_context"} == {
         k: v for k, v in LANE.items() if k != "_trace_context"
     }
-    assert _trace_id(lane["_trace_context"]) == _trace_id(LANE["_trace_context"])
+    if same_trace:
+        assert _trace_id(lane["_trace_context"]) == _trace_id(LANE["_trace_context"])
 
 
 def _write(tmp_path, name: str, config: dict[str, Any]) -> str:
@@ -256,5 +264,99 @@ async def test_council_publish_result_carries_lane() -> None:
 
         published = orch.publish.call_args[0][1]
         _assert_lane(published)
+    finally:
+        os.unlink(fh.name)
+
+
+# --- originate-from-goal: subtasks an orchestrator dispatches for a goal ---
+
+
+async def _first_dispatched(bus: InMemoryBus, start: Any) -> dict[str, Any]:
+    """Run ``start()`` in the background and return the first published task."""
+    import asyncio
+
+    sub = await bus.subscribe("heddle.tasks.incoming")
+    runner = asyncio.create_task(start())
+    try:
+        return await asyncio.wait_for(sub.__anext__(), timeout=5)
+    finally:
+        runner.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await runner
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_subtasks_carry_goal_lane() -> None:
+    import json
+
+    from tests.test_orchestrator import MockOrchestratorBackend, _write_config
+
+    plan = json.dumps([{"worker_type": "summarizer", "payload": {"text": "t"}}])
+    config_path = _write_config(timeout_seconds=2)
+    try:
+        bus = InMemoryBus()
+        actor = OrchestratorActor(
+            actor_id="orch", config_path=config_path, backend=MockOrchestratorBackend(plan)
+        )
+        actor._bus = bus
+        await bus.connect()
+        goal = OrchestratorGoal(instruction="summarize")
+
+        task = await _first_dispatched(
+            bus, lambda: actor.handle_message(_frame("core.OrchestratorGoal", goal))
+        )
+
+        assert task["payload_type"] == "core.TaskMessage"
+        _assert_lane(task, same_trace=False)
+    finally:
+        os.unlink(config_path)
+
+
+@pytest.mark.asyncio
+async def test_pipeline_stage_tasks_carry_goal_lane(tmp_path) -> None:
+    stages = [
+        {
+            "name": "A",
+            "worker_type": "workerA",
+            "tier": "local",
+            "input_mapping": {"x": "goal.context.x"},
+        }
+    ]
+    config = _write(
+        tmp_path, "pipeline.yaml", {"name": "p", "pipeline_stages": stages, "timeout_seconds": 2}
+    )
+    bus = InMemoryBus()
+    orch = PipelineOrchestrator("pipe", config, bus=bus)
+    await bus.connect()
+    goal = OrchestratorGoal(instruction="run", context={"x": "v"})
+
+    task = await _first_dispatched(
+        bus, lambda: orch.handle_message(_frame("core.OrchestratorGoal", goal))
+    )
+
+    assert task["payload"]["worker_type"] == "workerA"
+    _assert_lane(task, same_trace=False)
+
+
+@pytest.mark.asyncio
+async def test_council_agent_turns_carry_goal_lane() -> None:
+    from tests.contrib.council.test_orchestrator import MockFacilitatorBackend, _council_config
+
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as fh:
+        yaml.dump(_council_config(), fh)
+    try:
+        bus = InMemoryBus()
+        await bus.connect()
+        orch = CouncilOrchestrator(
+            actor_id="council", config_path=fh.name, backend=MockFacilitatorBackend(), bus=bus
+        )
+        goal = OrchestratorGoal(instruction="debate")
+
+        task = await _first_dispatched(
+            bus, lambda: orch.handle_message(_frame("core.OrchestratorGoal", goal))
+        )
+
+        assert task["payload"]["metadata"]["council"]
+        _assert_lane(task, same_trace=False)
     finally:
         os.unlink(fh.name)

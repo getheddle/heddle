@@ -121,7 +121,8 @@ TaskResult frame (DESIGN_INVARIANTS #22). When OpenTelemetry is enabled,
 `_trace_context` is then replaced with the span the worker's actor opened
 for the message, so a consumer-side span parents under it. The router
 forwards a task's frame, so `_` keys, `origin`, `correlation_id` and
-`causation_id` reach the worker as the producer sent them.
+`causation_id` reach the worker as the producer sent them. Orchestrators copy a goal's `_` keys onto the subtasks they
+dispatch for it, so a key set on a goal reaches every worker.
 
 ## Generating typed wrappers in your language
 

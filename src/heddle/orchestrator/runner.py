@@ -113,6 +113,8 @@ class GoalState:
             decisions.  Each entry is a compact summary of a completed goal.
         checkpoint_counter: Monotonically increasing checkpoint version
             number for this goal's checkpoint chain.
+        lane: The goal frame's Middleware-Lane (``_``-prefixed) keys, copied
+            onto every subtask frame (DESIGN_INVARIANTS #22).
     """
 
     goal: OrchestratorGoal
@@ -121,6 +123,7 @@ class GoalState:
     start_time: float = field(default_factory=time.monotonic)
     conversation_history: list[dict[str, Any]] = field(default_factory=list)
     checkpoint_counter: int = 0
+    lane: dict[str, Any] = field(default_factory=dict[str, Any])
 
     @property
     def all_collected(self) -> bool:
@@ -318,7 +321,7 @@ class OrchestratorActor(BaseActor):
         log.info("orchestrator.goal_received", instruction=goal.instruction[:120])
         record_orchestrator_goal_received(self.actor_id)
 
-        goal_state = GoalState(goal=goal)
+        goal_state = GoalState(goal=goal, lane=middleware_lane(envelope))
         self._active_goals[goal.goal_id] = goal_state
 
         try:
@@ -536,7 +539,7 @@ class OrchestratorActor(BaseActor):
             goal_state.dispatched_tasks[task.task_id] = task
             await self.publish(
                 "heddle.tasks.incoming",
-                wrap("core.TaskMessage", task).model_dump(mode="json"),
+                wrap("core.TaskMessage", task, **goal_state.lane).model_dump(mode="json"),
             )
             # ``decomposer_rationale`` is set by the decomposer when
             # the LLM explained why this subtask was emitted.  Logging
