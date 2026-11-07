@@ -478,3 +478,13 @@ async def test_subscription_backoff_resets_on_success():
         assert sub._consecutive_errors == 0
         await sub.__anext__()  # consumes 2 more
         assert sub._consecutive_errors == 0
+
+
+@pytest.mark.asyncio
+async def test_publish_refuses_non_finite_numbers():
+    """NaN is not JSON; every receiver would drop it, so the sender fails loudly."""
+    bus = NATSBus()
+    bus._nc = AsyncMock()  # pyright: ignore[reportPrivateUsage]
+    with pytest.raises(ValueError):
+        await bus.publish("heddle.tasks.incoming", {"x": float("nan")})
+    bus._nc.publish.assert_not_awaited()  # pyright: ignore[reportPrivateUsage]

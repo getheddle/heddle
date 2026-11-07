@@ -46,6 +46,11 @@ def test_rejects_non_finite_numbers(text: str) -> None:
         loads(text)
 
 
+def test_deep_nesting_is_a_wire_error_not_a_recursion_error() -> None:
+    with pytest.raises(WireJSONError, match="too deep"):
+        loads("[" * 100_000 + "]" * 100_000)
+
+
 def test_every_error_is_a_value_error() -> None:
     for text in ('{"a": 1, "a": 2}', "{not json", b"\xff"):
         with pytest.raises(ValueError):

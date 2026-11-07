@@ -14,14 +14,20 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ### Changed
 
-- **Wire message text must be I-JSON (RFC 7493).** A message whose JSON
+- **Wire message text must follow two I-JSON (RFC 7493) rules.** **Breaking
+  for senders that emit `NaN` or `Infinity`, or repeat a member name:** their
+  messages are now dropped, and the NATS bus now refuses to send `NaN`
+  (`json.dumps(..., allow_nan=False)` raises `ValueError`). A message whose JSON
   repeats a member name in any object, at any depth, or contains `NaN`,
   `Infinity` or a number that overflows a double, is now malformed. The NATS
   bus logs and skips it (Invariant 8) instead of letting Python's `json`
   keep the last repeated value. Other parsers keep the first value or
   reject, so the same message could be read differently by a Python and a
   non-Python actor (for example, two `payload_type` members). New
-  `heddle.core.wire_json.loads` does the strict decode. Three new invalid
+  `heddle.core.wire_json.loads` does the strict decode; nesting too deep to
+  decode is also malformed rather than a `RecursionError` that would end the
+  subscription. Integer literals keep their exact value and are not
+  range-checked. Three new invalid
   fixtures pin the rule (`frame_repeated_member_name`,
   `frame_repeated_member_name_nested`, `frame_non_finite_number`; 27
   fixtures in total), and `schemas/v1/fixtures/README.md` states it. The

@@ -57,17 +57,24 @@ loaded would accept.
 Following Invariant 8, a worker or router that receives any of these on
 the bus logs a warning and skips it. It does not crash.
 
-## Message text is I-JSON
+## Message text: two I-JSON rules
 
-Wire message text MUST be I-JSON ([RFC 7493](https://www.rfc-editor.org/rfc/rfc7493)):
+Wire message text MUST follow these two rules from I-JSON
+([RFC 7493](https://www.rfc-editor.org/rfc/rfc7493)):
 
 - **Member names are unique** within every object, at every depth (the frame,
   the body, and opaque values such as `input` or a lane key's value).
 - **Numbers are finite**: no `NaN`, `Infinity` or `-Infinity`, and no number
-  that overflows an IEEE 754 double (for example `1e400`).
+  with a fraction or exponent that overflows an IEEE 754 double (for example
+  `1e400`). Integer literals without a fraction or exponent are exempt: they
+  keep their exact value, however large.
 
 A message that breaks either rule is rejected at the `frame` layer, before any
-schema runs. JSON parsers disagree on repeated names: some keep the first value,
+schema runs. Text nested too deeply for a receiver to decode is also a `frame`
+rejection, and must not stop the receiver; receivers should decode at least
+512 levels. Other I-JSON rules, such as rejecting lone surrogates in strings,
+are not part of v1. Senders must not emit non-finite numbers. Python's
+`json.dumps` does by default, so heddle sends with `allow_nan=False`. JSON parsers disagree on repeated names: some keep the first value,
 some the last, some reject. A message that two receivers read differently, such
 as one with two `payload_type` members, is a correctness and security hazard,
 so no receiver may pick a winner. Python's standard `json` module accepts both

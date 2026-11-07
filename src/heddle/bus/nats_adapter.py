@@ -233,7 +233,9 @@ class NATSBus(MessageBus):
         persistence but is not yet configured.
         """
         nc = self._require_connected()
-        await nc.publish(subject, json.dumps(data).encode())
+        # allow_nan=False: NaN/Infinity are not JSON, and every receiver drops
+        # them (wire_json). Fail loudly at the sender instead.
+        await nc.publish(subject, json.dumps(data, allow_nan=False).encode())
 
     async def subscribe(
         self,
@@ -263,7 +265,7 @@ class NATSBus(MessageBus):
         nc = self._require_connected()
         resp = await nc.request(
             subject,
-            json.dumps(data).encode(),
+            json.dumps(data, allow_nan=False).encode(),
             timeout=timeout,
         )
         return wire_loads(resp.data)

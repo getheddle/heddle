@@ -1,7 +1,9 @@
 """Strict JSON text decoding for wire messages (I-JSON, RFC 7493).
 
-The v1 wire contract requires message text to be I-JSON: object member names
-are unique at every depth, and numbers are finite. Python's ``json`` module
+The v1 wire contract takes two rules from I-JSON (RFC 7493): object member
+names are unique at every depth, and numbers are finite. Integer literals are
+exempt from the double-range check (they keep their exact value), and string
+contents (for example lone surrogates) are not checked. Python's ``json`` module
 accepts both violations silently (a repeated name keeps the *last* value;
 ``NaN`` and ``Infinity`` parse to floats), and other languages' parsers
 disagree with it — some keep the first value, some reject. A message that two
@@ -50,7 +52,8 @@ def loads(data: bytes | bytearray | str) -> Any:
 
     Raises:
         WireJSONError: a repeated member name in any object, ``NaN`` /
-            ``Infinity`` / ``-Infinity``, or a number that overflows a double.
+            ``Infinity`` / ``-Infinity``, a fractional or exponent number
+            that overflows a double, or nesting too deep to decode.
         json.JSONDecodeError: the text is not JSON at all.
         UnicodeDecodeError: bytes that are not UTF-8.
 
@@ -58,9 +61,14 @@ def loads(data: bytes | bytearray | str) -> Any:
     any ``ValueError`` as "malformed, skip" (Invariant 8) handles all three.
     """
     text = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
-    return json.loads(
-        text,
-        object_pairs_hook=_unique_members,
-        parse_constant=_reject_constant,
-        parse_float=_finite_float,
-    )
+    try:
+        return json.loads(
+            text,
+            object_pairs_hook=_unique_members,
+            parse_constant=_reject_constant,
+            parse_float=_finite_float,
+        )
+    except RecursionError as exc:
+        # Nesting deeper than the interpreter can decode. Report it as
+        # malformed text so callers that skip ValueError keep running.
+        raise WireJSONError("JSON nesting is too deep to decode") from exc
