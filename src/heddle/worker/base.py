@@ -18,7 +18,7 @@ import yaml
 from heddle.core.actor import BaseActor
 from heddle.core.config import resolve_schema_refs
 from heddle.core.contracts import validate_input, validate_output
-from heddle.core.envelope import parse, wrap
+from heddle.core.envelope import middleware_lane, parse, wrap
 from heddle.core.messages import TaskMessage, TaskResult, TaskStatus
 from heddle.tracing.metrics import (
     record_task_completed,
@@ -65,8 +65,12 @@ class TaskWorker(BaseActor):
 
     async def handle_message(self, data: dict[str, Any]) -> None:
         """Handle an incoming task message through the full worker lifecycle."""
-        _envelope, body = parse(data)
+        envelope, body = parse(data)
         task = cast("TaskMessage", body)
+        # Middleware-Lane keys (`_`-prefixed) travel from the TaskMessage to
+        # its TaskResult (DESIGN_INVARIANTS #22). A local, not instance state:
+        # workers hold nothing between tasks.
+        lane = middleware_lane(envelope)
         start = time.monotonic()
 
         # Record the task arrival metric immediately after parse. Pairs with
@@ -98,6 +102,7 @@ class TaskWorker(BaseActor):
                     TaskStatus.FAILED,
                     error=f"Input validation: {errors}",
                     elapsed=_elapsed_ms(),
+                    lane=lane,
                 )
                 return
 
@@ -117,6 +122,7 @@ class TaskWorker(BaseActor):
                     model_used=result.get("model_used"),
                     tokens=result.get("token_usage"),
                     elapsed=_elapsed_ms(),
+                    lane=lane,
                 )
                 return
 
@@ -130,12 +136,15 @@ class TaskWorker(BaseActor):
                 tokens=result.get("token_usage"),
                 metadata=result.get("metadata"),
                 elapsed=elapsed,
+                lane=lane,
             )
             log.info("worker.completed", ms=elapsed)
 
         except Exception as e:
             log.error("worker.exception", error=str(e))
-            await self._publish_result(task, TaskStatus.FAILED, error=str(e), elapsed=_elapsed_ms())
+            await self._publish_result(
+                task, TaskStatus.FAILED, error=str(e), elapsed=_elapsed_ms(), lane=lane
+            )
         finally:
             # Reset — worker holds NO state from this task.
             # This is a design invariant, not a suggestion. Any instance
@@ -189,7 +198,14 @@ class TaskWorker(BaseActor):
         tokens: dict[str, int] | None = None,
         metadata: dict[str, Any] | None = None,
         elapsed: int = 0,
+        lane: dict[str, Any] | None = None,
     ) -> None:
+        """Publish the TaskResult for ``task``.
+
+        ``lane`` holds the inbound TaskMessage's Middleware-Lane keys
+        (:func:`heddle.core.envelope.middleware_lane`); they are copied onto
+        the result frame before ``_trace_context`` is re-injected.
+        """
         result = TaskResult(
             task_id=task.task_id,
             parent_task_id=task.parent_task_id,
@@ -227,10 +243,10 @@ class TaskWorker(BaseActor):
         # Results route back to the orchestrator that dispatched this task.
         # If parent_task_id is None (no orchestrator), results go to "heddle.results.default".
         subject = f"heddle.results.{task.parent_task_id or 'default'}"
-        result_dict = wrap("core.TaskResult", result).model_dump(mode="json")
-        # Inject _trace_context for return-path propagation symmetry with
-        # the outbound TaskMessage. No consumer reads this today; it
-        # exists so any future consumer-side span (in dispatch.py or
-        # elsewhere) can parent under the worker span correctly.
+        result_dict = wrap("core.TaskResult", result, **(lane or {})).model_dump(mode="json")
+        # Re-inject _trace_context for return-path propagation symmetry with
+        # the outbound TaskMessage: when tracing is active this replaces the
+        # copied parent context with the worker span, so a consumer-side span
+        # can parent under it. Otherwise the inbound value passes through.
         inject_trace_context(result_dict)
         await self.publish(subject, result_dict)

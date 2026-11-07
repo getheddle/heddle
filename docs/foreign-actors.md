@@ -96,7 +96,7 @@ heddle.results.{parent_task_id or "default"}
        └── WireEnvelope ─── JSON object ─────────────────────┐
                                                               │
    (same frame fields; payload_type "core.TaskResult")        │ FRAME
-   _trace_context       object  (worker span; see note below) │
+   _* keys              every `_` key from the TaskMessage    │
    ─────────────────────────────────────────────────────────  ┘
    payload              TaskResult body:                      ╮
      task_id            str  (matches TaskMessage.task_id)    │
@@ -116,10 +116,12 @@ heddle.results.{parent_task_id or "default"}
 Bodies carry no timestamps; the frame's `occurred_at` / `recorded_at`
 replace the former `created_at` / `completed_at`.
 
-The Python worker sets the result frame's `_trace_context` from its own
-span (only when OpenTelemetry is enabled). It does not currently copy
-other `_` keys from the TaskMessage onto the TaskResult, so do not rely
-on them coming back.
+The worker copies every `_` key from the TaskMessage frame onto the
+TaskResult frame (DESIGN_INVARIANTS #22). When OpenTelemetry is enabled,
+`_trace_context` is then replaced with the worker's own span, so a
+consumer-side span parents under it. The router forwards a task's frame
+unchanged, so `_` keys, `origin`, `correlation_id` and `causation_id`
+reach the worker as the producer sent them.
 
 ## Generating typed wrappers in your language
 
