@@ -88,7 +88,9 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 - **`heddle.contrib.events` is experimental.** It ships in this release
   with its delivery guarantees unproven: acknowledge-before-process on
   subscription, and sequence/CAS scope across aggregates. Its bodies are
-  not part of the exported wire contract (heddle#55).
+  not part of the exported wire contract (heddle#55). The README status
+  table, a warning at the top of the `contrib.events` part of
+  `docs/CONCEPTS.md`, and the package docstring now say so.
 - **Release-gate note: CI does not exercise a live NATS/JetStream broker.**
   Integration tests are excluded from CI, so green CI does not certify
   broker restart, redelivery, or cross-language behavior.

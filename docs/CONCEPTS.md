@@ -178,6 +178,26 @@ line without editing the file.
 
 ---
 
+## Experimental: heddle.contrib.events
+
+!!! warning "Experimental and frozen"
+    Everything from here to the end of this page describes
+    `heddle.contrib.events`, the event-sourcing package. It is
+    **experimental and frozen**: it ships, but receives no new features,
+    its API may change, and it may later be slimmed or extracted. Do not
+    build production systems on it without validating the delivery path
+    yourself. Status and scope: [heddle#55](https://github.com/getheddle/heddle/issues/55).
+
+- **Delivery guarantees are unproven.** Acknowledge-before-process on
+  subscriptions, and the scope of sequence/CAS ordering across aggregates,
+  have not been validated against a live JetStream broker; CI does not run
+  one. The "Sprint 3" behaviors below describe the design and its
+  unit-tested implementation, not a production certification.
+- **Not part of the wire contract.** The `events.Event`, `events.Command`
+  and `events.Rejection` bodies are not exported to `schemas/v1/` and are
+  not supported by the language SDKs. Only the `WireEnvelope` frame and
+  the core bodies are.
+
 ## Issuer conventions (heddle.contrib.events)
 
 Every event and command carried through `heddle.contrib.events` has a
@@ -430,7 +450,7 @@ implemented in Sprint 2 (in-memory) and completed in Sprint 3
 (JetStream + Valkey + cache + snapshot). The table captures
 exactly what observably changes.
 
-| Behavior | Sprint 2 (in-memory) | Sprint 3 (production) |
+| Behavior | Sprint 2 (in-memory) | Sprint 3 (JetStream + Valkey) |
 |---|---|---|
 | Dedup within a single `handle()` call | ✓ via in-memory buffer | ✓ unchanged |
 | Dedup across `handle()` calls in same process | ✗ aggregate reloaded each call; buffer reset | ✓ aggregate cached (T2); buffer survives |
