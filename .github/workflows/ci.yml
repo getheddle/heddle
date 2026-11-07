@@ -123,9 +123,10 @@ jobs:
         run: uv run --with pyright pyright
 
   audit:
-    # Dependency vulnerability scan. Fails when pip-audit finds any CVE
-    # with a fix available — except those baselined in
-    # .github/pip-audit-ignore.txt. See docs/CODING_GUIDE.md
+    # Dependency vulnerability scan. Fails when pip-audit reports any
+    # vulnerability (fixable or not) except those baselined in
+    # .github/pip-audit-ignore.txt (category A: fix pending; category B:
+    # no fix yet). See docs/CODING_GUIDE.md
     # "Dependency security" for how to maintain the baseline.
     runs-on: ubuntu-latest
     steps:
