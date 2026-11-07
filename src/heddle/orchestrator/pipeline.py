@@ -291,6 +291,7 @@ class PipelineOrchestrator(BaseActor):
         goal: OrchestratorGoal,
         timeout: float,
         log: Any,
+        lane: dict[str, Any] | None = None,
     ) -> tuple[str, dict[str, Any]]:
         """Execute a single pipeline stage: build payload, dispatch, wait.
 
@@ -323,6 +324,7 @@ class PipelineOrchestrator(BaseActor):
                 timeout,
                 stage_log,
                 stage_span,
+                lane=lane,
             )
 
     async def _execute_stage_inner(
@@ -334,6 +336,7 @@ class PipelineOrchestrator(BaseActor):
         timeout: float,
         stage_log: Any,
         stage_span: Any,
+        lane: dict[str, Any] | None = None,
     ) -> tuple[str, dict[str, Any]]:
         """Inner stage execution (wrapped by _execute_stage span)."""
         # Check condition (if present) — skipped stages return empty output.
@@ -407,7 +410,8 @@ class PipelineOrchestrator(BaseActor):
             )
 
             stage_log.info("pipeline.stage_dispatching", worker_type=stage["worker_type"])
-            task_data = wrap("core.TaskMessage", task).model_dump(mode="json")
+            # The goal's Middleware-Lane keys travel to its stage tasks (#22).
+            task_data = wrap("core.TaskMessage", task, **(lane or {})).model_dump(mode="json")
             inject_trace_context(task_data)
             stage_timeout = stage.get("timeout_seconds", timeout)
             # Subscribe BEFORE publishing.  NATS is at-most-once — if a
@@ -483,6 +487,7 @@ class PipelineOrchestrator(BaseActor):
         level_log: Any,
         completed_stage_count: int,
         total_stage_count: int,
+        lane: dict[str, Any] | None = None,
     ) -> int:
         """Execute a parallel level: launch stages concurrently, collect incrementally.
 
@@ -509,6 +514,7 @@ class PipelineOrchestrator(BaseActor):
                 goal,
                 timeout,
                 level_log,
+                lane=lane,
             )
             task = asyncio.create_task(coro)
             task_to_stage[task] = stage
@@ -613,6 +619,7 @@ class PipelineOrchestrator(BaseActor):
                         goal,
                         timeout,
                         level_log,
+                        lane=lane,
                     )
                     if not result_dict.get("_skipped"):
                         context[name] = result_dict
@@ -631,6 +638,7 @@ class PipelineOrchestrator(BaseActor):
                         level_log,
                         completed_stage_count,
                         total_stage_count,
+                        lane=lane,
                     )
 
         except PipelineStageError as e:

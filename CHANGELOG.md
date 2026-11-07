@@ -53,10 +53,10 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
   `_trace_context` is replaced. Workers, and the orchestrator,
   pipeline and council actors when they publish a goal's final result, now
   copy the inbound frame's `_` keys onto the `TaskResult` frame. New helper:
-  `heddle.core.envelope.middleware_lane(envelope)`. Not yet covered: the
-  subtasks an orchestrator, pipeline or council dispatches for a goal do not
-  carry the goal's `_` keys.
-||||||| parent of 6546617 (fix(envelope): reject frames and bodies the v1 schemas reject)
+  `heddle.core.envelope.middleware_lane(envelope)`. The subtasks those
+  actors dispatch for a goal (orchestrator subtasks, pipeline stage tasks,
+  council agent turns) also carry the goal's `_` keys, so a goal's
+  Middleware-Lane key reaches every worker and comes back on every result.
 
 ## [0.10.0] — 2026-11-06
 

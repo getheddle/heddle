@@ -168,6 +168,7 @@ class CouncilOrchestrator(BaseActor):
                                 goal=goal,
                                 timeout=per_turn_timeout,
                                 log=round_log,
+                                lane=lane,
                             )
 
                         transcript.add_entry(entry)
@@ -265,6 +266,7 @@ class CouncilOrchestrator(BaseActor):
         goal: OrchestratorGoal,
         timeout: float,
         log: Any,
+        lane: dict[str, Any] | None = None,
     ) -> TranscriptEntry:
         """Dispatch a single agent turn via NATS and wait for the result."""
         task = TaskMessage(
@@ -280,8 +282,9 @@ class CouncilOrchestrator(BaseActor):
             },
         )
 
-        # Inject trace context for distributed tracing.
-        msg = wrap("core.TaskMessage", task).model_dump(mode="json")
+        # The goal's Middleware-Lane keys travel to each agent turn (#22);
+        # then inject trace context for distributed tracing.
+        msg = wrap("core.TaskMessage", task, **(lane or {})).model_dump(mode="json")
         inject_trace_context(msg)
 
         log.debug(
