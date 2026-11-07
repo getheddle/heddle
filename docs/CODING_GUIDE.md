@@ -637,9 +637,9 @@ Use `# pragma: no cover` only for truly unreachable code (e.g.,
 ## Dependency Security
 
 CI runs `pip-audit` against the resolved environment (`uv sync --all-extras`)
-on every push and PR. The `audit` job fails when any dependency has a known
-CVE with a fix available upstream — unless the CVE id is in the explicit
-baseline at `.github/pip-audit-ignore.txt`.
+on every push and PR. The `audit` job fails when `pip-audit` reports any
+known vulnerability, whether or not a fix exists, unless the vulnerability
+id is in the explicit baseline at `.github/pip-audit-ignore.txt`.
 
 **Baseline maintenance:**
 
@@ -650,8 +650,9 @@ baseline at `.github/pip-audit-ignore.txt`.
 - Adding an id to the baseline without an accompanying tracking note
   (issue link, PR number, or "next Dependabot cycle") is grounds to block
   the PR. The baseline is not a snooze button.
-- A new advisory that has no fix yet is *not* a CI failure (pip-audit
-  only fails on fixable vulns); it goes into a tracking issue instead.
+- An advisory with no released fix *does* fail CI. Add it to the baseline
+  under category (B) with the package and the reason the residual risk is
+  accepted, and open a tracking issue. Remove the entry when a fix ships.
 
 **Optional-extra surface:**
 
