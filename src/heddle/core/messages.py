@@ -32,7 +32,7 @@ from enum import StrEnum
 from typing import Any, cast
 
 import structlog
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 
 from heddle.core.envelope import parse, register_payload_type
 
@@ -132,7 +132,9 @@ class TaskResult(BaseModel):
     output: dict[str, Any] | None = None  # Structured output — must match worker's output_schema
     error: str | None = None  # Human-readable error message on failure
     model_used: str | None = None  # Actual model that processed this (e.g., "llama3.2:3b")
-    token_usage: dict[str, int] = Field(
+    # Strict ints: a JSON string or boolean is rejected, not coerced, so the
+    # runtime accepts exactly what the exported schema's `integer` allows.
+    token_usage: dict[str, StrictInt] = Field(
         default_factory=dict
     )  # {"prompt_tokens": N, "completion_tokens": N}
     # Worker-side observability that is NOT part of the worker's output
@@ -141,7 +143,7 @@ class TaskResult(BaseModel):
     # skipped at load time (F1).  Empty by default; orchestrators can
     # check it to detect "ran without resource X" without scraping logs.
     metadata: dict[str, Any] = Field(default_factory=dict)
-    processing_time_ms: int = 0  # work DURATION (kept; distinct from envelope recorded_at)
+    processing_time_ms: StrictInt = 0  # work DURATION (kept; distinct from envelope recorded_at)
     # No completed_at: the WireEnvelope carries occurred_at/recorded_at.
 
 

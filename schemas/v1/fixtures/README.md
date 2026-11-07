@@ -96,10 +96,6 @@ the bus logs a warning and skips it. It does not crash.
 
 ## Not specified here
 
-- **Lenient input in the Python runtime.** The schemas are the contract.
-  Today the Python runtime also accepts some inputs the schemas reject
-  (for example a timestamp without an offset, or a numeric field sent as
-  a string). Do not rely on that: send what the schemas allow.
 - **Preserving unknown body keys through intermediaries.** Dropping them
   is allowed today. Requiring receivers to keep them when re-sending
   would be a compatible tightening that can be adopted later.

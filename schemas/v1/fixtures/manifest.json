@@ -93,6 +93,27 @@
       "description": "occurred_at must be an RFC 3339 date-time."
     },
     {
+      "file": "invalid/frame_timestamp_without_offset.json",
+      "expect": "invalid",
+      "rejected_at": "frame",
+      "payload_type": "core.TaskMessage",
+      "description": "occurred_at/recorded_at must carry a UTC offset; a local time without one is ambiguous."
+    },
+    {
+      "file": "invalid/frame_null_timestamp.json",
+      "expect": "invalid",
+      "rejected_at": "frame",
+      "payload_type": "core.TaskMessage",
+      "description": "An explicit null timestamp is invalid. Omit the field instead; a receiver then fills it (see README, Comparison rules)."
+    },
+    {
+      "file": "invalid/frame_epoch_timestamp.json",
+      "expect": "invalid",
+      "rejected_at": "frame",
+      "payload_type": "core.TaskMessage",
+      "description": "Timestamps are RFC 3339 strings, not epoch numbers."
+    },
+    {
       "file": "invalid/body_task_message_missing_worker_type.json",
       "expect": "invalid",
       "rejected_at": "body",
@@ -119,6 +140,13 @@
       "rejected_at": "body",
       "payload_type": "core.TaskResult",
       "description": "status must be one of pending, processing, completed, failed."
+    },
+    {
+      "file": "invalid/body_task_result_number_as_string.json",
+      "expect": "invalid",
+      "rejected_at": "body",
+      "payload_type": "core.TaskResult",
+      "description": "Integer fields (processing_time_ms, token_usage values) must be JSON integers, not numeric strings."
     },
     {
       "file": "invalid/body_orchestrator_goal_missing_instruction.json",

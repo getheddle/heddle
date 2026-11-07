@@ -44,11 +44,12 @@ meaning needs a new `payload_type`. See `schemas/v1/fixtures/README.md`.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 import uuid_utils
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
 
 def _uuid7() -> str:
@@ -58,6 +59,29 @@ def _uuid7() -> str:
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+# RFC 3339 date-time with a mandatory offset, as the frame schema's
+# `format: date-time` requires. Pydantic alone would also accept epoch numbers
+# (and numeric strings) for a datetime field.
+_RFC3339 = re.compile(r"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$")
+
+
+def _rfc3339_or_datetime(value: object) -> object:
+    """Admit only what the frame schema admits.
+
+    That is an RFC 3339 string or, in process, a `datetime`. `AwareDatetime`
+    then rejects naive datetimes and strings without an offset.
+    """
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and _RFC3339.match(value):
+        return value
+    raise ValueError("must be an RFC 3339 date-time string with a UTC offset")
+
+
+Timestamp = Annotated[AwareDatetime, BeforeValidator(_rfc3339_or_datetime)]
+"""A frame timestamp: timezone-aware, RFC 3339 on the wire."""
 
 
 class WireEnvelope(BaseModel):
@@ -79,9 +103,9 @@ class WireEnvelope(BaseModel):
     at the base level)."""
     correlation_id: str | None = None
     causation_id: str | None = None
-    occurred_at: datetime = Field(default_factory=_now)
+    occurred_at: Timestamp = Field(default_factory=_now)
     """Domain time — when the thing this message is about happened."""
-    recorded_at: datetime = Field(default_factory=_now)
+    recorded_at: Timestamp = Field(default_factory=_now)
     """Bus time — when this message was recorded onto the transport."""
 
     @model_validator(mode="before")
@@ -93,19 +117,23 @@ class WireEnvelope(BaseModel):
         `occurred_at == recorded_at`). Only `occurred_at` supplied → `recorded_at`
         mirrors it. Only `recorded_at` supplied → `occurred_at` mirrors it. Both
         supplied → unchanged (events set both: domain time vs ordering time).
+
+        "Supplied" means the key is present: an explicit `null` is not
+        treated as absent, so it fails validation instead of silently
+        becoming "now".
         """
         if not isinstance(data, dict):
             return data
         d = cast("dict[str, Any]", data)
-        occurred = d.get("occurred_at")
-        recorded = d.get("recorded_at")
-        if occurred is None and recorded is None:
+        has_occurred = "occurred_at" in d
+        has_recorded = "recorded_at" in d
+        if not has_occurred and not has_recorded:
             now = _now()
             return {**d, "occurred_at": now, "recorded_at": now}
-        if recorded is None:
-            return {**d, "recorded_at": occurred}
-        if occurred is None:
-            return {**d, "occurred_at": recorded}
+        if not has_recorded:
+            return {**d, "recorded_at": d["occurred_at"]}
+        if not has_occurred:
+            return {**d, "occurred_at": d["recorded_at"]}
         return data
 
     @model_validator(mode="before")
