@@ -1068,23 +1068,23 @@ class TestBuildAnnotations:
     def test_destructive_flag(self):
         ann = _build_annotations({"destructive": True})
         assert ann is not None
-        assert ann.destructiveHint is True
+        assert ann.destructive_hint is True
 
     def test_read_only_flag(self):
         ann = _build_annotations({"read_only": True})
         assert ann is not None
-        assert ann.readOnlyHint is True
+        assert ann.read_only_hint is True
 
     def test_long_running_flag(self):
         ann = _build_annotations({"long_running": True})
         assert ann is not None
-        assert ann.idempotentHint is False
-        assert ann.openWorldHint is False
+        assert ann.idempotent_hint is False
+        assert ann.open_world_hint is False
 
     def test_multiple_flags(self):
         ann = _build_annotations({"destructive": True, "read_only": True})
-        assert ann.destructiveHint is True
-        assert ann.readOnlyHint is True
+        assert ann.destructive_hint is True
+        assert ann.read_only_hint is True
 
     def test_false_flags_return_none(self):
         """Explicitly False flags should not produce annotations."""
@@ -1325,7 +1325,7 @@ class TestHandleListToolsAnnotations:
 
         tool = next(t for t in tools if t.name == "annotated")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is True
+        assert tool.annotations.read_only_hint is True
 
     @pytest.mark.asyncio
     async def test_no_annotations_when_no_flags(self, tmp_path):

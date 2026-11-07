@@ -12,6 +12,15 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ## [Unreleased]
 
+### Changed
+
+- **Raised two stated minimums to what actually resolves.** `lancedb>=0.15.0`
+  is now `lancedb>=0.16.0` (`lancedb` extra and `dev`), and
+  `fastapi>=0.110.0` is now `fastapi>=0.133.0` (`workshop` extra). The other
+  minimums already excluded the older versions: a lowest-direct resolve
+  lands on lancedb 0.16.0 and fastapi 0.133.0. What installers get does not
+  change.
+
 ## [0.11.0] — 2026-11-07
 
 Full historical release notes: [`docs/releases/v0.11.0.md`](docs/releases/v0.11.0.md).

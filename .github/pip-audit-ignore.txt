@@ -27,5 +27,8 @@
 # `pip-audit` (no ignores) reports zero known vulnerabilities, including
 # the packages previously listed under category (B) as having no fix
 # (markdown, ollama, pyjwt, torch, transformers) — fixes have since
-# shipped for all of them. Re-populate this file the next time `pip-audit`
-# finds a fixable CVE that can't be bumped away immediately.
+# shipped for all of them. The 2026-11-06 lock refresh cleared 99 newer
+# advisories the same way, again with no ignores. Re-populate this file
+# the next time `pip-audit` reports an advisory that can't be cleared at
+# once: under (A) if a fix is released but the bump must wait, or under
+# (B) if no fix has been released.

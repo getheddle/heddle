@@ -57,7 +57,7 @@ rag = [
     "requests>=2.34.0",        # Ollama HTTP calls from LLM analyzers
 ]
 lancedb = [
-    "lancedb>=0.15.0",         # LanceDB embedded vector database
+    "lancedb>=0.16.0",         # LanceDB embedded vector database
     "pyarrow>=23.0.1",         # Arrow for LanceDB schema
 ]
 telegram = [
@@ -70,7 +70,7 @@ mcp = [
     "fastmcp>=4.1.2",            # FastMCP — high-level MCP server/client framework
 ]
 workshop = [
-    "fastapi>=0.110.0",        # Web framework for Workshop UI
+    "fastapi>=0.133.0",        # Web framework for Workshop UI
     "uvicorn>=0.27.0",         # ASGI server
     "jinja2>=3.1.6",           # Template engine
     "python-multipart>=0.0.31", # Form handling
@@ -115,7 +115,7 @@ dev = [
     "redis>=7.4.0",            # Needed for contrib/redis tests
     "croniter>=6.2.2",         # Needed for scheduler tests
     "fastmcp>=4.1.2",            # Needed for MCP gateway tests
-    "lancedb>=0.15.0",         # Needed for contrib/lancedb tests
+    "lancedb>=0.16.0",         # Needed for contrib/lancedb tests
     "pyarrow>=23.0.1",         # Needed for LanceDB
     "mkdocs-material>=9.7.7",           # Needed for docs build
     "mkdocstrings[python]>=0.24",
