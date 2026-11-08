@@ -19,7 +19,9 @@ passing large text through NATS messages.
 Docling tuning options can be passed via backend_config in the worker YAML:
     device:            "mps" | "cpu" | "cuda" | "auto" (default: "auto")
     num_threads:       int (default: 8 on Apple Silicon, 4 elsewhere)
-    ocr_engine:        "ocrmac" | "easyocr" | "tesseract" (default: "ocrmac" on macOS)
+    ocr_engine:        "auto" | "ocrmac" | "rapidocr" | "easyocr" | "tesseract"
+                       (default: "auto" -- Docling picks the first installed
+                       engine; the docproc extra ships RapidOCR)
     layout_batch_size: int (default: 4)
     ocr_batch_size:    int (default: 4)
     do_ocr:            bool (default: true)
@@ -27,7 +29,7 @@ Docling tuning options can be passed via backend_config in the worker YAML:
 
 See Also:
     configs/workers/doc_extractor.yaml -- worker config with I/O schemas
-    docs/docling-setup.md -- full Docling configuration and tuning guide
+    docs/workers-reference.md -- DoclingBackend configuration options
     heddle.worker.processor.SyncProcessingBackend -- base class for sync backends
     heddle.core.workspace.WorkspaceManager -- file-ref resolution with path safety
 """
@@ -43,6 +45,11 @@ from heddle.core.workspace import WorkspaceManager
 from heddle.worker.processor import BackendError, SyncProcessingBackend
 
 logger = logging.getLogger(__name__)
+
+#: Accepted ``ocr_engine`` values. "auto" lets Docling choose the first engine
+#: that is installed (OcrMac on macOS, then RapidOCR / EasyOCR); the others pin
+#: one engine, which must then be installed. Tesseract is never auto-selected.
+OCR_ENGINES = ("auto", "ocrmac", "rapidocr", "easyocr", "tesseract")
 
 
 class DoclingConversionError(BackendError):
@@ -124,8 +131,8 @@ class DoclingBackend(SyncProcessingBackend):
         """Build a Docling DocumentConverter with settings from backend_config.
 
         Constructs the converter with accelerator, OCR, and table structure
-        options pulled from the config dict. Falls back to sensible defaults
-        tuned for Apple Silicon (MPS device, ocrmac, 8 threads).
+        options pulled from the config dict. Defaults: ``device="auto"``,
+        ``ocr_engine="auto"``, 8 threads on Apple Silicon (4 elsewhere).
 
         Docling imports are done lazily here to avoid pulling in torch and
         torchvision at module import time.
@@ -139,8 +146,11 @@ class DoclingBackend(SyncProcessingBackend):
             A configured ``docling.document_converter.DocumentConverter``
             instance ready to process PDF and DOCX files.
 
+        Raises:
+            ValueError: If ``ocr_engine`` is not one of :data:`OCR_ENGINES`.
+
         See Also:
-            docs/docling-setup.md -- full Docling configuration reference.
+            docs/workers-reference.md -- DoclingBackend configuration options.
         """
         from docling.datamodel.base_models import InputFormat
         from docling.datamodel.pipeline_options import (
@@ -161,23 +171,7 @@ class DoclingBackend(SyncProcessingBackend):
 
         # --- OCR options ---
         do_ocr = config.get("do_ocr", True)
-        ocr_options = None
-        if do_ocr:
-            ocr_engine = config.get(
-                "ocr_engine", "ocrmac" if platform.system() == "Darwin" else "easyocr"
-            )
-            if ocr_engine == "ocrmac":
-                from docling.datamodel.pipeline_options import OcrMacOptions
-
-                ocr_options = OcrMacOptions(recognition="accurate")
-            elif ocr_engine == "easyocr":
-                from docling.datamodel.pipeline_options import EasyOcrOptions
-
-                ocr_options = EasyOcrOptions()
-            elif ocr_engine == "tesseract":
-                from docling.datamodel.pipeline_options import TesseractOcrOptions
-
-                ocr_options = TesseractOcrOptions()
+        ocr_options = _ocr_options(config.get("ocr_engine", "auto")) if do_ocr else None
 
         # --- Table structure ---
         do_table_structure = config.get("do_table_structure", True)
@@ -248,20 +242,7 @@ class DoclingBackend(SyncProcessingBackend):
         text = doc.export_to_markdown()
 
         # --- Gather structural metadata ---
-        # Collect section headers and titles for downstream classification.
-        sections: list[str] = [
-            item.text if hasattr(item, "text") else str(item)
-            for item in doc.iterate_items()
-            if hasattr(item, "label") and item.label in ("section_header", "title")
-        ]
-
-        # Check whether the document contains any tables.
-        has_tables = any(
-            hasattr(item, "label") and item.label == "table" for item in doc.iterate_items()
-        )
-
-        # Page count -- Docling exposes a .pages list on most document types.
-        page_count = len(doc.pages) if hasattr(doc, "pages") else 1
+        sections, has_tables, page_count = summarize_document(doc)
 
         # Text preview: first ~500 words, included inline in the NATS message
         # so the classifier stage can work without reading the full JSON.
@@ -302,3 +283,59 @@ class DoclingBackend(SyncProcessingBackend):
             "sections": sections[:20],  # Cap at 20 to keep NATS messages small.
             "text_preview": text_preview,
         }
+
+
+def _ocr_options(engine: str) -> Any:
+    """Return the Docling OCR options object for an ``ocr_engine`` value.
+
+    Docling is imported lazily, as in ``_build_converter``.
+
+    Args:
+        engine: One of :data:`OCR_ENGINES`.
+
+    Returns:
+        A ``docling.datamodel.pipeline_options.OcrOptions`` subclass instance.
+
+    Raises:
+        ValueError: If ``engine`` is not one of :data:`OCR_ENGINES`. An unknown
+            name used to fall through silently to Docling's own default.
+    """
+    from docling.datamodel import pipeline_options as po
+
+    if engine == "auto":
+        return po.OcrAutoOptions()
+    if engine == "ocrmac":
+        return po.OcrMacOptions(recognition="accurate")
+    if engine == "rapidocr":
+        return po.RapidOcrOptions()
+    if engine == "easyocr":
+        return po.EasyOcrOptions()
+    if engine == "tesseract":
+        return po.TesseractOcrOptions()
+    raise ValueError(f"unknown ocr_engine {engine!r}; expected one of {', '.join(OCR_ENGINES)}")
+
+
+def summarize_document(doc: Any) -> tuple[list[str], bool, int]:
+    """Collect section headings, table presence, and page count from a document.
+
+    Args:
+        doc: A ``docling_core`` ``DoclingDocument``.
+
+    Returns:
+        ``(sections, has_tables, page_count)``. ``sections`` holds the text of
+        every title and section header in reading order (uncapped).
+        ``page_count`` is the number of laid-out pages, or 1 for formats
+        Docling does not paginate (DOCX, HTML, Markdown), matching the
+        MarkItDown backend's floor of 1.
+    """
+    sections: list[str] = []
+    has_tables = False
+    # iterate_items() yields (item, level) pairs, not bare items.
+    for item, _level in doc.iterate_items():
+        label = getattr(item, "label", None)
+        if label in ("title", "section_header"):
+            sections.append(getattr(item, "text", "") or "")
+        elif label == "table":
+            has_tables = True
+    page_count = len(doc.pages) or 1
+    return sections, has_tables, page_count

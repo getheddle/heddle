@@ -316,7 +316,8 @@ processing_backend: "heddle.contrib.docproc.docling_backend.DoclingBackend"
 ```
 
 **Supports:** Scanned PDFs, complex layouts, multi-column documents.
-**Config options:** `device` (mps/cpu/cuda), `ocr_engine` (ocrmac/easyocr/tesseract),
+**Config options:** `device` (mps/cpu/cuda), `ocr_engine` (auto/ocrmac/rapidocr/easyocr/tesseract;
+default `auto` picks the first installed engine, and the `docproc` extra ships RapidOCR),
 `num_threads`, `layout_batch_size`, `ocr_batch_size`.
 
 ### SmartExtractorBackend (recommended)

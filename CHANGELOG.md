@@ -12,6 +12,23 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`DoclingBackend` works with `backend_config: {}`.** The default
+  `ocr_engine` was `ocrmac` on macOS and `easyocr` elsewhere, but neither is
+  installed by the `docproc` extra, so converting a PDF failed with
+  `ocrmac is not correctly installed`. The default is now `auto`: Docling
+  picks the first installed engine (OcrMac if present, otherwise RapidOCR,
+  which the extra installs). `rapidocr` is a new explicit choice. An unknown
+  `ocr_engine` value now fails the conversion with a message listing the valid
+  names, instead of silently using Docling's default (heddle#58).
+- **`DoclingBackend` reports `has_tables` and `sections`.** They were
+  always `false` and `[]`: the code read `iterate_items()` results as bare
+  items, but Docling yields `(item, level)` pairs (heddle#58).
+- **`DoclingBackend` reports `page_count: 1` for DOCX**, instead of 0.
+  Docling does not paginate DOCX, HTML or Markdown; 1 matches the
+  MarkItDown backend's floor (heddle#58).
+
 ## [0.12.0] — 2026-11-07
 
 Full historical release notes: [`docs/releases/v0.12.0.md`](docs/releases/v0.12.0.md).

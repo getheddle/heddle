@@ -424,3 +424,96 @@ class TestShippedWorkerConfigs:
     def test_reviewer_config(self, configs_dir):
         errors = self._validate_config(configs_dir / "reviewer.yaml")
         assert errors == [], errors
+
+
+# ---------------------------------------------------------------------------
+# Docling metadata and OCR options -- real docling objects, no mocks
+# ---------------------------------------------------------------------------
+
+
+class TestDoclingSummarizeDocument:
+    """summarize_document against real ``DoclingDocument`` objects.
+
+    The mocked tests above could not catch heddle#58: ``iterate_items()``
+    yields ``(item, level)`` pairs, and the old code read each pair as an item.
+    """
+
+    @pytest.fixture
+    def doc_types(self):
+        return pytest.importorskip("docling_core.types.doc")
+
+    def test_sections_and_tables(self, doc_types):
+        from heddle.contrib.docproc.docling_backend import summarize_document
+
+        doc = doc_types.DoclingDocument(name="report")
+        doc.add_title(text="Annual Report")
+        doc.add_heading(text="Introduction", level=1)
+        doc.add_text(label=doc_types.DocItemLabel.TEXT, text="Body text.")
+        doc.add_heading(text="Results", level=2)
+        doc.add_table(data=doc_types.TableData(num_rows=2, num_cols=2))
+
+        sections, has_tables, _ = summarize_document(doc)
+
+        assert sections == ["Annual Report", "Introduction", "Results"]
+        assert has_tables is True
+
+    def test_no_tables(self, doc_types):
+        from heddle.contrib.docproc.docling_backend import summarize_document
+
+        doc = doc_types.DoclingDocument(name="memo")
+        doc.add_heading(text="Only heading", level=1)
+        doc.add_text(label=doc_types.DocItemLabel.TEXT, text="Body text.")
+
+        sections, has_tables, _ = summarize_document(doc)
+
+        assert sections == ["Only heading"]
+        assert has_tables is False
+
+    def test_unpaginated_document_reports_one_page(self, doc_types):
+        """DOCX/HTML conversions carry no pages; report 1, never 0."""
+        from heddle.contrib.docproc.docling_backend import summarize_document
+
+        doc = doc_types.DoclingDocument(name="docx")
+        doc.add_text(label=doc_types.DocItemLabel.TEXT, text="Body text.")
+        assert len(doc.pages) == 0
+
+        assert summarize_document(doc)[2] == 1
+
+    def test_paginated_document_reports_page_count(self, doc_types):
+        from heddle.contrib.docproc.docling_backend import summarize_document
+
+        doc = doc_types.DoclingDocument(name="pdf")
+        for page_no in (1, 2, 3):
+            doc.add_page(page_no=page_no, size=doc_types.Size(width=612, height=792))
+
+        assert summarize_document(doc)[2] == 3
+
+
+class TestDoclingOcrOptions:
+    """_ocr_options maps ocr_engine names to Docling option objects."""
+
+    @pytest.fixture
+    def po(self):
+        return pytest.importorskip("docling.datamodel.pipeline_options")
+
+    @pytest.mark.parametrize(
+        ("engine", "cls_name"),
+        [
+            ("auto", "OcrAutoOptions"),
+            ("ocrmac", "OcrMacOptions"),
+            ("rapidocr", "RapidOcrOptions"),
+            ("easyocr", "EasyOcrOptions"),
+            ("tesseract", "TesseractOcrOptions"),
+        ],
+    )
+    def test_known_engines(self, po, engine, cls_name):
+        from heddle.contrib.docproc.docling_backend import OCR_ENGINES, _ocr_options
+
+        assert engine in OCR_ENGINES
+        assert type(_ocr_options(engine)) is getattr(po, cls_name)
+
+    def test_unknown_engine_is_rejected(self, po):
+        from heddle.contrib.docproc.docling_backend import _ocr_options
+
+        with pytest.raises(ValueError, match="unknown ocr_engine 'paddle'"):
+            _ocr_options("paddle")
