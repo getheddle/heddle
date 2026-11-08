@@ -3,7 +3,7 @@ Generic TTL-aware key-value store for cross-process state.
 
 This ABC is the substrate for any Heddle component that needs string-keyed
 persistence with optional expiry: orchestrator checkpoint compression,
-aggregate snapshots (heddle.contrib.events), distributed locks, and so on.
+distributed locks, and so on.
 
 Two implementations ship with heddle:
 - ``InMemoryKeyValueStore`` (this module) — for tests and local development.
@@ -61,8 +61,7 @@ class KeyValueStore(ABC):
         TTL is mandatory — the SETNX-without-TTL footgun (orphaned
         leases on crash) is explicitly disallowed.
 
-        Used by :func:`heddle.contrib.events.lease.finalization_lease`
-        and any other coordination primitive that needs a single-writer
+        Use it for any coordination primitive that needs a single-writer
         guarantee with bounded recovery.
         """
         ...

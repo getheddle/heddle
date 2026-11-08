@@ -1,8 +1,10 @@
 # ADR-013: NATS auth model for `heddle.contrib.events`
 
-**Status:** Accepted (Sprint 3, 2026-05-19).
-**Pairs with:** [runbook: nats-acl-configuration](../runbooks/nats-acl-configuration.md)
-(concrete config); `heddle-contrib-events-m2-architecture-v7.md`
+**Status:** Accepted (Sprint 3, 2026-05-19). Obsolete since 2026-11-08:
+`heddle.contrib.events` and its `nats-acl-configuration` runbook were
+removed. Kept as a record.
+**Paired with:** the `nats-acl-configuration` runbook (removed; see git
+history); `heddle-contrib-events-m2-architecture-v7.md`
 §4.5 (publish-ACL backstop on `*.InternalFinalized`).
 
 ## Context
@@ -46,7 +48,7 @@ predefined user roles inside one NATS account:
   subscribes to all for live-view rendering.
 
 The concrete NATS server config and verification commands live in
-the [`nats-acl-configuration` runbook](../runbooks/nats-acl-configuration.md).
+the `nats-acl-configuration` runbook (removed with the module).
 
 ## Alternatives considered
 
@@ -117,7 +119,7 @@ for each application worker, etc.).
 
 - Heddle must document the four-user shape as part of its
   deployment surface. New operators read one runbook
-  ([nats-acl-configuration](../runbooks/nats-acl-configuration.md))
+  (`nats-acl-configuration`, since removed)
   to understand what credentials their deployment needs.
 - The single-account isolation property is weaker than multi-
   account. A compromise of the `framework` credential lets an

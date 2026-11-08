@@ -9,7 +9,7 @@ module owns the *generic* JetStream mechanics with **no domain semantics**:
   dedup and ``Nats-Expected-Last-Subject-Sequence`` optimistic concurrency),
 - **a durable pull-consumer base** — :func:`pull`.
 
-Contrib modules (e.g. ``heddle.contrib.events``) *specialize* over these:
+Contrib modules *specialize* over these:
 they build subject names, pick stream names, and map the generic
 :class:`WrongLastSequenceError` raised here onto their own domain errors
 (e.g. ``ConcurrencyError``). The dependency is one-way — this module never
