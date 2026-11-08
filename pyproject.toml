@@ -102,8 +102,8 @@ chatbridge = [
     "openai>=1.0.0",           # OpenAI Chat Completions client
 ]
 events = [
-    # No new deps — uuid_utils (UUIDv7) is now a core dependency, used by the
-    # base WireEnvelope that contrib.events bodies ride.
+    # Empty: the old heddle.contrib.events was removed (it needed no extra
+    # deps). Kept so `heddle-ai[events]` still resolves; see CHANGELOG.
 ]
 dev = [
     "pytest>=9.0.3",
@@ -150,14 +150,6 @@ timeout = 60
 [tool.coverage.run]
 source = ["heddle"]
 branch = true
-# JetStream-backed implementations are exercised by tests gated on the
-# NATS_URL env var (@pytest.mark.integration). They have no in-process
-# unit coverage by design; omit them from the fail_under gate so the
-# unit-only CI path stays accurate. Drop these once CI runs the
-# integration tier against a live NATS+Valkey environment.
-omit = [
-    "src/heddle/contrib/events/jetstream/*",
-]
 
 [tool.coverage.report]
 show_missing = true
@@ -197,7 +189,6 @@ workshop = 84
 "contrib/council" = 92
 "contrib/docproc" = 90
 "contrib/duckdb" = 93
-"contrib/events" = 94
 "contrib/lancedb" = 77
 "contrib/rag" = 90
 "contrib/redis" = 98
@@ -347,7 +338,6 @@ include = [
     "src/heddle/bus",
     "src/heddle/worker",
     "src/heddle/orchestrator",
-    "src/heddle/contrib/events",
 ]
 exclude = [
     "**/__pycache__",

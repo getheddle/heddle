@@ -126,8 +126,8 @@ Before committing a structural change:
 
 - Have you read `docs/DESIGN_INVARIANTS.md` for the area you're touching?
 - Have you run `/heddle-preflight` (or its commands manually)?
-- If you touched wire models (`core/messages.py`, `core/envelope.py`,
-  `contrib/events/`) or `schemas/v1/*`, have you run
+- If you touched wire models (`core/messages.py`, `core/envelope.py`)
+  or `schemas/v1/*`, have you run
   `uv run python tools/export_schemas.py --check` (CI enforces it) and
   `/heddle-contract-sync` from `../heddle-sdk/`?
 - For non-trivial changes: did you spawn `heddle-architect` to surface

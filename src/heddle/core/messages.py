@@ -11,17 +11,9 @@ Message flow:
     Orchestrator  ──TaskMessage──>  Router  ──TaskMessage──>  Worker
     Worker  ──TaskResult──>  Orchestrator
 
-The event-sourcing wire bodies (``Event``, ``Command``,
-and their metadata) live in :mod:`heddle.contrib.events.envelopes` —
-distinct from the router-dispatched worker envelopes above because they
-target aggregates by natural identity and CAS rather than worker classes.
-
 See Also:
     heddle.core.contracts — JSON Schema validation for payload/output dicts
     heddle.bus.nats_adapter — NATS subject conventions for message routing
-    heddle.contrib.events.envelopes — event-sourcing wire envelopes
-    heddle.contrib.events.subjects — NATS subject helpers for event-sourcing
-    heddle.contrib.events.issuer_conventions — reserved ``issued_by`` prefixes
 """
 
 from __future__ import annotations

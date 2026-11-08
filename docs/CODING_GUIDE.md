@@ -600,7 +600,6 @@ CI red-lining on normal coverage noise. Current floors:
 | `contrib/council` | 92 | |
 | `contrib/docproc` | 90 | |
 | `contrib/duckdb` | 93 | |
-| `contrib/events` | 94 | |
 | `contrib/lancedb` | 77 | Native-lib paths; some only exercised with infra. |
 | `contrib/rag` | 90 | I/O-heavy; some paths need external services. |
 | `contrib/redis` | 98 | |

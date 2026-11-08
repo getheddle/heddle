@@ -96,7 +96,7 @@ class WireEnvelope(BaseModel):
     message_id: str = Field(default_factory=_uuid7)
     payload_type: str
     """Dotted `<owner>.<BodyName>` discriminator, e.g. `core.TaskMessage`,
-    `events.Event`. Resolves to a body model via the payload-type registry."""
+    `core.TaskResult`. Resolves to a body model via the payload-type registry."""
     payload: dict[str, Any]
     """Opaque body slot — the specialization's typed body, validated in step
     two against the model registered for `payload_type`."""

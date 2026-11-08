@@ -12,6 +12,21 @@ rule and `docs/CONTRIBUTING.md` for contributor-facing guidance.
 
 ## [Unreleased]
 
+### Removed
+
+- **`heddle.contrib.events` is removed.** **Breaking for anyone importing
+  it.** The module was experimental and frozen, its delivery guarantees were
+  never verified, and its bodies were never part of the exported wire
+  contract. A new event log will follow under the same import path in a
+  later release. There is no migration path from the old module to the new
+  one. If you depend on the old module, pin `heddle-ai` to `0.12.x`. Removed
+  with it: the `events.Event`, `events.Command` and `events.Rejection`
+  payload-type registrations in `heddle.bootstrap`, so those types now get
+  the usual unknown-type handling; the CONCEPTS.md sections on the module;
+  and the `nats-acl-configuration` runbook. ADR-013 is kept as a record,
+  marked obsolete. The `events` extra stays, empty, so
+  `heddle-ai[events]` still installs.
+
 ### Fixed
 
 - **`DoclingBackend` works with `backend_config: {}`.** The default

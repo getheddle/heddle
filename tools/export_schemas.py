@@ -49,10 +49,8 @@ from heddle.core.messages import (
 # release as a breaking wire change.  After 1.0, a breaking field change
 # moves to ``schemas/v2/`` instead of overwriting ``v1``.
 #
-# ``heddle.contrib.events`` bodies (Event/Command/Rejection) are
-# intentionally NOT exported: ``contrib.events`` is frozen and
-# experimental, and S4 is scoped to the frame plus core bodies (heddle#54,
-# heddle#55).
+# Only the frame and core bodies are exported. Contrib bodies are not part
+# of the exported wire contract.
 _EXPORTS: list[tuple[str, type]] = [
     ("wire_envelope", WireEnvelope),
     ("task_message", TaskMessage),

@@ -425,9 +425,9 @@ from contrib.**
 one contrib's semantics into core couples core to that contrib's lifecycle
 and invites a core→contrib import cycle. The wire envelope is the worked
 example: the base `WireEnvelope` (identity, timestamps, origin, opaque
-payload slot) is horizontal and lives in `core.envelope`; event-sourcing
-semantics (`aggregate_*`, `event_type`, the `issued_by` vocabulary) stay in
-`contrib.events`. The `payload_type` body registry lives in core but is
+payload slot) is horizontal and lives in `core.envelope`; the event-sourcing
+semantics of the former `contrib.events` (`aggregate_*`, `event_type`, the
+`issued_by` vocabulary) stayed in that contrib. The `payload_type` body registry lives in core but is
 *populated by per-contrib registration* — core owns the map structure, never
 the entries — so resolution works by dependency inversion without core
 importing contrib.

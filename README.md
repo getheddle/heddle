@@ -225,7 +225,7 @@ Go deeper:
 | Workshop web UI | Complete | Test bench, eval runner, pipeline editor |
 | MCP gateway | Complete | FastMCP 4.x, session tools, workshop tools |
 | Multi-agent deliberation | Complete | Council framework, ChatBridge adapters, 3 protocols |
-| Event sourcing (`heddle.contrib.events`) | Experimental, frozen | Delivery guarantees unproven; not part of the exported wire contract ([details](docs/CONCEPTS.md#experimental-heddlecontribevents)) |
+| Event sourcing (`heddle.contrib.events`) | Removed | The experimental module was removed; a new event log is planned under the same import path ([CHANGELOG](CHANGELOG.md)) |
 | Tests | Comprehensive | 91%+ coverage (CI gate, no infrastructure needed) |
 
 ---
