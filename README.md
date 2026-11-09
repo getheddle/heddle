@@ -167,6 +167,25 @@ Scale any component by running more copies — NATS load-balances automatically.
 
 ---
 
+## What's New
+
+Full history: [CHANGELOG](CHANGELOG.md).
+
+<!-- Keep this list short (the latest few releases, newest first) and in
+     sync between README.md and docs/index.md. CHANGELOG.md has the rest. -->
+
+| Release | What changed |
+|---------|--------------|
+| **v0.12.0** (2026-11-07) | Wire text follows two I-JSON rules: no `NaN`/`Infinity`, no repeated member names. Senders that break them are dropped, not misread. |
+| **v0.11.0** (2026-11-07) | The runtime rejects frames and bodies the v1 schemas reject. Middleware-Lane (`_`-prefixed) keys travel across hops. |
+| **v0.10.0** (2026-11-06) | One frame for every message: `WireEnvelope`, with identity, timestamps and correlation on the frame. The .NET, Swift, and JVM SDKs speak it. |
+
+**In design:** a small event log for durable history, built on NATS
+JetStream and SQLite, to replace the removed experimental
+`heddle.contrib.events`.
+
+---
+
 ## Documentation
 
 <!-- The "Documentation", "Tutorials", and "Go deeper" tables below are kept
@@ -218,6 +237,7 @@ Go deeper:
 | Area | Status | Details |
 |------|--------|---------|
 | Core framework | Complete | Messages, contracts, config, workspace |
+| Wire protocol | v1, verified | `WireEnvelope` frame, I-JSON text rules, conformance fixtures; .NET, Swift, and JVM SDKs checked live against a heddle router |
 | LLM backends | Complete | Anthropic, LM Studio, Ollama, OpenAI-compatible |
 | Workers & processors | Complete | Tool-use, knowledge silos, embeddings |
 | Orchestration | Complete | Goal decomposition, pipelines, scheduling |

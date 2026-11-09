@@ -164,6 +164,8 @@ uv sync --extra telegram      # Live Telegram channel capture via Telethon
 uv sync --extra duckdb        # DuckDB tools and query backends
 uv sync --extra redis         # Redis/Valkey-backed checkpoint store
 uv sync --extra local         # Ollama client for local models
+uv sync --extra docproc       # Docling document extraction (PDF, DOCX, OCR)
+uv sync --extra chatbridge    # OpenAI-compatible ChatBridge adapter for councils
 uv sync --extra workshop      # Worker Workshop web UI (FastAPI, Jinja2, DuckDB)
 uv sync --extra mcp           # MCP gateway (Model Context Protocol)
 uv sync --extra otel          # OpenTelemetry distributed tracing

@@ -175,12 +175,13 @@ on drift). Schema agreement alone does not prove wire compatibility, so
 an SDK claims conformance only when it passes every fixture in
 `schemas/v1/fixtures/`.
 
-!!! warning "SDK status"
-    Since the `WireEnvelope` reshape (on `main`; first released in
-    v0.10.0), the reference SDKs in `heddle-sdk` still speak the
-    pre-`WireEnvelope` flat format and are **not** wire-compatible with it. Migration is tracked in
-    [heddle-sdk#4](https://github.com/getheddle/heddle-sdk/issues/4) and
-    [heddle-sdk#5](https://github.com/getheddle/heddle-sdk/issues/5).
+!!! note "SDK status"
+    The .NET, Swift and JVM SDKs in `heddle-sdk` speak the v1
+    `WireEnvelope` frame (heddle v0.10.0 and later) and the I-JSON text
+    rules (v0.12.0 and later), and pass every fixture in
+    `schemas/v1/fixtures/`. Each was also checked live: an echo worker in
+    each language against a heddle router over NATS. The SDKs are not yet
+    published to NuGet, SwiftPM or Maven; build them from source.
 
 ## NATS subjects
 
