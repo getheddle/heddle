@@ -1,0 +1,7 @@
+# Registered claims (M3): written text that must equal its source.
+# Checked by `workspace doc-check` (heddle-workspace); format in its doc_check.py.
+claims:
+  - id: readme-version-badge
+    file: README.md
+    pattern: 'badge/heddle-v([0-9.]+)-'
+    equals: {toml: pyproject.toml, key: project.version}
