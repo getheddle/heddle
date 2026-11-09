@@ -89,7 +89,7 @@ management, dead-letter handling, and OpenTelemetry tracing.
 | **Config-Driven** | Define workers in YAML — no Python code needed for LLM steps |
 | **Knowledge Silos** | Per-worker access control; blind audit workers can't see what they're reviewing |
 | **Pipeline Orchestration** | Chain steps with automatic dependency detection and parallelism |
-| **Foreign-Language SDKs** | Build .NET and Swift processor workers with the companion [Heddle SDK](https://github.com/getheddle/heddle-sdk) |
+| **Foreign-Language SDKs** | Build .NET, Swift, and JVM processor workers with the companion [Heddle SDK](https://github.com/getheddle/heddle-sdk) |
 | **Three Model Tiers** | Local (LM Studio or Ollama), Standard (Claude Sonnet), Frontier (Claude Opus) |
 | **Document Processing** | PDF/DOCX extraction via MarkItDown (fast) or Docling (deep OCR) |
 | **RAG Pipeline** | Telegram ingestion, chunking, vector search (DuckDB or LanceDB) |
@@ -99,6 +99,24 @@ management, dead-letter handling, and OpenTelemetry tracing.
 | **Config Wizard** | `heddle setup` auto-detects backends; `heddle new` scaffolds workers and pipelines |
 | **Live Monitoring** | TUI dashboard, OpenTelemetry tracing, dead-letter inspection |
 | **Deployment** | Docker Compose, Kubernetes manifests, mDNS discovery |
+
+## What's New
+
+Full history: [Release Notes](releases/README.md) and the
+[CHANGELOG](https://github.com/getheddle/heddle/blob/main/CHANGELOG.md).
+
+<!-- Keep this list short (the latest few releases, newest first) and in
+     sync between README.md and docs/index.md. CHANGELOG.md has the rest. -->
+
+| Release | What changed |
+|---------|--------------|
+| **v0.12.0** (2026-11-07) | Wire text follows two I-JSON rules: no `NaN`/`Infinity`, no repeated member names. Senders that break them are dropped, not misread. |
+| **v0.11.0** (2026-11-07) | The runtime rejects frames and bodies the v1 schemas reject. Middleware-Lane (`_`-prefixed) keys travel across hops. |
+| **v0.10.0** (2026-11-06) | One frame for every message: `WireEnvelope`, with identity, timestamps and correlation on the frame. The .NET, Swift, and JVM SDKs speak it. |
+
+**In design:** a small event log for durable history, built on NATS
+JetStream and SQLite, to replace the removed experimental
+`heddle.contrib.events`.
 
 ## Documentation
 
@@ -126,8 +144,8 @@ Go deeper:
 | [Multi-Agent Councils](council-howto.md) | Structured deliberation with multiple LLM agents |
 | [Adversarial Review](BLIND_AUDIT.md) | Set up genuine blind review using knowledge silos |
 | [Building Workflows](building-workflows.md) | Custom steps, pipelines, tools, knowledge |
-| [Foreign-Language Actors](foreign-actors.md) | Build .NET, Swift, or other processor workers against Heddle's wire protocol |
-| [Language SDKs](https://getheddle.dev/heddle-sdk/) | Companion .NET and Swift SDK documentation |
+| [Foreign-Language Actors](foreign-actors.md) | Build .NET, Swift, JVM, or other processor workers against Heddle's wire protocol |
+| [Language SDKs](https://getheddle.dev/heddle-sdk/) | Companion .NET, Swift, and JVM SDK documentation |
 | [Gateway Actors](gateway-actors.md) | Bridge HTTP, MQTT, IoT, or other non-NATS systems into Heddle |
 | [Workshop Architecture](workshop.md) | Web UI architecture and enhancement guide |
 | [Architecture](ARCHITECTURE.md) | System design, message flow, NATS subjects |
