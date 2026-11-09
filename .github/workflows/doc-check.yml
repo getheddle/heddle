@@ -1,0 +1,59 @@
+name: Doc check
+
+# Mechanical checks on written claims (repo-qualified paths, hook patterns,
+# relative links): `workspace doc-check` from heddle-workspace. Design:
+# Heddle-Platform roadmap/repo-dreaming.md, "Mechanical layer". The public
+# sibling repos are checked out side by side so cross-repo references resolve.
+# Broken references from other repos into this one show as warnings only.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * 1"  # weekly: catches renames in the other repos
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  doc-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out heddle
+        uses: actions/checkout@v7
+        with:
+          path: heddle
+      - name: Check out heddle-sdk
+        uses: actions/checkout@v7
+        with:
+          repository: getheddle/heddle-sdk
+          path: heddle-sdk
+      - name: Check out heddle-workspace
+        uses: actions/checkout@v7
+        with:
+          repository: getheddle/heddle-workspace
+          path: heddle-workspace
+      - name: Check out warp-design
+        uses: actions/checkout@v7
+        with:
+          repository: getheddle/warp-design
+          path: warp-design
+      - name: Check out getheddle.github.io
+        uses: actions/checkout@v7
+        with:
+          repository: getheddle/getheddle.github.io
+          path: getheddle.github.io
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Check written claims
+        # The checker lives in heddle-workspace; bump the pinned commit to
+        # pick up new checks.
+        run: uvx --from "git+https://github.com/getheddle/heddle-workspace@6c22c41234b5eda8aa894bc32f2af3d926799144" workspace -C . doc-check --repo heddle --format github
