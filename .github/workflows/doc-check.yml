@@ -56,4 +56,4 @@ jobs:
       - name: Check written claims
         # The checker lives in heddle-workspace; bump the pinned commit to
         # pick up new checks.
-        run: uvx --from "git+https://github.com/getheddle/heddle-workspace@8730d406ffa825a1f4668ca2b1c969997e4f2e99" workspace -C . doc-check --repo heddle --format github
+        run: uvx --from "git+https://github.com/getheddle/heddle-workspace@6c22c41234b5eda8aa894bc32f2af3d926799144" workspace -C . doc-check --repo heddle --format github
