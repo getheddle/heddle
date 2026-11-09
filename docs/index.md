@@ -110,6 +110,7 @@ Full history: [Release Notes](releases/README.md) and the
 
 | Release | What changed |
 |---------|--------------|
+| **v0.13.0** (2026-11-08) | Docling works with `backend_config: {}` and reports tables, sections and DOCX page counts correctly. The experimental `heddle.contrib.events` is removed ahead of a rewrite (pin `heddle-ai` to `0.12.x` if you depend on it). |
 | **v0.12.0** (2026-11-07) | Wire text follows two I-JSON rules: no `NaN`/`Infinity`, no repeated member names. Senders that break them are dropped, not misread. |
 | **v0.11.0** (2026-11-07) | The runtime rejects frames and bodies the v1 schemas reject. Middleware-Lane (`_`-prefixed) keys travel across hops. |
 | **v0.10.0** (2026-11-06) | One frame for every message: `WireEnvelope`, with identity, timestamps and correlation on the frame. The .NET, Swift, and JVM SDKs speak it. |
