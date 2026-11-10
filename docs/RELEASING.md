@@ -13,7 +13,14 @@ PyPI publishing via [`.github/workflows/publish.yml`](https://github.com/gethedd
 
 ## When to release
 
-Cut a release when:
+Release at most once every two weeks, counted from the previous
+release tag. Find its date with:
+
+```bash
+git tag --list 'v*' --sort=-creatordate --format='%(refname:short) %(creatordate:short)' | head -1
+```
+
+Once two weeks have passed, cut a release when:
 
 - A meaningful set of changes has accumulated under `[Unreleased]`
   in [`CHANGELOG.md`](https://github.com/getheddle/heddle/blob/main/CHANGELOG.md).
@@ -23,6 +30,20 @@ Cut a release when:
 
 Skip a release for a single typo fix or a docs-only commit unless
 the user asks.
+
+### Urgent releases
+
+A release inside the two weeks is for something urgent:
+
+- a security fix;
+- a regression or data-loss bug in the latest release that users can hit;
+- anything else the user judges urgent.
+
+Say which reason applies in the release's CHANGELOG entry. The two
+weeks then count from the urgent release.
+
+When the user asks for a release inside the two weeks, give the date
+of the previous release and ask which urgent reason applies.
 
 ## Pick the version
 
