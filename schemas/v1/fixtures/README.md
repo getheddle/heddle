@@ -51,8 +51,8 @@ treat `format: date-time` as an annotation and do not enforce it.
 
 An SDK registers exactly the `payload_types` listed in the manifest.
 Any other `payload_type` is a `dispatch` rejection, including
-`events.*` types that a Python process with `heddle.contrib.events`
-loaded would accept.
+`events.*` types, which the former `heddle.contrib.events` registered
+(removed in v0.13.0).
 
 Following Invariant 8, a worker or router that receives any of these on
 the bus logs a warning and skips it. It does not crash.
@@ -137,7 +137,7 @@ Load fixtures with your SDK's strict wire decoder.
   is allowed today. Requiring receivers to keep them when re-sending
   would be a compatible tightening that can be adopted later.
 - **`contrib.events` bodies** (`events.Event`, `events.Command`,
-  `events.Rejection`). They are experimental and not part of the exported
-  contract.
+  `events.Rejection`). They belonged to the experimental module removed
+  in v0.13.0 and were never part of the exported contract.
 - Transport: NATS subjects and queue groups are in
   `docs/foreign-actors.md`.
