@@ -8,7 +8,24 @@ permissions:
   id-token: write  # Trusted publishing (no API token needed)
 
 jobs:
+  cadence:
+    # docs/RELEASING.md "When to release": 14 days between releases unless
+    # the CHANGELOG section says "Urgent release: <reason>".
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # all tags, to find the previous release
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Check release cadence
+        run: python tools/check_release_cadence.py --tag "${{ github.event.release.tag_name }}"
+
   build:
+    needs: cadence
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
