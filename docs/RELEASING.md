@@ -39,8 +39,22 @@ A release inside the two weeks is for something urgent:
 - a regression or data-loss bug in the latest release that users can hit;
 - anything else the user judges urgent.
 
-Say which reason applies in the release's CHANGELOG entry. The two
-weeks then count from the urgent release.
+Say which reason applies on a line of its own at the top of the
+release's CHANGELOG section:
+
+```markdown
+## [X.Y.Z] — YYYY-MM-DD
+
+Urgent release: security fix for <what>.
+```
+
+The two weeks then count from the urgent release.
+
+The publish workflow enforces this: its `cadence` job runs
+`tools/check_release_cadence.py`, which fails the publish when the
+release comes less than two weeks after the previous tag and its
+CHANGELOG section has no `Urgent release:` line. Run the same check
+before tagging (step 4).
 
 When the user asks for a release inside the two weeks, give the date
 of the previous release and ask which urgent reason applies.
@@ -146,6 +160,9 @@ VIRTUAL_ENV= uv run --extra docs mkdocs build --strict
 
 # Package builds cleanly.
 uv build
+
+# Two weeks since the previous release, or an "Urgent release:" line.
+uv run python tools/check_release_cadence.py
 ```
 
 If any step fails, stop and fix before tagging.
